@@ -98,6 +98,34 @@
                                 },
                                 "to": [{ "key_code": "right_arrow" }],
                                 "type": "basic"
+                            },
+                            {
+                                "description": "hyper+b -> option+left_arrow (previous word)",
+                                "from": {
+                                    "key_code": "b",
+                                    "modifiers": { "mandatory": ["left_command", "left_control", "left_shift", "left_option"] }
+                                },
+                                "to": [
+                                    {
+                                        "key_code": "left_arrow",
+                                        "modifiers": ["left_option"]
+                                    }
+                                ],
+                                "type": "basic"
+                            },
+                            {
+                                "description": "hyper+f -> option+right_arrow (forward word)",
+                                "from": {
+                                    "key_code": "f",
+                                    "modifiers": { "mandatory": ["left_command", "left_control", "left_shift", "left_option"] }
+                                },
+                                "to": [
+                                    {
+                                        "key_code": "right_arrow",
+                                        "modifiers": ["left_option"]
+                                    }
+                                ],
+                                "type": "basic"
                             }
                         ]
                     }
@@ -112,6 +140,7 @@
                         "vendor_id": 12625
                     },
                     "ignore": false,
+                    "ignore_vendor_events": true,
                     "simple_modifications": [
                         {
                             "from": { "key_code": "left_command" },
@@ -120,6 +149,10 @@
                         {
                             "from": { "key_code": "left_control" },
                             "to": [{ "key_code": "left_command" }]
+                        },
+                        {
+                            "from": { "key_code": "right_option" },
+                            "to": [{ "key_code": "right_command" }]
                         }
                     ]
                 },
