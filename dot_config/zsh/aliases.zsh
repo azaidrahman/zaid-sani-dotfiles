@@ -4,3 +4,5 @@ alias py='python3'
 alias n="nvim"
 # alias claude="/Users/zaid/.claude/local/claude"
 alias opr="op run --"
+alias cz="chezmoi"
+alias czm="tree -L 2 -- $(chezmoi source-path)" # Simpler chezmoi managed
