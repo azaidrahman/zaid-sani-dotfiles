@@ -6,3 +6,4 @@ alias n="nvim"
 alias opr="op run --"
 alias cz="chezmoi"
 alias czm="tree -L 2 -- $(chezmoi source-path)" # Simpler chezmoi managed
+alias uvoprun='op run --env-file=.env -- uv run main.py'

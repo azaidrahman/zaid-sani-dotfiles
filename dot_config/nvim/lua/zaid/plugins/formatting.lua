@@ -40,6 +40,7 @@ return {
 				vue = { "prettier" },
 				lua = { "stylua" },
 				python = { "black" },
+				zsh = { "beautysh" },
 				markdown = { "prettier" },
 				["markdown.mdx"] = { "prettier", "markdownlint-cli2", "markdown-toc" },
 			},
