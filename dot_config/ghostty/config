@@ -8,7 +8,9 @@ custom-shader = shaders/cursor_smear.glsl
 
 # This assumes you installed tmux through brew if using macos
 # command = zsh --login -c "if command -v tmux >/dev/null 2>&1; then tmux attach || tmux; else zsh; fi"
-command = zsh --login -c "if command -v tmux >/dev/null 2>&1; then $HOME/github/dotfiles-latest/tmux/tools/prime/tmux-sessionizer.sh $HOME/github/dotfiles-latest || (tmux attach 2>/dev/null || tmux); else exec zsh; fi"
+# command = zsh --login -c "if command -v tmux >/dev/null 2>&1; then /$HOME/github/dotfiles-latest/tmux/tools/prime/tmux-sessionizer.sh $HOME/github/dotfiles-latest || (tmux attach 2>/dev/null || tmux); else exec zsh; fi"
+# command = zsh --login
+# command = ~/scripts/smart_tmux
 
 # quit after last window closed
 quit-after-last-window-closed = false
@@ -40,7 +42,7 @@ confirm-close-surface = false
 keybind = cmd+s=toggle_quick_terminal
 
 # This does not work with GLFW builds.
-macos-option-as-alt = right
+macos-option-as-alt = true
 
 # Duration (in seconds) of the quick terminal enter and exit animation.
 # Set it to 0 to disable animation completely. This can be changed at
@@ -51,6 +53,7 @@ quick-terminal-animation-duration = 0.08
 
 keybind = super+i=inspector:toggle
 keybind = super+r=reload_config
+keybind = cmd+d=unbind
 
 macos-icon = official
 
