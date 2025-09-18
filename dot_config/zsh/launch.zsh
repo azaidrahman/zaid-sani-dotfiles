@@ -10,9 +10,9 @@ fi
 source "$HOME/.local/share/zinit/zinit.git/zinit.zsh"
 autoload -Uz _zinit
 (( ${+_comps} )) && _comps[zinit]=_zinit
-autoload -Uz compinit bashcompinit
+autoload -Uz compinit 
 compinit
-bashcompinit
+# bashcompinit
 
 # Load a few important annexes, without Turbo
 # (this is currently required for annexes)

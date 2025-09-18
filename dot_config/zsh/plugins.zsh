@@ -21,4 +21,4 @@ eval "$(zoxide init zsh)"
 #   atpull"%atclone" src"init.zsh" nocompile'!'
 # zinit light ajeetdsouza/zoxide
 
-terraform -install-autocomplete
+# terraform -install-autocomplete
