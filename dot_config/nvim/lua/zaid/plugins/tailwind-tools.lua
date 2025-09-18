@@ -1,5 +1,6 @@
 return {
     "roobert/tailwindcss-colorizer-cmp.nvim",
+    enabled=true,
     {
         "NvChad/nvim-colorizer.lua",
         dependencies = { "nvim-treesitter/nvim-treesitter" },

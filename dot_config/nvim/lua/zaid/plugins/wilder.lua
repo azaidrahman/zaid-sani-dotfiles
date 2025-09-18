@@ -1,6 +1,5 @@
 return {
 	"gelguy/wilder.nvim",
-	-- "nvim-telescope/telescope.nvim",
 	dependencies = {
 		"nvim-tree/nvim-web-devicons",
 		"romgrk/fzy-lua-native",

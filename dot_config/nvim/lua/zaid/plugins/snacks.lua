@@ -47,7 +47,9 @@ return {
 				layout = {
 					-- presets options : "default" , "ivy" , "ivy-split" , "telescope" , "vscode", "select" , "sidebar"
 					-- override picker layout in keymaps function as a param below
-					preset = "telescope", -- defaults to this layout unless overidden
+					preset = function()
+						return vim.o.columns >= 120 and "default" or "vertical"
+					end,
 					cycle = false,
 				},
 				layouts = {
@@ -69,11 +71,12 @@ return {
 						},
 					},
 					telescope = {
-						reverse = true, -- set to false for search bar to be on top
+						reverse = false, -- set to false for search bar to be on top
 						layout = {
 							box = "horizontal",
 							backdrop = false,
-							width = 0.8,
+							-- width = 0.8,
+							width = 0.5,
 							height = 0.9,
 							border = "none",
 							{
@@ -90,7 +93,8 @@ return {
 							{
 								win = "preview",
 								title = "{preview:Preview}",
-								width = 0.50,
+								-- width = 0.50,
+								width = 0.80,
 								border = "rounded",
 								title_pos = "center",
 							},
@@ -112,6 +116,22 @@ return {
 								{ win = "list", border = "none" },
 								{ win = "preview", title = "{preview}", width = 0.5, border = "left" },
 							},
+						},
+					},
+					default = {
+						layout = {
+							box = "horizontal",
+							width = 0.8,
+							min_width = 120,
+							height = 0.8,
+							{
+								box = "vertical",
+								border = "rounded",
+								title = "{title} {live} {flags}",
+								{ win = "input", height = 1, border = "bottom" },
+								{ win = "list", border = "none" },
+							},
+							{ win = "preview", title = "{preview}", border = "rounded", width = 0.7 },
 						},
 					},
 				},
@@ -148,16 +168,38 @@ return {
 				enabled = true,
 				sections = {
 					{ section = "header" },
+					{
+						pane = 2,
+						section = "terminal",
+						cmd = "colorscript -e square",
+						height = 5,
+						padding = 1,
+					},
 					{ section = "keys", gap = 1, padding = 1 },
+					{
+						pane = 2,
+						icon = " ",
+						title = "Recent Files",
+						section = "recent_files",
+						indent = 2,
+						padding = 1,
+					},
+					{ pane = 2, icon = " ", title = "Projects", section = "projects", indent = 2, padding = 1 },
+					{
+						pane = 2,
+						icon = " ",
+						title = "Git Status",
+						section = "terminal",
+						enabled = function()
+							return Snacks.git.get_root() ~= nil
+						end,
+						cmd = "git status --short --branch --renames",
+						height = 5,
+						padding = 1,
+						ttl = 5 * 60,
+						indent = 3,
+					},
 					{ section = "startup" },
-					-- {
-					--     section = "terminal",
-					--     cmd = "ascii-image-converter ~/Desktop/Others/profiles.JPG -C -c",
-					--     random = 15,
-					--     pane = 2,
-					--     indent = 15,
-					--     height = 20,
-					-- },
 				},
 			},
 		},
@@ -248,7 +290,7 @@ return {
 				desc = "Pick Color Schemes",
 			},
 			{
-				"<leader>vh",
+				"<leader>hf",
 				function()
 					require("snacks").picker.help()
 				end,
