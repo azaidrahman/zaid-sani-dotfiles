@@ -3,7 +3,7 @@ return {
         "nvzone/showkeys",
         cmd = "ShowkeysToggle",
         opts = {
-            -- position = "bottom-right",
+            position = "bottom-right",
             maxkeys = 3,
             show_count = true,
             winopts = {
