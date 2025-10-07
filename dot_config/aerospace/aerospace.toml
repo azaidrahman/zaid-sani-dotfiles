@@ -48,12 +48,12 @@ exec-on-workspace-change = [
 2 = [1,'built-in']
 3 = [1,'built-in']
 4 = [1,'built-in']
-5 = 'built-in'
-6 = 'built-in'
-7 = 'built-in'
-8 = [3,'built-in']
-9 = [3,'built-in']
-10 = [3,'built-in']
+5 = [3,'built-in']
+6 = [3,'built-in']
+7 = [3,'built-in']
+8 = 'built-in'
+9 = 'built-in'
+10 = 'built-in'
 
 [gaps]
 inner.horizontal = 8
@@ -99,6 +99,7 @@ outer.right =      8
 
     alt-q = 'exec-and-forget open -a "Ghostty" -n'
     alt-b = 'exec-and-forget open -a "Vivaldi" -n'
+    # alt-t = 'exec-and-forget open -a "Whatsapp" -n'
     # alt-b = 'exec-and-forget open -a "Zen" -n'
 
     # i3 wraps focus by default
@@ -163,13 +164,11 @@ run = 'layout floating'
 if.app-id = "com.mitchellh.ghostty"
 run = [
   "layout floating",
-  "move-node-to-workspace 1",
 ]
 
-# [[on-window-detected]]
-#   if.app-id = 'com.github.GitHubClient'
-#   run = 'move-node-to-workspace 4'
-
+[[on-window-detected]]
+if.app-name-regex-substring = 'FreeTube'
+run = 'layout floating'  
 
 [[on-window-detected]]
 if.app-name-regex-substring = 'IINA'
@@ -177,9 +176,9 @@ run = 'layout floating'
 [[on-window-detected]]
 if.app-name-regex-substring = 'Thunderbird'
 run = 'layout floating'  
-[[on-window-detected]]
-if.app-name-regex-substring = 'UTM'
-run = 'layout floating'  
+# [[on-window-detected]]
+# if.app-name-regex-substring = 'VMWare Fusion'
+# run = 'layout floating'  
 
 # [[on-window-detected]]
 # if.app-name-regex-substring = 'pixea'
