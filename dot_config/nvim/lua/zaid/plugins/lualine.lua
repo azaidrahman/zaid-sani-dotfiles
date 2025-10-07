@@ -75,7 +75,8 @@ return {
 			sections = {
                 lualine_a = { mode },
                 lualine_b = { branch },
-                lualine_c = { diff, filename },
+                -- lualine_c = { diff, filename },
+                lualine_c = {  filename },
 				lualine_x = {
 					{
                         -- require("noice").api.statusline.mode.get,

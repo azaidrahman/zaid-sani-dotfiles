@@ -32,7 +32,7 @@ return {
 			desc = "LSP actions",
 			group = vim.api.nvim_create_augroup("UserLspConfig", {}),
 			callback = function(ev)
-                -- Search  *grr* *gra* *grn* *gri* *grt* *i_CTRL-S* in help for other default keybinds
+				-- Search  *grr* *gra* *grn* *gri* *grt* *i_CTRL-S* in help for other default keybinds
 				-- Buffer local mappings
 				local opts = { buffer = ev.buf, silent = true }
 
@@ -55,6 +55,44 @@ return {
 			end,
 		})
 
+		-- local on_attach_pyright = function(client, _)
+		-- 	-- Disable all capabilities except hoverProvider
+		-- 	client.server_capabilities.completionProvider = false
+		-- 	client.server_capabilities.definitionProvider = false
+		-- 	client.server_capabilities.typeDefinitionProvider = false
+		-- 	client.server_capabilities.implementationProvider = false
+		-- 	client.server_capabilities.referencesProvider = false
+		-- 	client.server_capabilities.documentSymbolProvider = false
+		-- 	client.server_capabilities.workspaceSymbolProvider = false
+		-- 	client.server_capabilities.codeActionProvider = false
+		-- 	client.server_capabilities.documentFormattingProvider = false
+		-- 	client.server_capabilities.documentRangeFormattingProvider = false
+		-- 	client.server_capabilities.renameProvider = false
+		-- 	client.server_capabilities.signatureHelpProvider = false
+		-- 	client.server_capabilities.documentHighlightProvider = false
+		-- 	client.server_capabilities.foldingRangeProvider = false
+		-- 	client.server_capabilities.semanticTokensProvider = false
+		-- 	client.server_capabilities.declarationProvider = false
+		-- 	client.server_capabilities.callHierarchyProvider = false
+		-- 	client.server_capabilities.diagnosticProvider = false
+		--
+		-- 	-- Enable hoverProvider
+		-- 	client.server_capabilities.hoverProvider = true
+		-- end
+
+		local on_attach_ruff = function(client, _)
+			if client.name == "ruff" then
+				-- disable hover in favor of pyright
+				client.server_capabilities.hoverProvider = false
+				-- Create a keymap for manual linting (if desired)
+				-- vim.keymap.set(
+				-- 	"n",
+				-- 	"<leader>ml",
+				-- 	vim.lsp.buf.lint,
+				-- 	{ buffer = bufnr, desc = "Lint current file with Ruff" }
+				-- )
+			end
+		end
 		-- NOTE: ENABLE/DISABLE HERE - Define LSP configurations in a single table
 		local lsp_servers = {
 			-- List of servers to enable
@@ -63,10 +101,12 @@ return {
 				"ts_ls",
 				"html",
 				"cssls",
-                "gopls",
+				"gopls",
 				-- "emmet_ls",
 				"emmet_language_server",
 				"marksman",
+				"basedpyright",
+				"ruff",
 				-- Add "tailwindcss" here if you want to enable it
 				-- Add "pyright" here if you want to enable it
 			},
@@ -89,20 +129,6 @@ return {
 								},
 							},
 						},
-					},
-				},
-
-				emmet_ls = {
-					filetypes = {
-						"vue",
-						"html",
-						"typescriptreact",
-						"javascriptreact",
-						"css",
-						"sass",
-						"scss",
-						"less",
-						"svelte",
 					},
 				},
 
@@ -147,13 +173,34 @@ return {
 					},
 				},
 
-				pyright = {
-					cmd = { "pyright", "--stdio" },
-					settings = {
-						python = {
-							venvPath = ".",
-							venv = ".venv",
-							pythonPath = vim.fn.exepath("python3"),
+				-- pyright = {
+				-- 	on_attach = on_attach_pyright,
+				-- 	capabilities = (function()
+				-- 		local capabilities = vim.lsp.protocol.make_client_capabilities()
+				-- 		capabilities.textDocument.publishDiagnostics.tagSupport.valueSet = { 2 }
+				-- 		return capabilities
+				-- 	end)(),
+				-- 	settings = {
+				-- 		python = {
+				-- 			analysis = {
+				-- 				useLibraryCodeForTypes = true,
+				-- 				diagnosticSeverityOverrides = {
+				-- 					reportUnusedVariable = "warning",
+				-- 				},
+				-- 				typeCheckingMode = "off", -- Set type-checking mode to off
+				-- 				diagnosticMode = "off", -- Disable diagnostics entirely
+				-- 			},
+				-- 		},
+				-- 	},
+				-- },
+
+				ruff = {
+					on_attach = on_attach_ruff,
+					init_options = {
+						settings = {
+							lint = {
+								args = { "--select=E,F,I" },
+							},
 						},
 					},
 				},
@@ -163,7 +210,7 @@ return {
 				},
 
 				-- Add other server configurations as needed
-			}
+			},
 		}
 
 		-- Configure and enable each LSP server
@@ -192,5 +239,10 @@ return {
 				end,
 			},
 		})
+
+		-- for _, server_name in ipairs(lsp_servers.enabled) do
+		-- 	local opts = lsp_servers.configs[server_name] or {}
+		-- 	require("lspconfig")[server_name].setup(opts)
+		-- end
 	end,
 }

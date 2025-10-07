@@ -110,14 +110,8 @@ vim.keymap.set("n", "<leader>lx", function()
 	})
 end, { desc = "Toggle LSP diagnostics" })
 
+vim.keymap.set("n", "<leader>qr","<cmd>make<cr>", descopts("Run makefile") )
 
--- vim.keymap.set("n", "<leader>rp", function()
--- 	vim.cmd("w")
--- 	vim.cmd("!clear && python3 %")
--- end, { desc = "Run Python script", noremap = true })
---
--- recommended mappings
--- resizing splits
--- these keymaps will also accept a range,
--- for example `10<A-h>` will `resize_left` by `(10 * config.default_amount)`
---
+vim.keymap.set("n", "<leader>pq", "<cmd>copen<CR>", descopts("Open quickfix list") )
+
+vim.keymap.set("n","<leader>gn","<cmd>Neogit<cr>",descopts("Open neogit"))
