@@ -30,6 +30,7 @@ export VISUAL="nvim"
 export SUDO_EDITOR="nvim"
 export FCEDITOR="nvim"
 export TERMINAL="Ghostty"
+# export ZUNO="/Users/zaid/Library/Mobile Documents/com~apple~CloudDocs/ZUNO/"
 # export BROWSER="app.zen-browser.zen"
 #
 export FZ_DEFAULT_COMMAND='rg —files —hidden -g !.git/'
