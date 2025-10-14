@@ -107,6 +107,7 @@ return {
 				"marksman",
 				"basedpyright",
 				"ruff",
+                "terraformls"
 				-- Add "tailwindcss" here if you want to enable it
 				-- Add "pyright" here if you want to enable it
 			},
