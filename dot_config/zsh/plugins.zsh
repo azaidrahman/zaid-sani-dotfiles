@@ -15,6 +15,10 @@ zinit snippet OMZP::git
 
 source <(fzf --zsh)
 eval "$(zoxide init zsh)"
+
+# Google cloud completion
+source "$(brew --prefix)/share/google-cloud-sdk/completion.zsh.inc"
+#
 # zinit ice wait"2" as"command" from"gh-r" lucid \
 #   mv"zoxide*/zoxide -> zoxide" \
 #   atclone"./zoxide init zsh > init.zsh" \
