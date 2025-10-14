@@ -44,13 +44,13 @@ exec-on-workspace-change = [
 
 [workspace-to-monitor-force-assignment]
 # 1 is 2nd monitor, 3 is vertical monitor, for some reason idk
-1 = [1,'built-in']
-2 = [1,'built-in']
-3 = [1,'built-in']
-4 = [1,'built-in']
-5 = [3,'built-in']
-6 = [3,'built-in']
-7 = [3,'built-in']
+1 = ['HP',1,'built-in']
+2 = ['HP',1,'built-in']
+3 = ['HP',1,'built-in']
+4 = ['HP',1,'built-in']
+5 = [3,'HP','built-in']
+6 = [3,'HP','built-in']
+7 = [3,'HP','built-in']
 8 = 'built-in'
 9 = 'built-in'
 10 = 'built-in'
