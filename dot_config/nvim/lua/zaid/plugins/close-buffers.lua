@@ -11,3 +11,13 @@ return {
 		})
 	end,
 }
+
+-- :BDelete! hidden
+-- :BDelete nameless
+-- :BDelete this
+-- :BDelete 1
+-- :BDelete regex='.*[.].md'
+--
+-- :BWipeout! all
+-- :BWipeout other
+-- :BWipeout hidden glob=*.lua

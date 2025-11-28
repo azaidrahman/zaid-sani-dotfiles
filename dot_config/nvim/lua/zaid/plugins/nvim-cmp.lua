@@ -199,16 +199,56 @@ return {
 					luasnip.lsp_expand(args.body)
 				end,
 			},
-            -- NOTE: CHANGE HERE IF YOU WANT TO ADD MORE SOURCES
+			-- NOTE: CHANGE HERE IF YOU WANT TO ADD MORE SOURCES
 			sources = cmp.config.sources({
-				{ name = "luasnip" }, -- Snippets
-				{ name = "supermaven" }, -- Uncomment if using Supermaven
 				{ name = "nvim_lsp" },
+				{
+					name = "luasnip",
+					-- Only show snippets when preceded by "!"
+					entry_filter = function(entry, ctx)
+						local offset = entry:get_offset()
+						if offset <= 1 then
+							return false
+						end
+						local line = ctx.cursor_before_line
+						local char_before_offset = line:sub(offset - 1, offset - 1)
+						return char_before_offset == "!"
+					end,
+				}, -- Snippets
+				{ name = "supermaven" }, -- Uncomment if using Supermaven
 				{ name = "buffer" },
 				{ name = "path" },
 			}),
 			mapping = cmp.mapping.preset.insert({
-				["<C-Space>"] = cmp.mapping.complete(),
+				["<CR>"] = cmp.mapping({
+					i = function(fallback)
+						if cmp.visible() then
+							cmp.confirm({ select = true })
+						else
+							fallback()
+						end
+					end,
+					-- Optional: also handle command mode if you use cmp in cmdline
+					c = function(fallback)
+						if cmp.visible() then
+							cmp.confirm({ select = true })
+						else
+							fallback()
+						end
+					end,
+				}, { "i", "c" }),
+				["<C-x>"] = cmp.mapping.complete(),
+				-- Show all snippets on <C-m>
+				["<C-f>"] = cmp.mapping(function()
+					cmp.complete({
+						config = {
+							sources = {
+								{ name = "luasnip" }, -- Only show snippets, no filter
+							},
+						},
+					})
+				end, { "i" }),
+
 				["<C-e>"] = cmp.mapping.abort(),
 				["<C-d>"] = cmp.mapping(function()
 					cmp.close_docs()

@@ -115,3 +115,9 @@ vim.keymap.set("n", "<leader>qr","<cmd>make<cr>", descopts("Run makefile") )
 vim.keymap.set("n", "<leader>pq", "<cmd>copen<CR>", descopts("Open quickfix list") )
 
 vim.keymap.set("n","<leader>gn","<cmd>Neogit<cr>",descopts("Open neogit"))
+
+vim.keymap.set('n', '<leader>yd', ':let @+=expand("%:p:h")<CR>',descopts("Copy directory path") )
+--
+
+-- Aerial
+vim.keymap.set("n", "<leader>i", "<cmd>AerialToggle!<CR>")

@@ -14,10 +14,13 @@ return {
 		main = "ibl",
 		event = { "BufReadPost", "BufNewFile" },
 		opts = {
-			indent = {
-				char = "|",
-				highlight = highlight_list,
-			},
+            scope = {
+                highlight = highlight_list
+            },
+			-- indent = {
+			-- 	char = "|",
+			-- 	highlight = highlight_list,
+			-- },
 		},
 		config = function(_, opts)
 			local hooks = require("ibl.hooks")
@@ -32,7 +35,10 @@ return {
 			end)
 			-- paste the hooks code here
 			-- change the setup() call to:
+            vim.g.rainbow_delimiters = {highlight = highlight_list}
 			require("ibl").setup(opts)
+            hooks.register(hooks.type.SCOPE_HIGHLIGHT, hooks.builtin.scope_highlight_from_extmark)
 		end,
 	},
 }
+
