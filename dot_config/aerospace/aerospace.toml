@@ -167,6 +167,15 @@ run = [
     # 'move-node-to-workspace 9',
     'layout floating',
 ]
+# Workspace 3 - Apps
+[[on-window-detected]]
+if.app-name-regex-substring = 'Docker'
+run = 'move-node-to-workspace 3'
+
+# Workspace 4 - News
+[[on-window-detected]]
+if.app-name-regex-substring = 'NetNewsWire'
+run = 'move-node-to-workspace 4'
 
 # Workspace 5 - Terminal
 [[on-window-detected]]
@@ -201,6 +210,9 @@ if.app-name-regex-substring = 'Outlook'
 run = 'move-node-to-workspace 9'
 
 # Workspace 10  - Chats
+[[on-window-detected]]
+if.app-name-regex-substring = 'Messages'
+run = 'move-node-to-workspace 10'
 [[on-window-detected]]
 if.app-id = 'net.whatsapp.WhatsApp'
 run = 'move-node-to-workspace 10'
