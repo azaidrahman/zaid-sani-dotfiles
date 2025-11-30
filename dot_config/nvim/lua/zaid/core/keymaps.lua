@@ -121,3 +121,7 @@ vim.keymap.set('n', '<leader>yd', ':let @+=expand("%:p:h")<CR>',descopts("Copy d
 
 -- Aerial
 vim.keymap.set("n", "<leader>i", "<cmd>AerialToggle!<CR>")
+
+-- NOTE: NVIM-CMP
+-- <C-x> to complete
+-- <C-f> to complete snippets

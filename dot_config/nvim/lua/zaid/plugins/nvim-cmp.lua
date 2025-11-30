@@ -220,23 +220,25 @@ return {
 				{ name = "path" },
 			}),
 			mapping = cmp.mapping.preset.insert({
-				["<CR>"] = cmp.mapping({
-					i = function(fallback)
-						if cmp.visible() then
-							cmp.confirm({ select = true })
-						else
-							fallback()
-						end
-					end,
-					-- Optional: also handle command mode if you use cmp in cmdline
-					c = function(fallback)
-						if cmp.visible() then
-							cmp.confirm({ select = true })
-						else
-							fallback()
-						end
-					end,
-				}, { "i", "c" }),
+                -- NOTE: I dont like this because while writing i want to <CR> to go next line
+                 
+				-- ["<CR>"] = cmp.mapping({
+				-- 	i = function(fallback)
+				-- 		if cmp.visible() then
+				-- 			cmp.confirm({ select = true })
+				-- 		else
+				-- 			fallback()
+				-- 		end
+				-- 	end,
+				-- 	-- Optional: also handle command mode if you use cmp in cmdline
+				-- 	c = function(fallback)
+				-- 		if cmp.visible() then
+				-- 			cmp.confirm({ select = true })
+				-- 		else
+				-- 			fallback()
+				-- 		end
+				-- 	end,
+				-- }, { "i", "c" }),
 				["<C-x>"] = cmp.mapping.complete(),
 				-- Show all snippets on <C-m>
 				["<C-f>"] = cmp.mapping(function()

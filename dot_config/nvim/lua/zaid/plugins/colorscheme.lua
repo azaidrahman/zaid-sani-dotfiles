@@ -30,6 +30,7 @@ return {
 			})
 
 			-- HACK: set this on the color you want to be persistent
+            
 			-- when quit and reopening nvim
 			-- vim.cmd("colorscheme rose-pine")
 		end,
@@ -128,6 +129,9 @@ return {
 				},
 			})
 		end,
+	}, -- NOTE: gruber-darker
+	{
+		{ "blazkowolf/gruber-darker.nvim" },
 	}, -- NOTE: neosolarized
 	{
 		"craftzdog/solarized-osaka.nvim",
@@ -181,6 +185,9 @@ return {
 			local fg_gutter = "#627E97"
 			local border = "#547998"
 
+            -- CUSTOM COMMENT
+            local comment = "#858470"
+
 			require("tokyonight").setup({
 				style = "night",
 				transparent = transparent,
@@ -207,10 +214,13 @@ return {
 					colors.fg_float = fg
 					colors.fg_gutter = fg_gutter
 					colors.fg_sidebar = fg_dark
+                    -- ADDING THIS FOR CUSTOM COMMENT
+                    colors.comment = comment
 				end,
 			})
 			-- vim.cmd("colorscheme tokyonight")
 			-- NOTE: Auto switch to tokyonight for markdown files only
+            --
 			-- vim.api.nvim_create_autocmd("FileType", {
 			--     pattern = { "markdown" },
 			--     callback = function()
