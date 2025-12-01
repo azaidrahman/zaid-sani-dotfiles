@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>HOME</key>
+	<string>TZ_Asia__Kuala_Lumpur</string>
+	<key>TIMESTAMP_FORMAT</key>
+	<string>FORMAT_DEFAULT_12HS</string>
+	<key>TZ_Australia__Brisbane</key>
+	<true/>
+	<key>TZ_UTC</key>
+	<false/>
+</dict>
+</plist>
