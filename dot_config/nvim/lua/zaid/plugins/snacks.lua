@@ -171,6 +171,8 @@ return {
 					{
 						pane = 2,
 						section = "terminal",
+                        -- install from https://gitlab.com/dwt1/shell-color-scripts.git 
+                        -- https://gitlab.com/dwt1/shell-color-scripts
 						cmd = "colorscript -e square",
 						height = 5,
 						padding = 1,
