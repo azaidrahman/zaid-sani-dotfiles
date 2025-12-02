@@ -314,7 +314,8 @@ return {
 					if cmp.visible() then
 						local entries = cmp.get_entries()
 						if #entries == 1 then
-							confirm(entries[1])
+						    smart_tab()
+							-- confirm(entries[1])
 						else
 							cmp.select_next_item()
 						end
@@ -322,8 +323,8 @@ return {
 						luasnip.expand_or_jump() -- Standard: Expand or jump forward
 					elseif in_whitespace() then
 						smart_tab()
-					else
-						cmp.complete()
+					-- else
+					-- 	cmp.complete()
 					end
 				end, { "i", "s" }),
 
