@@ -1,3 +1,4 @@
+local yank = require 'zaid.core.yank'
 local opts = { noremap = true, silent = true }
 -- noremap just means that the keymap stops at that trigger and doesnt get retriggered, or in other words, it doesnt get overridden
 local descopts = function(desc)
@@ -34,7 +35,24 @@ vim.keymap.set("n", "<leader>pd", ":lua Snacks.dashboard()<CR>", opts)
 vim.keymap.set("v", "p", '"_dp', opts)
 
 -- Copies or Yank to system clipboard
-vim.keymap.set("n", "<leader>Y", [["+Y]], opts)
+vim.keymap.set("n", "<leader>ys", [["+Y]], opts)
+
+-- yank path
+vim.keymap.set('n', '<leader>ya', function()
+  yank.yank_path(yank.get_buffer_absolute(), 'absolute')
+end, { desc = '[Y]ank [A]bsolute path to clipboard' })
+
+vim.keymap.set('n', '<leader>yr', function()
+  yank.yank_path(yank.get_buffer_cwd_relative(), 'relative')
+end, { desc = '[Y]ank [R]elative path to clipboard' })
+
+vim.keymap.set('v', '<leader>ya', function()
+  yank.yank_visual_with_path(yank.get_buffer_absolute(), 'absolute')
+end, { desc = '[Y]ank selection with [A]bsolute path' })
+
+vim.keymap.set('v', '<leader>yr', function()
+  yank.yank_visual_with_path(yank.get_buffer_cwd_relative(), 'relative')
+end, { desc = '[Y]ank selection with [R]elative path' })
 
 -- leader d delete wont remember as yanked/clipboard when delete pasting
 -- vim.keymap.set({ "n", "v" }, "<leader>d", [["_d]])
