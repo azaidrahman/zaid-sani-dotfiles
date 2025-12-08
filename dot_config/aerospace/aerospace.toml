@@ -197,6 +197,9 @@ run = 'move-node-to-workspace 7'
 [[on-window-detected]]
 if.app-name-regex-substring = 'T3 Chat'
 run = 'move-node-to-workspace 8'
+[[on-window-detected]]
+if.app-name-regex-substring = 'Claude'
+run = 'move-node-to-workspace 8'
 
 # Workspace 9 - Emails & Tasks
 [[on-window-detected]]
