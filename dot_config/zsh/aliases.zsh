@@ -31,3 +31,5 @@ alias setalias="nvim ~/.config/zsh/aliases.zsh"
 alias tf="terraform"
 
 alias cat="bat"
+
+alias unblock="xattr -d com.app.quarantine"
