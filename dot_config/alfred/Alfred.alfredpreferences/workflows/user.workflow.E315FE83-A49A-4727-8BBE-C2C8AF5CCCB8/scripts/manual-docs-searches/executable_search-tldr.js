@@ -11,43 +11,31 @@ function httpRequest(url) {
 	return $.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding).js;
 }
 
-/** @param {string} str @return {string} */
-function prettyString(str) {
-	const capitalized = str.charAt(0).toUpperCase() + str.slice(1);
-	return capitalized.replaceAll("-", " ");
-}
-
 //──────────────────────────────────────────────────────────────────────────────
 
 /** @type {AlfredRun} */
 // biome-ignore lint/correctness/noUnusedVariables: Alfred run
 function run() {
-	const docsUrl =
-		"https://api.github.com/repos/duckduckgo/duckduckgo-help-pages/git/trees/master?recursive=1";
-	const baseUrl = "https://duckduckgo.com/duckduckgo-help-pages";
+	const docsUrl = "https://api.github.com/repos/tldr-pages/tldr/git/trees/main?recursive=1";
+	const baseUrl = "https://tldr.inbrowser.app/pages/";
 
 	const workArray = JSON.parse(httpRequest(docsUrl)).tree.flatMap(
 		(/** @type {{ path: string; }} */ entry) => {
 			const path = entry.path;
-			const [_, subsite] = path.match(/^_docs\/(.*)\.md$/) || [];
-			if (!subsite || subsite.startsWith("_")) return [];
+			const [_, category, cli] = path.match(/\/(osx|common)\/(.+)\.md$/) || [];
+			if (!category || !cli) return [];
 
-			const url = `${baseUrl}/${subsite}`;
-			let [category, title] = subsite.split("/");
-			if (!title) {
-				title = category
-				category = "";
-			}
+			const url = `${baseUrl}/${category}/${cli}`;
 
 			return {
-				title: prettyString(title),
-				subtitle: prettyString(category),
+				title: cli,
+				subtitle: category,
 				mods: {
-					cmd: { arg: subsite }, // copy entry
+					cmd: { arg: cli }, // copy entry
 				},
 				arg: url,
 				quicklookurl: url,
-				uid: subsite,
+				uid: cli,
 			};
 		},
 	);

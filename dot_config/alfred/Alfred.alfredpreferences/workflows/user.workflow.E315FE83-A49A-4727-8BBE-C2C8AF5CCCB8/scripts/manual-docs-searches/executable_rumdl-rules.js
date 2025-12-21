@@ -11,46 +11,37 @@ function httpRequest(url) {
 	return $.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding).js;
 }
 
-/** @param {string} str @return {string} */
-function prettyString(str) {
-	const capitalized = str.charAt(0).toUpperCase() + str.slice(1);
-	return capitalized.replaceAll("-", " ");
-}
-
 //──────────────────────────────────────────────────────────────────────────────
 
 /** @type {AlfredRun} */
 // biome-ignore lint/correctness/noUnusedVariables: Alfred run
 function run() {
-	const docsUrl =
-		"https://api.github.com/repos/duckduckgo/duckduckgo-help-pages/git/trees/master?recursive=1";
-	const baseUrl = "https://duckduckgo.com/duckduckgo-help-pages";
+	const docsUrl = "https://raw.githubusercontent.com/rvben/rumdl/refs/heads/main/docs/RULES.md";
+	const baseUrl = "https://github.com/rvben/rumdl/tree/main/docs";
 
-	const workArray = JSON.parse(httpRequest(docsUrl)).tree.flatMap(
-		(/** @type {{ path: string; }} */ entry) => {
-			const path = entry.path;
-			const [_, subsite] = path.match(/^_docs\/(.*)\.md$/) || [];
-			if (!subsite || subsite.startsWith("_")) return [];
+	const workArray = httpRequest(docsUrl)
+		.split("\n")
+		.flatMap((line) => {
+			const [_, id, name, desc] =
+				line.match(/^\|.*?(MD\d{3}).*?\| *(.*?) *\| *(.*?) *\|$/) || [];
+			if (!(id && name && desc)) return [];
 
-			const url = `${baseUrl}/${subsite}`;
-			let [category, title] = subsite.split("/");
-			if (!title) {
-				title = category
-				category = "";
-			}
+			const url = `${baseUrl}/${id.toLowerCase()}.md`;
+			const num = id.match(/\d\d$/)?.[0] || "";
+			const subtitle = desc === name ? id : `${id}: ${desc}`;
 
 			return {
-				title: prettyString(title),
-				subtitle: prettyString(category),
+				title: name,
+				subtitle: subtitle,
+				match: [id, num, name].join(" "),
 				mods: {
-					cmd: { arg: subsite }, // copy entry
+					cmd: { arg: id }, // copy entry
 				},
 				arg: url,
 				quicklookurl: url,
-				uid: subsite,
+				uid: id,
 			};
-		},
-	);
+		});
 
 	return JSON.stringify({
 		items: workArray,

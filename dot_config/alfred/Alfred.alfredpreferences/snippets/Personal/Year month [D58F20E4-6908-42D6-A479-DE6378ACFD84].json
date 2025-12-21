@@ -1,0 +1,8 @@
+{
+  "alfredsnippet" : {
+    "snippet" : "{isodate:yy-MM}",
+    "uid" : "D58F20E4-6908-42D6-A479-DE6378ACFD84",
+    "name" : "Year & month",
+    "keyword" : ":ym:"
+  }
+}
