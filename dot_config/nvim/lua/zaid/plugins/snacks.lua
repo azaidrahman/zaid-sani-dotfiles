@@ -33,6 +33,8 @@ return {
 			-- HACK: read picker docs @ https://github.com/folke/snacks.nvim/blob/main/docs/picker.md
 			picker = {
 				enabled = true,
+				-- HACK: FALSE IF DONT WANT IGNORED
+				ignored = true,
 				matchers = {
 					frecency = true,
 					cwd_bonus = false,
@@ -48,7 +50,7 @@ return {
 					-- presets options : "default" , "ivy" , "ivy-split" , "telescope" , "vscode", "select" , "sidebar"
 					-- override picker layout in keymaps function as a param below
 					preset = function()
-						return vim.o.columns >= 120 and "default" or "vertical"
+						return vim.o.columns >= 120 and "vertical" or "vertical"
 					end,
 					cycle = false,
 				},
@@ -171,8 +173,8 @@ return {
 					{
 						pane = 2,
 						section = "terminal",
-                        -- install from https://gitlab.com/dwt1/shell-color-scripts.git 
-                        -- https://gitlab.com/dwt1/shell-color-scripts
+						-- install from https://gitlab.com/dwt1/shell-color-scripts.git
+						-- https://gitlab.com/dwt1/shell-color-scripts
 						cmd = "colorscript -e square",
 						height = 5,
 						padding = 1,
@@ -243,6 +245,22 @@ return {
 					require("snacks").picker.files()
 				end,
 				desc = "Find Files (Snacks Picker)",
+			},
+			{
+				"<leader>pz",
+				function()
+					require("snacks").picker.zoxide({
+						finder = "files_zoxide",
+						format = "file",
+						confirm = "load_session",
+						win = {
+							preview = {
+								minimal = true,
+							},
+						},
+					})
+				end,
+				desc = "Find Config File",
 			},
 			{
 				"<leader>pc",
