@@ -43,3 +43,4 @@ export PATH="$PATH:$HOME/go/bin"
 export SSH_AUTH_SOCK=~/Library/Group\ Containers/2BUA8C4S2C.com.1password/t/agent.sock
 
 export STARSHIP_CONFIG="$HOME/.config/zsh/starship.toml"
+
