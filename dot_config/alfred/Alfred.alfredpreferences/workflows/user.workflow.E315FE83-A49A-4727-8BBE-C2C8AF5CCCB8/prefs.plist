@@ -4,5 +4,15 @@
 <dict>
 	<key>keyword_01</key>
 	<string>terraform</string>
+	<key>keyword_02</key>
+	<string>git</string>
+	<key>keyword_03</key>
+	<string>bash</string>
+	<key>keyword_04</key>
+	<string>kubectl</string>
+	<key>keyword_05</key>
+	<string>docker</string>
+	<key>keyword_06</key>
+	<string>zsh</string>
 </dict>
 </plist>

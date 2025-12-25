@@ -4,6 +4,8 @@
 <dict>
 	<key>bundleid</key>
 	<string>de.chris-grieser.doc-searches</string>
+	<key>category</key>
+	<string>⭐️</string>
 	<key>connections</key>
 	<dict>
 		<key>02AF1097-A098-43E8-91E4-28B34C6C010C</key>
@@ -467,7 +469,7 @@
 				<key>destinationuid</key>
 				<string>70C4F79D-D608-41A7-B2FF-723F59D79DDF</string>
 				<key>modifiers</key>
-				<integer>0</integer>
+				<integer>524288</integer>
 				<key>modifiersubtext</key>
 				<string>⌥: Copy URL</string>
 				<key>vitoclose</key>
@@ -1119,8 +1121,6 @@
 			<integer>3</integer>
 		</dict>
 		<dict>
-			<key>config</key>
-			<dict/>
 			<key>type</key>
 			<string>alfred.workflow.utility.junction</string>
 			<key>uid</key>
@@ -2520,7 +2520,7 @@ Workflow created by [Chris Grieser](https://chris-grieser.de/).</string>
 			<key>xpos</key>
 			<real>30</real>
 			<key>ypos</key>
-			<real>1510</real>
+			<real>1515</real>
 		</dict>
 		<key>B88D572C-2770-41B2-B7BD-FF771975A4E8</key>
 		<dict>
@@ -40211,7 +40211,7 @@ Workflow created by [Chris Grieser](https://chris-grieser.de/).</string>
 		</dict>
 	</array>
 	<key>version</key>
-	<string>2.23.0</string>
+	<string>2.23.1</string>
 	<key>webaddress</key>
 	<string>https://chris-grieser.de/</string>
 </dict>
