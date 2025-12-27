@@ -14,7 +14,8 @@ zinit snippet OMZP::command-not-found
 zinit snippet OMZP::git
 
 source <(fzf --zsh)
-eval "$(zoxide init --cmd cd zsh)"
+# eval "$(zoxide init --cmd cd zsh)"
+eval "$(zoxide init zsh)"
 
 # Google cloud completion
 source "$(brew --prefix)/share/google-cloud-sdk/completion.zsh.inc"
