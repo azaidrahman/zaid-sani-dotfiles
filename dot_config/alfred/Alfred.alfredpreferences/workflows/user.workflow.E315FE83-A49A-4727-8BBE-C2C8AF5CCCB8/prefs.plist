@@ -14,5 +14,7 @@
 	<string>docker</string>
 	<key>keyword_06</key>
 	<string>zsh</string>
+	<key>keyword_07</key>
+	<string>go</string>
 </dict>
 </plist>
