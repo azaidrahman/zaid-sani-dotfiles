@@ -38,7 +38,7 @@ return {
 		-- end
 
 		--Harpoon Nav Interface
-		vim.keymap.set("n", "<leader>a", function()
+		vim.keymap.set("n", "<leader>af", function()
 			harpoon:list():add()
 		end, { desc = "Harpoon add file" })
 		vim.keymap.set("n", "<C-e>", function()
@@ -60,10 +60,10 @@ return {
 		-- end)
 
 		-- Toggle previous & next buffers stored within Harpoon list
-		vim.keymap.set("n", "<C-S-P>", function()
+		vim.keymap.set("n", "<leader>ap", function()
 			harpoon:list():prev()
 		end)
-		vim.keymap.set("n", "<C-S-N>", function()
+		vim.keymap.set("n", "<leader>an", function()
 			harpoon:list():next()
 		end)
 

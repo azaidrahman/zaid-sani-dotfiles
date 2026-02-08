@@ -87,11 +87,11 @@ vim.keymap.set("n", "x", '"_x', opts)
 -- Hightlight yanking
 
 -- tab stuff
--- vim.keymap.set("n", "<leader>to", "<cmd>tabnew<CR>") -- open new tab
--- vim.keymap.set("n", "<leader>tx", "<cmd>tabclose<CR>") -- close current tab
--- vim.keymap.set("n", "<leader>tn", "<cmd>tabn<CR>") -- go to next
--- vim.keymap.set("n", "<leader>tp", "<cmd>tabp<CR>") -- go to pre
--- vim.keymap.set("n", "<leader>tf", "<cmd>tabnew %<CR>") -- open current tab in new tab
+vim.keymap.set("n", "<leader>to", "<cmd>tabnew<CR>") -- open new tab
+vim.keymap.set("n", "<leader>tx", "<cmd>tabclose<CR>") -- close current tab
+vim.keymap.set("n", "<leader>tn", "<cmd>tabn<CR>") -- go to next
+vim.keymap.set("n", "<leader>tp", "<cmd>tabp<CR>") -- go to pre
+vim.keymap.set("n", "<leader>tf", "<cmd>tabnew %<CR>") -- open current tab in new tab
 
 -- buffer stuff
 vim.keymap.set("n", "<S-l>", ":bnext<CR>", { noremap = true, silent = true, desc = "Move to next buffer" })

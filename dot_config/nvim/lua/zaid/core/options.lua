@@ -61,3 +61,10 @@ vim.opt.mouse = "a"
 
 -- gets rid of line with white spaces
 vim.g.editorconfig = true
+
+-- filetype extensions
+vim.filetype.add({
+    extension = {
+        MD = "markdown",
+    },
+})
