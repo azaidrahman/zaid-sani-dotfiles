@@ -8,7 +8,5 @@
 	<string>FORMAT_DEFAULT_12HS</string>
 	<key>TZ_Australia__Brisbane</key>
 	<true/>
-	<key>TZ_UTC</key>
-	<false/>
 </dict>
 </plist>
