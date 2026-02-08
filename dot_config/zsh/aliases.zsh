@@ -29,6 +29,7 @@ alias lt="eza -al --sort=modified"
 alias setalias="nvim ~/.config/zsh/aliases.zsh"
 
 alias tf="terraform"
+alias tfr="terraformer"
 
 alias cat="bat"
 
@@ -38,4 +39,4 @@ alias unblock="xattr -d com.app.quarantine"
 alias gcloud-tlo='export CLOUDSDK_CONFIG=$(mktemp -d)'
 alias neog='nvim -c Neogit'
 
-# alias help='run-help'
+alias grant-terraform-sa='/Users/abdullahzaidas-sani/projects/gamuda/gtech-platform-infra-monorepo/scripts/bootstrap/grant-terraform-sa.sh'
