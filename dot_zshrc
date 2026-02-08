@@ -4,8 +4,11 @@ if [[ -n "$ZSH_PROFILER" ]]; then
 fi
 
 # ~/.zshrc
-CONFIG_DIR="$HOME/.config/zsh"  # or ~/dotfiles/zsh if you prefer
+CONFIG_DIR="$HOME/.config/zsh"
 
+# Add to PATH only if not already present
+path_prepend() { [[ ":$PATH:" != *":$1:"* ]] && export PATH="$1:$PATH"; }
+path_append()  { [[ ":$PATH:" != *":$1:"* ]] && export PATH="$PATH:$1"; }
 
 # Base
 source "$CONFIG_DIR/launch.zsh"
@@ -33,3 +36,10 @@ fi
 
 autoload -U +X bashcompinit && bashcompinit
 complete -o nospace -C /opt/homebrew/bin/terraform terraform
+
+# bun completions
+[ -s "/Users/zaid/.bun/_bun" ] && source "/Users/zaid/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+path_prepend "$BUN_INSTALL/bin"

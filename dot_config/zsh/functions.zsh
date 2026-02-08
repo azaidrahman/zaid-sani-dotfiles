@@ -1,5 +1,5 @@
 # function to run yazi with the current directory as the cwd
-function y() {
+function ,y() {
 	local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
 	yazi "$@" --cwd-file="$tmp"
 	IFS= read -r -d '' cwd < "$tmp"
@@ -8,7 +8,7 @@ function y() {
 }
 
 # function to open nvim using zoxide
-function v() {
+function ,v() {
     local file="$1"
     # local path=$(zoxide query -l | xargs -I {} find {} -name "$file" -type f 2>/dev/null | head -n 1)
     local target=$(zoxide query "$file")
@@ -21,7 +21,7 @@ function v() {
 }
 
 # function to read 1password entries
-function env-op() {
+function ,env-op() {
     local search="$*"
     local keys_string values_string
 
@@ -39,4 +39,32 @@ function env-op() {
         export "${keys[i]}"="$last_value"
         print -u 2 "Loaded ${keys[i]}"
     done
+}
+
+function ,isglob() {
+    local opts=$(setopt) || return
+    local target="extendedglob"
+
+    if grep -q "$target" <<< "$opts"; then
+        echo "$target is on"
+        read "answer?do you want to turn it off? [y/n]"
+        if [[ "$answer" == "y" ]]; then
+            unsetopt "$target"
+            echo "$target is now off"
+        else
+            echo "Aborting"
+            return
+        fi
+    else
+        echo "$target is off"
+        read "answer?do you want to turn it on? [y/n]"
+        echo "$answer"
+        if [[ "$answer" == "y" ]]; then
+            setopt "$target"
+            echo "$target is now on"
+        else
+            echo "Aborting"
+            return
+        fi
+    fi
 }

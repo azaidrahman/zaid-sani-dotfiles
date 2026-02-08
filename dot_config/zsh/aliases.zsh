@@ -37,3 +37,5 @@ alias unblock="xattr -d com.app.quarantine"
 # temp gcloud logout
 alias gcloud-tlo='export CLOUDSDK_CONFIG=$(mktemp -d)'
 alias neog='nvim -c Neogit'
+
+# alias help='run-help'

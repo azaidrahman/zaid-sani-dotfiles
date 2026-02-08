@@ -1,10 +1,11 @@
-export PATH="/opt/homebrew/bin:$PATH"
-# export PATH="$HOME/.npm-global/bin:$PATH"
+path_prepend "/opt/homebrew/bin"
+# path_prepend "$HOME/.npm-global/bin"
 export XDG_CONFIG_HOME="$HOME/.config"
 
 export PYENV_ROOT="$HOME/.pyenv"
-export PATH="$HOME/.local/bin:$PATH"
-[[ -d $PYENV_ROOT/bin ]] && export PATH="PYENV_ROOT/bin:$PATH"
+path_prepend "$HOME/.local/bin"
+[[ -d $PYENV_ROOT/bin ]] && path_prepend "$PYENV_ROOT/bin"
+
 eval "$(pyenv init - zsh)"
 
 if [ -n "$NVIM_LISTEN_ADDRESS" ]; then
@@ -37,10 +38,9 @@ export TERMINAL="Ghostty"
 export FZ_DEFAULT_COMMAND='rg —files —hidden -g !.git/'
 
 # GOLANG
-export PATH="$PATH:$HOME/go/bin"
+path_append "$HOME/go/bin"
 
 # 1password
 export SSH_AUTH_SOCK=~/Library/Group\ Containers/2BUA8C4S2C.com.1password/t/agent.sock
 
 export STARSHIP_CONFIG="$HOME/.config/zsh/starship.toml"
-

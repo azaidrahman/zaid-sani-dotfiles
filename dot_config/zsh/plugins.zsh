@@ -27,3 +27,7 @@ source "$(brew --prefix)/share/google-cloud-sdk/completion.zsh.inc"
 # zinit light ajeetdsouza/zoxide
 
 # terraform -install-autocomplete
+
+# enable help in zsh
+# unalias run-help 2>/dev/null
+# autoload -Uz run-help
