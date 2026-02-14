@@ -23,7 +23,7 @@ alias lf="eza -lf --color=always | grep -v /"
 alias lh="eza -dl .* --group-directories-first"
 alias ll="eza -al --group-directories-first"
 # alias ls="eza -alf --color=always --sort=size | grep -v /"
-alias ls="eza -al --color=always --sort=size"
+alias ,ls="eza -al --color=always --sort=size"
 alias lt="eza -al --sort=modified"
 
 alias setalias="nvim ~/.config/zsh/aliases.zsh"
@@ -31,7 +31,7 @@ alias setalias="nvim ~/.config/zsh/aliases.zsh"
 alias tf="terraform"
 alias tfr="terraformer"
 
-alias cat="bat"
+alias ,cat="bat"
 
 alias unblock="xattr -d com.app.quarantine"
 
@@ -39,4 +39,7 @@ alias unblock="xattr -d com.app.quarantine"
 alias gcloud-tlo='export CLOUDSDK_CONFIG=$(mktemp -d)'
 alias neog='nvim -c Neogit'
 
-alias grant-terraform-sa='/Users/abdullahzaidas-sani/projects/gamuda/gtech-platform-infra-monorepo/scripts/bootstrap/grant-terraform-sa.sh'
+alias ,grant-terraform-sa='/Users/abdullahzaidas-sani/projects/gamuda/gtech-platform-infra-monorepo/scripts/bootstrap/grant-terraform-sa.sh'
+alias ,rename-template='/Users/abdullahzaidas-sani/projects/gamuda/gtech-platform-infra-monorepo/scripts/bootstrap/rename-template.sh'
+
+alias gwtpwd='basename $(git rev-parse --show-toplevel)'

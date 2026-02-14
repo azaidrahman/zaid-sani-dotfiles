@@ -37,6 +37,8 @@ export TERMINAL="Ghostty"
 #
 export FZ_DEFAULT_COMMAND='rg —files —hidden -g !.git/'
 
+export GCP_SCRIPTS="/Users/abdullahzaidas-sani/projects/gamuda/gtech-platform-infra-monorepo/scripts/"
+
 # GOLANG
 path_append "$HOME/go/bin"
 
@@ -44,3 +46,5 @@ path_append "$HOME/go/bin"
 export SSH_AUTH_SOCK=~/Library/Group\ Containers/2BUA8C4S2C.com.1password/t/agent.sock
 
 export STARSHIP_CONFIG="$HOME/.config/zsh/starship.toml"
+
+export WTREE="/Users/abdullahzaidas-sani/projects/gamuda/worktrees"
