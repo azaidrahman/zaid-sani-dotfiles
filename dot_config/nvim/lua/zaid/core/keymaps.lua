@@ -21,6 +21,10 @@ vim.keymap.set("v", ">", ">gv", opts)
 
 vim.keymap.set("n", "<leader>bv","ggVG", descopts("Select all in buffer") )
 
+vim.keymap.set("n", "<leader>bd", "<cmd>BDelete this<CR>", descopts("[B]uffer [D]elete"))
+vim.keymap.set("n", "<leader>bo", "<cmd>BDelete other<CR>", descopts("[B]uffer [O]ther"))
+vim.keymap.set("n", "<leader>bn", "<cmd>BDelete nameless<CR>", descopts("[B]uffer [N]ameless"))
+
 vim.keymap.set("n", "<leader>qq", ":q<CR>", opts)
 vim.keymap.set("n", "<leader>qc", ":q!<CR>", opts)
 vim.keymap.set("n", "<leader>qs", ":w<CR>", opts)
@@ -97,6 +101,13 @@ vim.keymap.set("n", "<leader>tf", "<cmd>tabnew %<CR>") -- open current tab in ne
 vim.keymap.set("n", "<S-l>", ":bnext<CR>", { noremap = true, silent = true, desc = "Move to next buffer" })
 vim.keymap.set("n", "<S-h>", ":bprevious<CR>", { noremap = true, silent = true, desc = "Move to previous buffer" })
 
+-- get current buffers directory
+vim.keymap.set("n", "<leader>hd", function()
+    print(vim.fn.expand("%:p:h"))
+end, descopts("Show current buffer directory")
+)
+
+
 vim.keymap.set("v", "<leader>hs", function()
     vim.cmd('normal! "xy')
     vim.cmd('execute "help " . @x')
@@ -143,3 +154,4 @@ vim.keymap.set("n", "<leader>i", "<cmd>AerialToggle!<CR>")
 -- NOTE: NVIM-CMP
 -- <C-x> to complete
 -- <C-f> to complete snippets
+
