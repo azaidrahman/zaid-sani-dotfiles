@@ -1,3 +1,7 @@
 *backup*
 *Emoji*Pack*
 Emoji\ Pack/
+
+{{- if eq .chezmoi.username "abdullahzaidas-sani" }}
+.config/alfred/Alfred.alfredpreferences/workflows/user.workflow.37E41EA6-ECD9-4CE8-866A-82611B54D345/info.plist
+{{- end }}

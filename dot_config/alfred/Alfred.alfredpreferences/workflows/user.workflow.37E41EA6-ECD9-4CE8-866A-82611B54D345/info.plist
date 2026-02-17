@@ -94,6 +94,7 @@
 				<key>scopes</key>
 				<array>
 					<string>~/Library/CloudStorage/OneDrive-GamudaBerhad</string>
+					<string>~/Library/CloudStorage/GoogleDrive-abdullahzaidassani@gamuda.tech/My Drive</string>
 				</array>
 				<key>sortmode</key>
 				<integer>0</integer>
