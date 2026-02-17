@@ -4,31 +4,31 @@ if [[ -n "$ZSH_PROFILER" ]]; then
 fi
 
 # ~/.zshrc
-CONFIG_DIR="$HOME/.config/zsh"
+ZSH_DIR="$HOME/.config/zsh"
 
 # Add to PATH only if not already present
 path_prepend() { [[ ":$PATH:" != *":$1:"* ]] && export PATH="$1:$PATH"; }
 path_append()  { [[ ":$PATH:" != *":$1:"* ]] && export PATH="$PATH:$1"; }
 
 # Base
-source "$CONFIG_DIR/launch.zsh"
-source "$CONFIG_DIR/exports.zsh"
-source "$CONFIG_DIR/aliases.zsh"
+source "$ZSH_DIR/launch.zsh"
+source "$ZSH_DIR/exports.zsh"
+source "$ZSH_DIR/aliases.zsh"
 # Bindings & general
-source "$CONFIG_DIR/general.zsh"
+source "$ZSH_DIR/general.zsh"
 # Functions
-source "$CONFIG_DIR/functions.zsh"
+source "$ZSH_DIR/functions.zsh"
 # Zinit plugins
-source "$CONFIG_DIR/plugins.zsh"
+source "$ZSH_DIR/plugins.zsh"
 
 
 # Custom functions/plugins/themes
-# for file in "$CONFIG_DIR/custom/"*.zsh; do
+# for file in "$ZSH_DIR/custom/"*.zsh; do
 #   source "$file"
 # done
 
 # Prompt/theme
-source "$CONFIG_DIR/theme.zsh"
+source "$ZSH_DIR/theme.zsh"
 
 if [[ -n "$ZSH_PROFILER" ]]; then
     zprof
