@@ -1,0 +1,119 @@
+;; Goku (GokuRakuJoudo) configuration for Karabiner-Elements
+;; Generates complex_modifications in ~/.config/karabiner/karabiner.json
+;;
+;; Note: Device simple_modifications and fn_function_keys are managed
+;; by Karabiner UI, not by this file.
+;;
+;; !  | means mandatory
+;; #  | means optional
+;; C  | left_command
+;; T  | left_control
+;; O  | left_option
+;; S  | left_shift
+;; F  | fn
+;; Q  | right_command
+;; W  | right_control
+;; E  | right_option
+;; R  | right_shift
+;; P  | caps_lock
+;; !! | mandatory command + control + optional + shift (hyper)
+;; ## | optional any
+
+{:profiles {:Zaid {:default true}}
+
+ :applications {:ghostty-utm ["^com\\.mitchellh\\.ghostty$"
+                              "^com\\.utmapp\\.UTM$"]}
+
+ :templates {:open          "open -a '%s'"
+             :open-vivaldi  "open -n -a Vivaldi --args --profile-directory='%s'"}
+
+ :tos {:show-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
+                              :text "M:Iphone, c:cursor, A:claude, m:spotify, f:fantastical, e:obsidian, V:vivaldi-w, v:vivaldi-p, S:safari, t:ghostty, T:TB, s:slack, w:WA, W:Messages, o:todo, p:teams, l: outlook i:Freetube, n: NNW, k:KM"}}
+       :clear-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
+                               :text ""}}}
+
+ :main
+ [{:des "Global app shortcut"
+   :rules
+   [;; Hold right_option to activate app launcher layer (shows key hints overlay)
+    [:right_option [:show-app-help ["app-launch" 1]] nil {:afterup [:clear-app-help ["app-launch" 0]]}]
+
+    ;; Shifted shortcuts
+    [:!Sa [:open "Claude"]            :app-launch]
+    [:!Sm [:open "iPhone Mirroring"]  :app-launch]
+    [:!Ss [:open "Safari"]            :app-launch]
+    ; [:!St [:open "Thunderbird"]       :app-launch]
+    [:!Sv [:open-vivaldi "Profile 2"] :app-launch]
+    [:!Sw [:open "Messages"]          :app-launch]
+
+    ;; Unshifted shortcuts
+    [:c [:open "Cursor"]            :app-launch]
+    [:e [:open "Obsidian"]          :app-launch]
+    [:f [:open "Fantastical"]       :app-launch]
+    [:i [:open "Freetube"]          :app-launch]
+    [:k [:open "Keyboard Maestro"] :app-launch]
+    [:l [:open "Microsoft Outlook"] :app-launch]
+    [:m [:open "Spotify"]           :app-launch]
+    [:n [:open "NetNewsWire"]       :app-launch]
+    [:o [:open "Todoist"]           :app-launch]
+    [:p [:open "Microsoft Teams"]   :app-launch]
+    [:s [:open "Slack"]             :app-launch]
+    [:t [:open "Ghostty"]           :app-launch]
+    [:v [:open-vivaldi "Default"]   :app-launch]
+    [:w [:open "Whatsapp"]          :app-launch]]}
+
+  {:des "Hyper Navigation"
+   :rules
+   [;; h = left
+    [:!QWERh      :left_arrow]                                      ;; left
+    [:!CQWERh     :!Sleft_arrow]                                    ;; +cmd → select char left
+    [:!OCQWERh    :!OSleft_arrow]                                   ;; +opt+cmd → select word left
+    [:!SQWERh     :!TStab]                                          ;; +shift → prev tab
+    [:!OQWERh     :!Oleft_arrow]                                    ;; +opt → word left
+
+    ;; j = down
+    [:!QWERj      :down_arrow]                                      ;; down
+    [:!CQWERj     :!Sdown_arrow]                                    ;; +cmd → select line down
+    [:!OCQWERj    [:!Sdown_arrow :!Sdown_arrow :!Sdown_arrow]]      ;; +opt+cmd → select 3 lines
+    [:!SQWERj     :!Ctab]                                           ;; +shift → next app
+    [:!TQWERj     :!Tdown_arrow]                                    ;; +ctrl → app expose
+
+    ;; k = up
+    [:!QWERk      :up_arrow]                                        ;; up
+    [:!CQWERk     :!Sup_arrow]                                      ;; +cmd → select line up
+    [:!OCQWERk    [:!Sup_arrow :!Sup_arrow :!Sup_arrow]]            ;; +opt+cmd → select 3 lines
+    [:!SQWERk     :!CStab]                                          ;; +shift → prev app
+    [:!TQWERk     :!Tup_arrow]                                      ;; +ctrl → mission control
+
+    ;; l = right
+    [:!QWERl      :right_arrow]                                     ;; right
+    [:!CQWERl     :!Sright_arrow]                                   ;; +cmd → select char right
+    [:!OCQWERl    :!OSright_arrow]                                   ;; +opt+cmd → select word right
+    [:!SQWERl     :!Ttab]                                           ;; +shift → next tab
+    [:!OQWERl     :!Oright_arrow]                                   ;; +opt → word right
+
+    ;; u = home, p = end
+    [:!QWERu      :!Cleft_arrow]                                    ;; home
+    [:!CQWERu     :!CSleft_arrow]                                   ;; +cmd → select to home
+    [:!QWERp      :!Cright_arrow]                                   ;; end
+    [:!CQWERp     :!CSright_arrow]                                  ;; +cmd → select to end
+
+    ;; x = delete
+    [:!QWERx      :delete_or_backspace]                             ;; backspace
+    [:!SQWERx     :delete_forward]]}                                ;; +shift → forward delete
+
+  {:des "CapsLock to Hyper"
+   :rules
+   [;; caps_lock → hyper (right modifiers), tap → escape
+    [:##caps_lock :!QWEright_shift nil {:alone :escape}]
+    ;; hyper+escape → toggle caps_lock
+    [:!QWER#Pescape :!Tcaps_lock]
+    ;; hyper+space → language switch (ctrl+space)
+    [:!QWERspacebar :!Tspacebar]
+    ;; hyper+cmd+space → emoji picker (ctrl+cmd+space)
+    [:!CQWERspacebar :!TCspacebar]]}
+
+  {:des "Ghostty/UTM: swap Cmd and Ctrl"
+   :rules
+   [[:##left_command :left_control :ghostty-utm {:alone :left_command}]
+    [:##left_control :left_command :ghostty-utm {:alone :left_control}]]}]}
