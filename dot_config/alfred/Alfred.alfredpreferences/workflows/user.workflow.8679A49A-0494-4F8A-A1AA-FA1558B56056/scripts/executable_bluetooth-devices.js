@@ -14,28 +14,53 @@ app.includeStandardAdditions = true;
  * @property {unknown} openConnection
  */
 
+/**
+ * @param {string} title
+ * @param {string=} subtitle
+ */
+function alfredErrorItem(title, subtitle) {
+	if (!subtitle) subtitle = "";
+	return JSON.stringify({ items: [{ title: "⛔ " + title, subtitle: subtitle, valid: false }] });
+}
+
 //────────────────────────────────────────────────────────────────────────
 
 /** @type {AlfredRun} */
 // biome-ignore lint/correctness/noUnusedVariables: Alfred run
 function run() {
 	// GUARD
-	const osVersion = $.NSProcessInfo.processInfo.operatingSystemVersion;
-	if (parseInt(osVersion.majorVersion) < 10 && parseInt(osVersion.minorVersion) < 15) {
-		return JSON.stringify({
-			items: [{ title: "⛔ This feature requires at least macOS 10.15", valid: false }],
-		});
+	const { majorVersion: major, minorVersion: minor } =
+		$.NSProcessInfo.processInfo.operatingSystemVersion;
+	if ((parseInt(major) === 10 && parseInt(minor) < 15) || parseInt(major) < 10) {
+		return alfredErrorItem("This feature requires at least macOS 10.15");
 	}
 	// @ts-expect-error
 	if ($.CBManager.authorization !== $.CBManagerAuthorizationAllowedAlways) {
-		const item = {
-			title: "⛔ Unable to access Bluetooth",
-			subtitle: "Open System Settings, then grant Alfred Bluetooth permissions.",
-			valid: false,
-		};
-		return JSON.stringify({ items: [item] });
+		return alfredErrorItem(
+			"Unable to access Bluetooth",
+			"Open System Settings, then grant Alfred Bluetooth permissions.",
+		);
 	}
 	//───────────────────────────────────────────────────────────────────────────
+
+	// CAVEAT this only shows the battery for first-party Apple devices
+	let ioregOutput;
+	try {
+		ioregOutput = app.doShellScript(
+			"ioreg -rak BatteryPercent | sed 's/data>/string>/' | plutil -convert json - -o -",
+		);
+	} catch (_error) {
+		const msg = "ioreg failed, battery info will not be included. ioreg output: " + ioregOutput;
+		console.log(msg);
+	}
+
+	/** @type {Record<string, number>} */
+	const batteryInfo = ioregOutput
+		? JSON.parse(ioregOutput).reduce((/** @type {any} */ acc, /** @type {any} */ device) => {
+				acc[device.DeviceAddress] = device.BatteryPercent;
+				return acc;
+			}, {})
+		: {};
 
 	const excludedDevices = $.getenv("excluded_devices").split(/ *, */);
 
@@ -45,13 +70,15 @@ function run() {
 	/** @type {AlfredItem[]} */
 	const deviceArr = devices.flatMap((device) => {
 		const name = device.nameOrAddress.js;
+		if (excludedDevices.includes(name)) return [];
+
 		const connectedIcon = device.isConnected ? "🟢 " : "🔴 ";
 		const address = device.addressString.js;
-		if (excludedDevices.includes(name)) return [];
+		const battery = batteryInfo[address] ? batteryInfo[address] + "%" : "";
 
 		return {
 			title: name,
-			subtitle: connectedIcon,
+			subtitle: connectedIcon + "  " + battery,
 			uid: address,
 			arg: address,
 		};

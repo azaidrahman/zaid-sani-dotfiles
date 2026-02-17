@@ -16,5 +16,9 @@
 	<string>zsh</string>
 	<key>keyword_07</key>
 	<string>go</string>
+	<key>keyword_08</key>
+	<string>bash</string>
+	<key>keyword_09</key>
+	<string>k8s</string>
 </dict>
 </plist>
