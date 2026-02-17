@@ -38,7 +38,7 @@ macos-titlebar-style = hidden
 # true. If set to false, surfaces will close without any confirmation.
 confirm-close-surface = false
 
-# keybind = global:cmd+s=toggle_quick_terminal
+# keybind = global:alt+s=toggle_quick_terminal
 keybind = cmd+s=toggle_quick_terminal
 
 # This does not work with GLFW builds.
