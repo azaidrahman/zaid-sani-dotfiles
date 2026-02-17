@@ -89,22 +89,6 @@
           "type" : "basic"
         }, {
           "from" : {
-            "key_code" : "t",
-            "modifiers" : {
-              "mandatory" : [ "left_shift" ]
-            }
-          },
-          "to" : [ {
-            "shell_command" : "open -a 'Thunderbird'"
-          } ],
-          "conditions" : [ {
-            "name" : "app-launch",
-            "value" : 1,
-            "type" : "variable_if"
-          } ],
-          "type" : "basic"
-        }, {
-          "from" : {
             "key_code" : "v",
             "modifiers" : {
               "mandatory" : [ "left_shift" ]
@@ -499,9 +483,9 @@
           "type" : "basic"
         }, {
           "from" : {
-            "key_code" : "k",
+            "key_code" : "m",
             "modifiers" : {
-              "mandatory" : [ "left_control", "right_command", "right_control", "right_option", "right_shift" ]
+              "mandatory" : [ "right_command", "right_control", "right_option", "right_shift" ]
             }
           },
           "to" : [ {

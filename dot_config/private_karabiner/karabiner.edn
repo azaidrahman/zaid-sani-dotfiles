@@ -83,7 +83,8 @@
     [:!CQWERk     :!Sup_arrow]                                      ;; +cmd → select line up
     [:!OCQWERk    [:!Sup_arrow :!Sup_arrow :!Sup_arrow]]            ;; +opt+cmd → select 3 lines
     [:!SQWERk     :!CStab]                                          ;; +shift → prev app
-    [:!TQWERk     :!Tup_arrow]                                      ;; +ctrl → mission control
+    ;; m = mission control
+    [:!QWERm     :!Tup_arrow]                                      ;; +ctrl → mission control
 
     ;; l = right
     [:!QWERl      :right_arrow]                                     ;; right
@@ -116,4 +117,5 @@
   {:des "Ghostty/UTM: swap Cmd and Ctrl"
    :rules
    [[:##left_command :left_control :ghostty-utm {:alone :left_command}]
-    [:##left_control :left_command :ghostty-utm {:alone :left_control}]]}]}
+    [:##left_control :left_command :ghostty-utm {:alone :left_control}]]}]
+}
