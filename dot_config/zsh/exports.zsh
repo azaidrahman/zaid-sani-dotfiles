@@ -21,10 +21,10 @@ fi
 # [ -s "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm" ] && \. "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm"  # This loads nvm bash_completion
 
 # The next line updates PATH for the Google Cloud SDK.
-if [ -f '/Users/zaid/Downloads/google-cloud-sdk/path.zsh.inc' ]; then . '/Users/zaid/Downloads/google-cloud-sdk/path.zsh.inc'; fi
+if [ -f "$HOME/Downloads/google-cloud-sdk/path.zsh.inc" ]; then . "$HOME/Downloads/google-cloud-sdk/path.zsh.inc"; fi
 
 # The next line enables shell command completion for gcloud.
-if [ -f '/Users/zaid/Downloads/google-cloud-sdk/completion.zsh.inc' ]; then . '/Users/zaid/Downloads/google-cloud-sdk/completion.zsh.inc'; fi
+if [ -f "$HOME/Downloads/google-cloud-sdk/completion.zsh.inc" ]; then . "$HOME/Downloads/google-cloud-sdk/completion.zsh.inc"; fi
 
 ## COMMON VARIABLES
 export EDITOR="nvim"
@@ -32,12 +32,12 @@ export VISUAL="nvim"
 export SUDO_EDITOR="nvim"
 export FCEDITOR="nvim"
 export TERMINAL="Ghostty"
-# export ZUNO="/Users/zaid/Library/Mobile Documents/com~apple~CloudDocs/ZUNO/"
+# export ZUNO="$HOME/Library/Mobile Documents/com~apple~CloudDocs/ZUNO/"
 # export BROWSER="app.zen-browser.zen"
 #
 export FZ_DEFAULT_COMMAND='rg —files —hidden -g !.git/'
 
-export GCP_SCRIPTS="/Users/abdullahzaidas-sani/projects/gamuda/gtech-platform-infra-monorepo/scripts/"
+export GCP_SCRIPTS="$HOME/projects/gamuda/gtech-platform-infra-monorepo/scripts/"
 
 # GOLANG
 path_append "$HOME/go/bin"
@@ -48,4 +48,7 @@ export SSH_AUTH_SOCK=~/Library/Group\ Containers/2BUA8C4S2C.com.1password/t/agen
 export STARSHIP_CONFIG="$HOME/.config/zsh/starship.toml"
 
 export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
-export WTREE="/Users/abdullahzaidas-sani/projects/gamuda/worktrees"
+export WTREE="$HOME/projects/gamuda/worktrees"
+
+# GOKU (KARABINER)
+export GOKU_EDN_CONFIG_FILE="$HOME/.config/karabiner/karabiner.edn"
