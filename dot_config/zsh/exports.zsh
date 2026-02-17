@@ -47,4 +47,5 @@ export SSH_AUTH_SOCK=~/Library/Group\ Containers/2BUA8C4S2C.com.1password/t/agen
 
 export STARSHIP_CONFIG="$HOME/.config/zsh/starship.toml"
 
+export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
 export WTREE="/Users/abdullahzaidas-sani/projects/gamuda/worktrees"
