@@ -156,9 +156,6 @@ run = 'layout floating'
 if.app-name-regex-substring = 'FreeTube'
 run = 'layout floating'  
 [[on-window-detected]]
-if.app-name-regex-substring = 'IINA'
-run = 'layout floating'  
-[[on-window-detected]]
 if.app-name-regex-substring = '1Password'
 run = 'layout floating'
 [[on-window-detected]]
@@ -176,6 +173,10 @@ run = 'move-node-to-workspace 3'
 [[on-window-detected]]
 if.app-name-regex-substring = 'NetNewsWire'
 run = 'move-node-to-workspace 4'
+[[on-window-detected]]
+if.app-name-regex-substring = 'IINA'
+run = 'move-node-to-workspace 4'
+# run = 'layout floating'  
 
 # Workspace 5 - Terminal
 [[on-window-detected]]
