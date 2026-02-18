@@ -43,3 +43,6 @@ complete -o nospace -C /opt/homebrew/bin/terraform terraform
 # bun
 export BUN_INSTALL="$HOME/.bun"
 path_prepend "$BUN_INSTALL/bin"
+
+# Zsh config change watcher
+source "$ZSH_DIR/zsh-config-watcher.zsh"

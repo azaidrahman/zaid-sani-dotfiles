@@ -68,3 +68,12 @@ function ,isglob() {
         fi
     fi
 }
+
+gwtcd() {
+    local selected
+    selected=$(git worktree list | awk '{print $1}' | while read -r p; do
+      printf "%s\t%s\n" "$(basename "$p")" "$p"
+    done | fzf --with-nth=1 | cut -f2)
+    [[ -n "$selected" ]] && cd "$selected"
+}
+
