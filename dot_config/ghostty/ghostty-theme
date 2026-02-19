@@ -1,6 +1,7 @@
 # background = #1a1410 #brown-black
 # background = #231c17 #lighter-brown-black
-background = #2a211a
+# background = #2a211a
+background = #282a36
 foreground = #ffffff
 
 cursor-color = #f94dff
