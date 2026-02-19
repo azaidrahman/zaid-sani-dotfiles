@@ -41,29 +41,13 @@
           "type" : "basic"
         }, {
           "from" : {
-            "key_code" : "a",
+            "key_code" : "w",
             "modifiers" : {
               "mandatory" : [ "left_shift" ]
             }
           },
           "to" : [ {
-            "shell_command" : "open -a 'Claude'"
-          } ],
-          "conditions" : [ {
-            "name" : "app-launch",
-            "value" : 1,
-            "type" : "variable_if"
-          } ],
-          "type" : "basic"
-        }, {
-          "from" : {
-            "key_code" : "m",
-            "modifiers" : {
-              "mandatory" : [ "left_shift" ]
-            }
-          },
-          "to" : [ {
-            "shell_command" : "open -a 'iPhone Mirroring'"
+            "shell_command" : "open -a 'Messages'"
           } ],
           "conditions" : [ {
             "name" : "app-launch",
@@ -105,13 +89,13 @@
           "type" : "basic"
         }, {
           "from" : {
-            "key_code" : "w",
+            "key_code" : "m",
             "modifiers" : {
               "mandatory" : [ "left_shift" ]
             }
           },
           "to" : [ {
-            "shell_command" : "open -a 'Messages'"
+            "shell_command" : "open -a 'iPhone Mirroring'"
           } ],
           "conditions" : [ {
             "name" : "app-launch",
@@ -121,10 +105,10 @@
           "type" : "basic"
         }, {
           "from" : {
-            "key_code" : "c"
+            "key_code" : "w"
           },
           "to" : [ {
-            "shell_command" : "open -a 'Cursor'"
+            "shell_command" : "open -a 'Whatsapp'"
           } ],
           "conditions" : [ {
             "name" : "app-launch",
@@ -147,10 +131,10 @@
           "type" : "basic"
         }, {
           "from" : {
-            "key_code" : "f"
+            "key_code" : "t"
           },
           "to" : [ {
-            "shell_command" : "open -a 'Fantastical'"
+            "shell_command" : "open -a 'Ghostty'"
           } ],
           "conditions" : [ {
             "name" : "app-launch",
@@ -164,58 +148,6 @@
           },
           "to" : [ {
             "shell_command" : "open -a 'Freetube'"
-          } ],
-          "conditions" : [ {
-            "name" : "app-launch",
-            "value" : 1,
-            "type" : "variable_if"
-          } ],
-          "type" : "basic"
-        }, {
-          "from" : {
-            "key_code" : "k"
-          },
-          "to" : [ {
-            "shell_command" : "open -a 'Keyboard Maestro'"
-          } ],
-          "conditions" : [ {
-            "name" : "app-launch",
-            "value" : 1,
-            "type" : "variable_if"
-          } ],
-          "type" : "basic"
-        }, {
-          "from" : {
-            "key_code" : "l"
-          },
-          "to" : [ {
-            "shell_command" : "open -a 'Microsoft Outlook'"
-          } ],
-          "conditions" : [ {
-            "name" : "app-launch",
-            "value" : 1,
-            "type" : "variable_if"
-          } ],
-          "type" : "basic"
-        }, {
-          "from" : {
-            "key_code" : "m"
-          },
-          "to" : [ {
-            "shell_command" : "open -a 'Spotify'"
-          } ],
-          "conditions" : [ {
-            "name" : "app-launch",
-            "value" : 1,
-            "type" : "variable_if"
-          } ],
-          "type" : "basic"
-        }, {
-          "from" : {
-            "key_code" : "n"
-          },
-          "to" : [ {
-            "shell_command" : "open -a 'NetNewsWire'"
           } ],
           "conditions" : [ {
             "name" : "app-launch",
@@ -251,6 +183,19 @@
           "type" : "basic"
         }, {
           "from" : {
+            "key_code" : "a"
+          },
+          "to" : [ {
+            "shell_command" : "open -a 'Claude'"
+          } ],
+          "conditions" : [ {
+            "name" : "app-launch",
+            "value" : 1,
+            "type" : "variable_if"
+          } ],
+          "type" : "basic"
+        }, {
+          "from" : {
             "key_code" : "s"
           },
           "to" : [ {
@@ -264,10 +209,49 @@
           "type" : "basic"
         }, {
           "from" : {
-            "key_code" : "t"
+            "key_code" : "f"
           },
           "to" : [ {
-            "shell_command" : "open -a 'Ghostty'"
+            "shell_command" : "open -a 'Fantastical'"
+          } ],
+          "conditions" : [ {
+            "name" : "app-launch",
+            "value" : 1,
+            "type" : "variable_if"
+          } ],
+          "type" : "basic"
+        }, {
+          "from" : {
+            "key_code" : "k"
+          },
+          "to" : [ {
+            "shell_command" : "open -a 'Keyboard Maestro'"
+          } ],
+          "conditions" : [ {
+            "name" : "app-launch",
+            "value" : 1,
+            "type" : "variable_if"
+          } ],
+          "type" : "basic"
+        }, {
+          "from" : {
+            "key_code" : "l"
+          },
+          "to" : [ {
+            "shell_command" : "open -a 'Microsoft Outlook'"
+          } ],
+          "conditions" : [ {
+            "name" : "app-launch",
+            "value" : 1,
+            "type" : "variable_if"
+          } ],
+          "type" : "basic"
+        }, {
+          "from" : {
+            "key_code" : "c"
+          },
+          "to" : [ {
+            "shell_command" : "open -a 'Cursor'"
           } ],
           "conditions" : [ {
             "name" : "app-launch",
@@ -290,10 +274,23 @@
           "type" : "basic"
         }, {
           "from" : {
-            "key_code" : "w"
+            "key_code" : "n"
           },
           "to" : [ {
-            "shell_command" : "open -a 'Whatsapp'"
+            "shell_command" : "open -a 'Inoreader'"
+          } ],
+          "conditions" : [ {
+            "name" : "app-launch",
+            "value" : 1,
+            "type" : "variable_if"
+          } ],
+          "type" : "basic"
+        }, {
+          "from" : {
+            "key_code" : "m"
+          },
+          "to" : [ {
+            "shell_command" : "open -a 'Spotify'"
           } ],
           "conditions" : [ {
             "name" : "app-launch",
@@ -679,41 +676,19 @@
           "type" : "basic"
         } ]
       }, {
-        "description" : "Ghostty/UTM: swap Cmd and Ctrl",
+        "description" : "Tab to Ctrl",
         "manipulators" : [ {
           "to_if_alone" : [ {
-            "key_code" : "left_command"
+            "key_code" : "tab"
           } ],
           "from" : {
-            "key_code" : "left_command",
+            "key_code" : "tab",
             "modifiers" : {
               "optional" : [ "any" ]
             }
           },
           "to" : [ {
             "key_code" : "left_control"
-          } ],
-          "conditions" : [ {
-            "type" : "frontmost_application_if",
-            "bundle_identifiers" : [ "^com\\.mitchellh\\.ghostty$", "^com\\.utmapp\\.UTM$" ]
-          } ],
-          "type" : "basic"
-        }, {
-          "to_if_alone" : [ {
-            "key_code" : "left_control"
-          } ],
-          "from" : {
-            "key_code" : "left_control",
-            "modifiers" : {
-              "optional" : [ "any" ]
-            }
-          },
-          "to" : [ {
-            "key_code" : "left_command"
-          } ],
-          "conditions" : [ {
-            "type" : "frontmost_application_if",
-            "bundle_identifiers" : [ "^com\\.mitchellh\\.ghostty$", "^com\\.utmapp\\.UTM$" ]
           } ],
           "type" : "basic"
         } ]

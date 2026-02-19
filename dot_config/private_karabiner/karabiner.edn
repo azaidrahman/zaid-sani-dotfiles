@@ -39,29 +39,29 @@
     [:right_option [:show-app-help ["app-launch" 1]] nil {:afterup [:clear-app-help ["app-launch" 0]]}]
 
     ;; Shifted shortcuts
-    [:!Sa [:open "Claude"]            :app-launch]
-    [:!Sm [:open "iPhone Mirroring"]  :app-launch]
-    [:!Ss [:open "Safari"]            :app-launch]
-    ; [:!St [:open "Thunderbird"]       :app-launch]
-    [:!Sv [:open-vivaldi "Profile 2"] :app-launch]
     [:!Sw [:open "Messages"]          :app-launch]
+    [:!Ss [:open "Safari"]            :app-launch]
+    [:!Sv [:open-vivaldi "Profile 2"] :app-launch]
+    [:!Sm [:open "iPhone Mirroring"]  :app-launch]
 
     ;; Unshifted shortcuts
-    [:c [:open "Cursor"]            :app-launch]
+    [:w [:open "Whatsapp"]          :app-launch]
     [:e [:open "Obsidian"]          :app-launch]
-    [:f [:open "Fantastical"]       :app-launch]
+    [:t [:open "Ghostty"]           :app-launch]
     [:i [:open "Freetube"]          :app-launch]
-    [:k [:open "Keyboard Maestro"] :app-launch]
-    [:l [:open "Microsoft Outlook"] :app-launch]
-    [:m [:open "Spotify"]           :app-launch]
-    [:n [:open "NetNewsWire"]       :app-launch]
     [:o [:open "Todoist"]           :app-launch]
     [:p [:open "Microsoft Teams"]   :app-launch]
+    [:a [:open "Claude"]            :app-launch]
     [:s [:open "Slack"]             :app-launch]
-    [:t [:open "Ghostty"]           :app-launch]
+    [:f [:open "Fantastical"]       :app-launch]
+    [:k [:open "Keyboard Maestro"]  :app-launch]
+    [:l [:open "Microsoft Outlook"] :app-launch]
+    [:c [:open "Cursor"]            :app-launch]
     [:v [:open-vivaldi "Default"]   :app-launch]
-    [:w [:open "Whatsapp"]          :app-launch]]}
-
+    [:n [:open "Inoreader"]         :app-launch]
+    [:m [:open "Spotify"]           :app-launch]
+   ]
+  }
   {:des "Hyper Navigation"
    :rules
    [;; h = left
@@ -114,8 +114,13 @@
     ;; hyper+cmd+space → emoji picker (ctrl+cmd+space)
     [:!CQWERspacebar :!TCspacebar]]}
 
-  {:des "Ghostty/UTM: swap Cmd and Ctrl"
+  {:des "Tab to Ctrl"
    :rules
-   [[:##left_command :left_control :ghostty-utm {:alone :left_command}]
-    [:##left_control :left_command :ghostty-utm {:alone :left_control}]]}]
+   [[:##tab :left_control nil {:alone :tab}]]}
+
+  ; {:des "Ghostty/UTM: swap Cmd and Ctrl"
+  ;  :rules
+  ;  [[:##left_command :left_control :ghostty-utm {:alone :left_command}]
+  ;   [:##left_control :left_command :ghostty-utm {:alone :left_control}]]}
+  ]
 }
