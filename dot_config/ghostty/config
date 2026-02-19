@@ -28,7 +28,11 @@ window-padding-x = 4,2
 window-padding-y = 6,0
 
 font-family = "JetBrainsMono Nerd Font"
-font-size = 15
+font-size = 17
+
+# Toggle between two font sizes
+keybind = cmd+shift+minus=set_font_size:17
+keybind = cmd+shift+equal=set_font_size:22
 
 # macOS: To hide the titlebar without removing the native window borders
 #        or rounded corners, use `macos-titlebar-style = hidden` instead.
