@@ -1,8 +1,0 @@
-{
-  "alfredsnippet" : {
-    "snippet" : "{isodate:yyyy_MM_dd}",
-    "uid" : "485D1CA8-1093-4642-BB15-BED17EB83812",
-    "name" : "Date",
-    "keyword" : ":ymd:"
-  }
-}
