@@ -28,7 +28,7 @@
              :open-vivaldi  "open -n -a Vivaldi --args --profile-directory='%s'"}
 
  :tos {:show-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
-                              :text "M:Iphone, c:cursor, A:claude, m:spotify, f:fantastical, e:obsidian, V:vivaldi-w, v:vivaldi-p, S:safari, t:ghostty, T:TB, s:slack, w:WA, W:Messages, o:todo, p:teams, l: outlook i:Freetube, n: NNW, k:KM"}}
+                              :text "M:Iphone, c:cursor, a:claude, m:spotify, f:fantastical, e:obsidian, V:vivaldi-w, v:vivaldi-p, S:safari, t:ghostty, T:TB, s:slack, w:WA, W:Messages, o:todo, p:teams, l: outlook i:Freetube, n: ino, k:KM"}}
        :clear-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
                                :text ""}}}
 
