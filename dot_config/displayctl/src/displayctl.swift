@@ -78,8 +78,10 @@ private func onlineDisplays() -> [CGDirectDisplayID] {
     return Array(ids.prefix(Int(count)))
 }
 
-// Return the id of the built-in display, or nil when it is off. A disabled
-// display is not in the online list, so nil also means "off".
+// Return the id of the built-in display, or nil when it is not in the online
+// list. A display leaves that list when this tool disables it. A display also
+// leaves it for a moment while the window server reconfigures the desk, so nil
+// alone does not tell why the display is gone. See builtinState().
 private func liveBuiltinID() -> CGDirectDisplayID? {
     onlineDisplays().first { CGDisplayIsBuiltin($0) != 0 }
 }
@@ -108,13 +110,97 @@ private func recallBuiltin() -> CGDirectDisplayID {
     return value
 }
 
+private func forgetBuiltin() {
+    try? FileManager.default.removeItem(atPath: stateFile)
+}
+
+// The file also records the intent of the tool. The file exists only while the
+// tool holds the display off. The file lives in /tmp, so a restart clears it.
+// A restart also restores the display, because the change has session scope.
+private func toolHoldsBuiltinOff() -> Bool {
+    FileManager.default.fileExists(atPath: stateFile)
+}
+
+// MARK: - The decision
+//
+// These two types hold all of the logic that does not touch the hardware. The
+// `selftest` command checks them.
+
+enum BuiltinState {
+    case on          // the display is in the online list
+    case offByTool   // the display is absent and this tool turned it off
+    case unknown     // the display is absent for some other reason
+}
+
+enum Action: Equatable {
+    case none        // the display is already in the wanted state
+    case turnOn
+    case turnOff
+    case waitUnknown // the state is not certain, so make no change now
+}
+
+func plan(wanted: Bool, state: BuiltinState) -> Action {
+    switch (wanted, state) {
+    case (true, .on): return .none
+    case (false, .on): return .turnOff
+    case (true, .offByTool): return .turnOn
+    case (false, .offByTool): return .none
+    // An enable of a display that is already live changes nothing, so the tool
+    // can turn the display on without knowing the state.
+    case (true, .unknown): return .turnOn
+    // The display may be on and absent from the list for only a moment. A
+    // disable now would do nothing and would still count as done, and the
+    // display would stay on. Wait for a state that is certain.
+    case (false, .unknown): return .waitUnknown
+    }
+}
+
+// The number of externals at the last decision. The agent acts only when this
+// number changes, so a manual change to the display stays until the desk
+// changes.
+struct Latch {
+    private(set) var lastExternals: Int? = nil
+
+    func isUnchanged(externals: Int) -> Bool { lastExternals == externals }
+
+    // Hold the count only when the display really reached the wanted state. A
+    // change that did not happen leaves the latch open, so the next look tries
+    // again instead of reporting no change in the set of monitors.
+    mutating func record(externals: Int, applied: Bool) {
+        lastExternals = applied ? externals : nil
+    }
+}
+
+private func builtinState() -> BuiltinState {
+    if liveBuiltinID() != nil { return .on }
+    return toolHoldsBuiltinOff() ? .offByTool : .unknown
+}
+
 // MARK: - Apply a state
+
+// The window server finishes a change a moment after the call returns. Look at
+// the display list until it agrees with the wanted state, or until the time
+// runs out. A change that the list never confirms counts as a failure.
+private func waitForBuiltin(on wanted: Bool, timeout: TimeInterval = 2.0) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    repeat {
+        if (liveBuiltinID() != nil) == wanted { return true }
+        usleep(100_000)
+    } while Date() < deadline
+    return (liveBuiltinID() != nil) == wanted
+}
 
 @discardableResult
 private func applyBuiltin(on wanted: Bool, dryRun: Bool) -> Bool {
-    let live = liveBuiltinID()
-    let isOn = live != nil
-    if wanted == isOn { return true }
+    switch plan(wanted: wanted, state: builtinState()) {
+    case .none:
+        return true
+    case .waitUnknown:
+        log("the built-in display is not in the display list, and this tool did not turn it off, so the state is not certain; making no change")
+        return false
+    case .turnOn, .turnOff:
+        break
+    }
 
     // Never disable the last display. That would leave no screen at all.
     if !wanted && onlineDisplays().count < 2 {
@@ -122,33 +208,56 @@ private func applyBuiltin(on wanted: Bool, dryRun: Bool) -> Bool {
         return false
     }
 
-    let id = live ?? recallBuiltin()
+    let id = liveBuiltinID() ?? recallBuiltin()
     if dryRun {
         log("dry run: would turn display \(id) \(wanted ? "on" : "off")")
         return true
     }
 
-    if !wanted { rememberBuiltin(id) }
-
     guard let sky = SkyLight.shared else {
         log("the SkyLight functions are missing, so this version of macOS is not supported")
         return false
     }
+
+    // Save the id before the change. A disabled display leaves the display
+    // list, so the tool cannot read the id again after the change.
+    if !wanted { rememberBuiltin(id) }
+
     let err = sky.setEnabled(id, wanted)
     if err != 0 {
         log("failed to turn display \(id) \(wanted ? "on" : "off"), error \(err)")
+        if !wanted { forgetBuiltin() }
         return false
     }
+    if !waitForBuiltin(on: wanted) {
+        log("the call to turn display \(id) \(wanted ? "on" : "off") reported no error, but the display list does not agree")
+        if !wanted { forgetBuiltin() }
+        return false
+    }
+    if wanted { forgetBuiltin() }
     log("display \(id) is now \(wanted ? "on" : "off")")
     return true
 }
 
 // MARK: - Watch mode
 
-// The number of externals at the last decision. The agent acts only when this
-// number changes. A manual change to the display therefore stays until the set
-// of monitors changes.
-private var lastExternals: Int? = nil
+private var latch = Latch()
+
+// A change that did not happen gets another look, because the state that
+// blocked it is short. Without this the agent would wait for the next change in
+// the set of monitors.
+private let retryDelay: TimeInterval = 4.0
+private let retryLimit = 5
+private var retriesLeft = retryLimit
+
+private func scheduleRetry() {
+    guard retriesLeft > 0 else {
+        log("no more retries, so the display stays as it is until the set of monitors changes")
+        return
+    }
+    retriesLeft -= 1
+    DispatchQueue.main.asyncAfter(deadline: .now() + retryDelay) { evaluate(reason: "retry") }
+}
 
 // The agent changes the display itself, and that change raises another
 // callback. This flag stops the agent from reacting to its own work.
@@ -164,7 +273,7 @@ private func evaluate(reason: String) {
     if applyingOwnChange { return }
 
     let externals = externalCount()
-    if lastExternals == externals {
+    if latch.isUnchanged(externals: externals) {
         log("\(reason): \(externals) external(s), no change in the set of monitors, leaving the display alone")
         return
     }
@@ -173,8 +282,9 @@ private func evaluate(reason: String) {
     log("\(reason): \(externals) external(s), the built-in display should be \(wanted ? "on" : "off")")
 
     applyingOwnChange = true
-    applyBuiltin(on: wanted, dryRun: watchDryRun)
-    lastExternals = externals
+    let applied = applyBuiltin(on: wanted, dryRun: watchDryRun)
+    latch.record(externals: externals, applied: applied)
+    if !applied { scheduleRetry() }
 
     // Release the guard after the events from our own change are done.
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { applyingOwnChange = false }
@@ -183,6 +293,7 @@ private func evaluate(reason: String) {
 // A dock sends many events in a burst. Wait for the burst to stop, then look at
 // the result one time.
 private func scheduleEvaluate(reason: String) {
+    retriesLeft = retryLimit
     debounceGeneration += 1
     let generation = debounceGeneration
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
@@ -234,6 +345,49 @@ private func watch(dryRun: Bool) -> Never {
     exit(0)
 }
 
+// MARK: - Self test
+//
+// These checks run on any Mac and touch no hardware. They cover the decision
+// and the latch, which is where the agent lost the display state before.
+
+private func selftest() -> Bool {
+    var failures = 0
+
+    func check(_ name: String, _ got: Any, _ want: Any) {
+        let ok = "\(got)" == "\(want)"
+        if !ok { failures += 1 }
+        print("\(ok ? "ok  " : "FAIL") \(name): got \(got), want \(want)")
+    }
+
+    // The display is in the list, so the state is certain.
+    check("on, want on", plan(wanted: true, state: .on), Action.none)
+    check("on, want off", plan(wanted: false, state: .on), Action.turnOff)
+
+    // The tool turned the display off, so the state is certain.
+    check("offByTool, want on", plan(wanted: true, state: .offByTool), Action.turnOn)
+    check("offByTool, want off", plan(wanted: false, state: .offByTool), Action.none)
+
+    // The display is absent for some other reason. Turning it on is safe,
+    // because an enable of a live display changes nothing. Turning it off is
+    // not safe, because the display may be on and merely absent for a moment.
+    check("unknown, want on", plan(wanted: true, state: .unknown), Action.turnOn)
+    check("unknown, want off", plan(wanted: false, state: .unknown), Action.waitUnknown)
+
+    // The latch must hold the count only after the display really moved. A
+    // change that did not happen must leave the latch open, so the next look
+    // tries again instead of reporting no change.
+    var latch = Latch()
+    latch.record(externals: 2, applied: true)
+    check("latch after a change that worked", latch.isUnchanged(externals: 2), true)
+
+    var open = Latch()
+    open.record(externals: 2, applied: false)
+    check("latch after a change that failed", open.isUnchanged(externals: 2), false)
+
+    print(failures == 0 ? "all checks passed" : "\(failures) check(s) failed")
+    return failures == 0
+}
+
 // MARK: - Command line
 
 private func printList() {
@@ -243,8 +397,13 @@ private func printList() {
         print("id=\(id) \(kind) \(Int(bounds.width))x\(Int(bounds.height))")
     }
     let externals = externalCount()
-    if liveBuiltinID() == nil {
+    switch builtinState() {
+    case .on:
+        break
+    case .offByTool:
         print("built-in display: OFF (saved id \(recallBuiltin()))")
+    case .unknown:
+        print("built-in display: not in the display list, and this tool did not turn it off")
     }
     print("externals: \(externals), the built-in display should be \(builtinShouldBeOn(externals: externals) ? "on" : "off")")
 }
@@ -261,10 +420,12 @@ case "on":
 case "off":
     exit(applyBuiltin(on: false, dryRun: dryRun) ? 0 : 1)
 case "toggle":
-    exit(applyBuiltin(on: liveBuiltinID() == nil, dryRun: dryRun) ? 0 : 1)
+    exit(applyBuiltin(on: builtinState() != .on, dryRun: dryRun) ? 0 : 1)
 case "watch":
     watch(dryRun: dryRun)
+case "selftest":
+    exit(selftest() ? 0 : 1)
 default:
-    print("usage: displayctl [list|on|off|toggle|watch] [--dry-run]")
+    print("usage: displayctl [list|on|off|toggle|watch|selftest] [--dry-run]")
     exit(2)
 }
