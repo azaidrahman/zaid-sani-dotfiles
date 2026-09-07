@@ -9,7 +9,8 @@
         "ctrl+o": "app:toggleTranscript",
         "ctrl+shift+b": "app:toggleBrief",
         "ctrl+shift+o": "app:toggleTeammatePreview",
-        "ctrl+r": "history:search"
+        "ctrl+r": "history:search",
+        "ctrl+x d": "app:toggleReplTab"
       }
     },
     {
