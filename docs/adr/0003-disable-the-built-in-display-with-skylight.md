@@ -58,5 +58,16 @@ change. It does not make the tool fail to build or fail to start.
 - A change through SkyLight notifies only the process that made it. Another
   process on the same Mac sees no event. A test of the agent therefore needs a
   real reconfiguration, such as a cable event or a change of origin.
+- An absent display in `CGGetOnlineDisplayList` has two causes. The tool
+  disabled the display, or the window server is in the middle of a change. The
+  tool must not read an absent display as "the display is off". It writes a file
+  in `/tmp` while it holds the display off. If the display is absent and the
+  file is missing, the tool makes no change and looks again a moment later. The
+  file and the change end at the same time, because a restart clears both.
+- The agent remembers the number of monitors only after the display reaches the
+  wanted state. A change that did not happen leaves that number unset, so the
+  next look tries again. If the agent remembered the number after a change that
+  failed, it would report no change in the set of monitors and leave the panel
+  on until the desk changed.
 - onyx does not run this agent. The build script, the install script, and
   `.chezmoiignore` all test the hostname.
