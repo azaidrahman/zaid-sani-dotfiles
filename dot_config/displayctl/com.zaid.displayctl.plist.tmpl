@@ -13,6 +13,12 @@
        the window server. A bootstrap into gui/<uid> gives that session. -->
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
+  <!-- The agent turns the built-in display back on before it stops. That change
+       goes through the window server and needs a few seconds. The default of
+       five seconds is too short. launchd then sends SIGKILL in the middle of the
+       change, and the record of the display in the window server becomes
+       unusable. The panel stays off until the next logout. -->
+  <key>ExitTimeOut</key><integer>20</integer>
   <key>StandardErrorPath</key>
   <string>/tmp/displayctl.err</string>
 </dict>

@@ -16,9 +16,10 @@ cp ~/.config/displayctl/com.zaid.displayctl.plist ~/Library/LaunchAgents/
 launchctl bootout gui/$(id -u)/com.zaid.displayctl 2>/dev/null || true
 
 # A bootout returns before the agent stops. A bootstrap that starts too early
-# fails with "Input/output error", because the label is still in use. Wait for
-# the label to go, for five seconds at most.
-for _ in $(seq 1 50); do
+# fails with "Input/output error", because the label is still in use. The agent
+# turns the display back on first, and `ExitTimeOut` in the plist gives it 20
+# seconds to do that. Wait for longer than that timeout, for 25 seconds at most.
+for _ in $(seq 1 250); do
   launchctl print gui/$(id -u)/com.zaid.displayctl >/dev/null 2>&1 || break
   sleep 0.1
 done
