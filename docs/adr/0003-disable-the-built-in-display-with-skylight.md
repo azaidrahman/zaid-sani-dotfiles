@@ -55,6 +55,13 @@ change. It does not make the tool fail to build or fail to start.
   the bootstrap. A bootout returns before the agent stops, and the agent takes a
   moment to turn the display back on first, so an immediate bootstrap fails with
   "Input/output error".
+- The plist sets `ExitTimeOut` to 20 seconds. The default of five seconds is too
+  short for the restore of the display. If launchd sends SIGKILL in the middle of
+  a display configuration, the record of that display in the window server
+  becomes unusable. A later `SLSConfigureDisplayEnabled` then accepts the id, and
+  `SLSCompleteDisplayConfiguration` returns error 1014. The panel stays off until
+  the next logout. We measured this on aqua on 2026-09-07. The wait loop of the
+  install script must therefore run for longer than `ExitTimeOut`.
 - A change through SkyLight notifies only the process that made it. Another
   process on the same Mac sees no event. A test of the agent therefore needs a
   real reconfiguration, such as a cable event or a change of origin.
