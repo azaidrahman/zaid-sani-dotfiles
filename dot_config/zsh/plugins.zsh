@@ -53,7 +53,9 @@ _init_cached zoxide zoxide-init.zsh zoxide init zsh
 # Source the env file first, because it puts ~/.atuin/bin on PATH.
 [[ -r "$HOME/.atuin/bin/env" ]] && source "$HOME/.atuin/bin/env"
 if (( $+commands[atuin] )); then
-  _init_cached atuin atuin-init.zsh atuin init zsh
+  # --disable-up-arrow keeps the Up key on the normal zsh history. Ctrl+R is
+  # the only key that opens the atuin search.
+  _init_cached atuin atuin-init.zsh atuin init zsh --disable-up-arrow
 
   # Atuin binds Ctrl+R in the viins and emacs keymaps only. In vicmd it binds
   # `/` instead. Bind Ctrl+R in vicmd too, so that the key opens atuin in every
