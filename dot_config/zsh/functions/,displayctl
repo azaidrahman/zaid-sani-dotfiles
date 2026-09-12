@@ -1,0 +1,149 @@
+# ,displayctl - Control the built-in display of this MacBook, and the agent that
+#               turns it off by itself.
+#
+#               The `displayctl` tool removes the built-in display from the
+#               display list of macOS. No windows go to it. The lid can stay
+#               open. The `com.zaid.displayctl` launch agent watches for a
+#               change of the monitors. It turns the built-in display off when
+#               exactly two external displays are connected. It turns the
+#               display on again for any other number.
+#
+#               This function passes the display commands to the tool. It adds
+#               the commands for the launch agent.
+#
+#               Usage:
+#                 ,displayctl               Show the displays and the wanted state.
+#                 ,displayctl list          The same as no command.
+#                 ,displayctl off           Turn the built-in display off now.
+#                 ,displayctl on            Turn the built-in display on now.
+#                 ,displayctl toggle        Change the state of the built-in display.
+#                 ,displayctl selftest      Run the checks of the tool.
+#                 ,displayctl status        Show if the agent runs.
+#                 ,displayctl start         Load the agent.
+#                 ,displayctl stop          Unload the agent.
+#                 ,displayctl restart       Unload the agent, then load it again.
+#                 ,displayctl log           Follow the log of the agent.
+#                 ,displayctl help          Show this help.
+#
+#               Add `--dry-run` to `off`, `on`, or `toggle`. The tool then
+#               reports the change and makes no change.
+#
+#               A manual `off` holds only until the agent sees the next change
+#               of the monitors. To keep the display off, run `stop` first.
+
+emulate -L zsh
+setopt local_options
+
+local bin="$HOME/.config/displayctl/bin/displayctl"
+local label=com.zaid.displayctl
+local plist="$HOME/Library/LaunchAgents/$label.plist"
+local target="gui/$(id -u)/$label"
+local logfile=/tmp/displayctl.err
+local command=${1:-list}
+
+.displayctl-help() {
+	local self=${functions_source[,displayctl]:-$HOME/.config/zsh/functions/,displayctl}
+	sed -n '1,/^$/s/^#\{1\} \{0,1\}//p' "$self"
+}
+
+.displayctl-loaded() {
+	launchctl print "$target" >/dev/null 2>&1
+}
+
+# A bootout returns before the agent stops. The agent turns the display back on
+# first, and the plist gives it 20 seconds for that. Wait for 25 seconds at most.
+.displayctl-wait-gone() {
+	local _
+	for _ in {1..250}; do
+		.displayctl-loaded || return 0
+		sleep 0.1
+	done
+	return 1
+}
+
+.displayctl-stop() {
+	if ! .displayctl-loaded; then
+		print "displayctl agent: already stopped"
+		return 0
+	fi
+	launchctl bootout "$target" 2>/dev/null
+	if .displayctl-wait-gone; then
+		print "displayctl agent: stopped"
+		return 0
+	fi
+	print -u 2 "displayctl agent: it did not stop in 25 seconds"
+	return 1
+}
+
+.displayctl-start() {
+	if .displayctl-loaded; then
+		print "displayctl agent: already running"
+		return 0
+	fi
+	if [[ ! -f $plist ]]; then
+		print -u 2 "displayctl agent: $plist is missing. Run 'chezmoi apply' first."
+		return 1
+	fi
+	launchctl bootstrap "gui/$(id -u)" "$plist" || return 1
+	print "displayctl agent: started"
+}
+
+.displayctl-cleanup() {
+	unfunction .displayctl-help .displayctl-loaded .displayctl-wait-gone \
+		.displayctl-stop .displayctl-start .displayctl-cleanup 2>/dev/null
+}
+
+if [[ $command == (help|-h|--help) ]]; then
+	.displayctl-help
+	.displayctl-cleanup
+	return 0
+fi
+
+local status_code=0
+
+case $command in
+status)
+	if .displayctl-loaded; then
+		print "displayctl agent: running"
+		launchctl print "$target" 2>/dev/null |
+			grep -E '^[[:space:]]+(state|pid|last exit code) = ' |
+			sed 's/^[[:space:]]*/  /'
+	else
+		print "displayctl agent: stopped"
+		status_code=1
+	fi
+	;;
+start)
+	.displayctl-start || status_code=$?
+	;;
+stop)
+	.displayctl-stop || status_code=$?
+	;;
+restart)
+	.displayctl-stop && .displayctl-start || status_code=$?
+	;;
+log)
+	if [[ ! -f $logfile ]]; then
+		print -u 2 "displayctl: $logfile does not exist yet"
+		status_code=1
+	else
+		tail -f "$logfile"
+	fi
+	;;
+list | on | off | toggle | selftest)
+	if [[ ! -x $bin ]]; then
+		print -u 2 "displayctl: $bin is missing. Run 'chezmoi apply' first."
+		status_code=1
+	else
+		"$bin" "$@" || status_code=$?
+	fi
+	;;
+*)
+	print -u 2 "displayctl: unknown command \"$command\""
+	print -u 2 "Run ',displayctl help' for the list of commands."
+	status_code=2
+	;;
+esac
+
+.displayctl-cleanup
+return $status_code
