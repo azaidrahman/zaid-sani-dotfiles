@@ -24,6 +24,17 @@ export FZF_DEFAULT_COMMAND='rg --files --hidden -g !.git/'
 export FZF_CTRL_R_COMMAND=""
 export GOKU_EDN_CONFIG_FILE="$HOME/.config/karabiner/karabiner.edn"
 
+# === Todoist ticket sync ===
+# ~/.claude/skills/todoist-ticket-sync/ticket-to-todoist.py reads the Todoist
+# token through this reference. A reference is not a secret, so it belongs
+# here and not in secrets.zsh. The script calls `op read` only when it writes,
+# so a shell that never syncs pays nothing for this line.
+#
+# The item sits in the Personal Development vault, which the personal
+# 1Password service account already covers. If a read fails, run
+# `,op-sa-health`.
+export TODOIST_OP_REF="op://Personal Development/Todoist.API/credential"
+
 # === Claude Code phone notifications ===
 # Send every notification to the phone, and do not wait until you leave the Mac.
 # ~/.claude/hooks/notify-tmux.sh sends to the phone only when you are away. This
