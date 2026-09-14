@@ -44,8 +44,10 @@ archive/
 .pi/agent/pi-cache-optimizer-stats.json
 .pi/agent/taskplane/
 
-# displayctl controls the built-in display of aqua only
+# displayctl controls the built-in display of aqua only. The shell function
+# calls the tool at .config/displayctl/bin/displayctl, so it goes with the tool.
 {{ if ne .chezmoi.hostname "aqua" }}
 .config/displayctl/
 .local/bin/displayctl
+.config/zsh/functions/,displayctl
 {{ end }}
