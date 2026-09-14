@@ -69,32 +69,37 @@ the user and stop.
 
 ## What goes in the description
 
-Every ticket task carries the body of the Jira ticket, then a link to it.
-Todoist renders Markdown, so keep the bold labels.
+**Do not write the description yourself.** A script does it, so the same
+ticket always makes the same text.
 
-```markdown
-**Why:** one paragraph.
+```bash
+# Print the text for one ticket. Writes nothing.
+~/.claude/skills/todoist-ticket-sync/jira-to-todoist.py GTI-673
 
-**What:** one paragraph, or a short numbered list.
+# Write it to the matching Todoist task.
+~/.claude/skills/todoist-ticket-sync/jira-to-todoist.py GTI-673 --apply
 
-**Done when:** one paragraph.
-
-[GTI-673](https://getrnd.atlassian.net/browse/GTI-673)
+# Refresh every task whose title starts with a key.
+~/.claude/skills/todoist-ticket-sync/jira-to-todoist.py --all --apply
 ```
 
-Rules for the body:
+The script reads the ticket through `twg`, converts the body from Atlassian
+Document Format to Markdown, cuts it at the first horizontal rule, and adds a
+link. It skips a task that already holds the right text, so a second run
+changes nothing.
 
-- Keep the Why, What and Done-when lines. They are the house style.
-- **Cut everything after a `---` separator.** Long tickets append analysis,
-  tables and AI triage notes below that line. The link carries them.
-- Keep a warning that changes how the work is done. A forced sign-out, a
-  destroy that hits live data, or a blocker that another person owns.
-- For an intake ticket, keep the requester and the needed-by date.
-- If the ticket has no description, write `The Jira ticket has no
-  description.` and then the link. Do not invent a body.
-- Do not copy comments. They go stale, and Todoist does not re-sync them.
+`--all` without `--apply` reports what would change. Run that first.
 
-The base URL is `https://getrnd.atlassian.net/browse/<KEY>`.
+The script needs a Todoist token. Set `TODOIST_API_TOKEN`, or set
+`TODOIST_OP_REF` to a 1Password reference such as
+`op://Private/Todoist/credential`. It needs no Jira token, because `twg`
+already holds the Atlassian credential.
+
+**What the script cannot decide.** It copies the ticket faithfully. It does
+not know that a ticket is unworkable as written, or that one item in a list
+must come first. When you read a ticket and find something like that, add one
+short line at the top of the **parent** task, not the subtask. The next run of
+the script overwrites a subtask description.
 
 ## When a ticket ends
 
