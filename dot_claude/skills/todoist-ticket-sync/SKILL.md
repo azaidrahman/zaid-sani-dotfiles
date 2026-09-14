@@ -54,10 +54,25 @@ the user and stop.
 
    **The task exists.** This is the normal case. The ticket is already a
    subtask of a workstream. Propose these changes:
-   - Move it to the `Now` section of its project, or to `Ops & Firefighting`
-     if the ticket is a live break.
    - Set the priority to `p2`, or to `p1` if the ticket is a live break.
    - Set the due date to today.
+
+   A priority and a due date are enough. Both put the ticket in Today and in
+   Upcoming, which is where the user looks.
+
+   > **Never set `sectionId` on a subtask.** Todoist treats a section move as
+   > a move out of the parent, so the subtask silently leaves its workstream
+   > and lands loose in the section. The same is true of `projectId`. Verified
+   > on 2026-09-14: a child moved to a section came back with no `parentId`.
+   >
+   > If a whole stream becomes active, move the **workstream parent** to the
+   > `Now` section instead. A parent has no parent to lose, and its subtasks
+   > travel with it. Propose that as a separate change and say why.
+   >
+   > A live break is the one case for a project move, because the ticket
+   > belongs in `Ops & Firefighting` rather than its build stream. That move
+   > orphans the subtask, so say so, and offer to re-parent it under
+   > `Fix broken alert routing` or the in-flight workstream there.
 
    **The task does not exist.** The ticket is new since the last sweep. Read
    the ticket in the tracker. Propose a new subtask:
@@ -135,6 +150,8 @@ the script overwrites a subtask description.
 - Do not change a Jira status here. `finish-branch` owns the Jira
   transition where that skill exists.
 - Do not move a ticket out of `Blocked` unless the blocker is gone.
+- Do not set `sectionId` or `projectId` on a subtask. Either one takes it out
+  of its workstream. Change the priority and the due date instead.
 - If the user declines, do nothing and do not ask again in this session.
 
 ## Related
