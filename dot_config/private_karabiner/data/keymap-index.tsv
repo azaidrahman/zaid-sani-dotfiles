@@ -108,6 +108,8 @@ hyper	⇪	=	alfred arc opentabs	!CTOSequal_sign
 hyper	⇪	\	alfred pin bookmarks	!CTOSbackslash
 hyper	⇪	e	alfred open windows	!CTOSe
 hyper	⇪	i	mouseless overlay	!CTOSi
+hyper	⇪	1	alfred todoist	!CTOS1
+hyper	⇪	2	alfred jira	!CTOS2
 hyper	⇪	0	ice bar	!QWER0
 hyper	⇪	q	mouseless freekey (hold)	!QWERq
 hyper	⇪	⌘spacebar	emoji	!TCspacebar
