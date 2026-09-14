@@ -60,11 +60,41 @@ the user and stop.
    - Title: `<KEY> <the Jira summary>`
    - Parent: the workstream that fits. Name your choice and say why.
    - Labels: `gti`, plus the system and environment labels that fit.
+   - Description: the body of the ticket, then the link. See below.
 
 3. Ask the user. Show the ticket, the task you found or propose, and the
    changes. Use one `AskUserQuestion` call. Give the user a way to skip.
 
 4. Write only what the user accepts.
+
+## What goes in the description
+
+Every ticket task carries the body of the Jira ticket, then a link to it.
+Todoist renders Markdown, so keep the bold labels.
+
+```markdown
+**Why:** one paragraph.
+
+**What:** one paragraph, or a short numbered list.
+
+**Done when:** one paragraph.
+
+[GTI-673](https://getrnd.atlassian.net/browse/GTI-673)
+```
+
+Rules for the body:
+
+- Keep the Why, What and Done-when lines. They are the house style.
+- **Cut everything after a `---` separator.** Long tickets append analysis,
+  tables and AI triage notes below that line. The link carries them.
+- Keep a warning that changes how the work is done. A forced sign-out, a
+  destroy that hits live data, or a blocker that another person owns.
+- For an intake ticket, keep the requester and the needed-by date.
+- If the ticket has no description, write `The Jira ticket has no
+  description.` and then the link. Do not invent a body.
+- Do not copy comments. They go stale, and Todoist does not re-sync them.
+
+The base URL is `https://getrnd.atlassian.net/browse/<KEY>`.
 
 ## When a ticket ends
 
