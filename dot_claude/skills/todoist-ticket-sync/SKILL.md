@@ -95,9 +95,17 @@ changes nothing.
 `--all` without `--apply` reports what would change. Run that first.
 
 The script needs a Todoist token. Set `TODOIST_API_TOKEN`, or set
-`TODOIST_OP_REF` to a 1Password reference such as
-`op://Private/Todoist/credential`. It needs no tracker token: the Jira
-provider reads through `twg`, which already holds the Atlassian credential.
+`TODOIST_OP_REF` to a 1Password reference. `exports.zsh` already sets the
+reference on both devices.
+
+To read it, the script first takes the 1Password service account token from
+the keychain entry `op-service-account-token-personal`, the same entry that
+`git-credential-op` uses. That keeps the read headless. Without it, `op`
+asks the desktop app instead, which waits for a person to unlock it and
+therefore hangs in a hook. Override the entry with `TODOIST_OP_SA_ENTRY`.
+
+The script needs no tracker token: the Jira provider reads through `twg`,
+which already holds the Atlassian credential.
 
 **What the script cannot decide.** It copies the ticket faithfully. It does
 not know that a ticket is unworkable as written, or that one item in a list
