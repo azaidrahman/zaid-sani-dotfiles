@@ -340,18 +340,85 @@ def get_provider():
 # ===========================================================================
 
 
+# The keychain entry that holds the 1Password service account token. This is
+# the same entry that git-credential-op uses. The account is scoped to the
+# Personal Development vault, which is where the Todoist item sits.
+SA_KEYCHAIN_ENTRY = os.environ.get(
+    "TODOIST_OP_SA_ENTRY", "op-service-account-token-personal"
+)
+
+
+def service_account_env():
+    """Return an environment that lets `op` run without the desktop app.
+
+    Without a service account token, `op read` falls through to the 1Password
+    desktop app. That path needs the app running and unlocked, it can raise a
+    Touch ID prompt, and it takes about four seconds. A service account token
+    makes the same read headless and fast.
+
+    Returns the current environment unchanged when no token is available, so
+    the desktop app stays as the fallback.
+    """
+    env = os.environ.copy()
+    if env.get("OP_SERVICE_ACCOUNT_TOKEN"):
+        return env
+    try:
+        got = subprocess.run(
+            [
+                "security", "find-generic-password",
+                "-a", os.environ.get("USER", ""),
+                "-s", SA_KEYCHAIN_ENTRY,
+                "-w",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return env
+    if got.returncode == 0 and got.stdout.strip():
+        env["OP_SERVICE_ACCOUNT_TOKEN"] = got.stdout.strip()
+    return env
+
+
 def todoist_token():
     token = os.environ.get("TODOIST_API_TOKEN")
     if token:
         return token.strip()
     ref = os.environ.get("TODOIST_OP_REF")
     if ref:
-        got = subprocess.run(
-            ["op", "read", ref], capture_output=True, text=True, timeout=30
-        )
+        env = service_account_env()
+        try:
+            got = subprocess.run(
+                ["op", "read", ref],
+                capture_output=True,
+                text=True,
+                timeout=20,
+                env=env,
+            )
+        except FileNotFoundError:
+            sys.exit("error: the `op` CLI is not installed")
+        except subprocess.TimeoutExpired:
+            # With no service account token, `op` asks the desktop app, which
+            # waits for a person to unlock it. Nobody answers that in a hook.
+            if "OP_SERVICE_ACCOUNT_TOKEN" in env:
+                sys.exit(f"error: `op read {ref}` timed out")
+            sys.exit(
+                f"error: `op read {ref}` timed out after 20s.\n"
+                f"No service account token was found in the keychain entry "
+                f"{SA_KEYCHAIN_ENTRY}, so `op` fell back to the desktop app "
+                "and waited for it to be unlocked.\n"
+                "Add the entry, or unlock 1Password, or set "
+                "TODOIST_API_TOKEN directly."
+            )
         if got.returncode == 0 and got.stdout.strip():
             return got.stdout.strip()
-        sys.exit(f"error: `op read {ref}` returned nothing")
+        detail = got.stderr.strip().splitlines()[-1] if got.stderr.strip() else ""
+        sys.exit(
+            f"error: `op read {ref}` returned nothing. {detail}\n"
+            f"Check the keychain entry {SA_KEYCHAIN_ENTRY}, or run "
+            "`,op-sa-health`."
+        )
     sys.exit(
         "error: no Todoist token.\n"
         "Set TODOIST_API_TOKEN, or set TODOIST_OP_REF to a 1Password "
