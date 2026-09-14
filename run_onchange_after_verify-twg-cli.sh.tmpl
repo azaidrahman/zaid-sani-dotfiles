@@ -1,0 +1,53 @@
+#!/bin/bash
+# Check that this device can run the Todoist ticket sync.
+#
+# ~/.claude/skills/todoist-ticket-sync/jira-to-todoist.py reads Jira through
+# the twg CLI. twg is not in the Brewfile on purpose: Atlassian ships its own
+# installer and its own `twg update` command, so Homebrew does not manage it.
+# This is the same reason atuin is not in the Brewfile.
+#
+# A missing twg does not break the hook or the skill. It only stops the
+# deterministic copy of the ticket body. So this script warns and exits 0. It
+# does not fail `chezmoi apply`.
+#
+# Re-runs whenever this script's rendered content changes, which is enough to
+# catch a first install on a new device.
+{{ if eq .chezmoi.os "darwin" -}}
+set -uo pipefail
+
+host="{{ .chezmoi.hostname }}"
+missing=()
+
+command -v twg >/dev/null 2>&1 || missing+=("twg")
+command -v python3 >/dev/null 2>&1 || missing+=("python3")
+
+if [ ${#missing[@]} -gt 0 ]; then
+    cat >&2 <<EOF
+
+⚠ todoist-ticket-sync: $host is missing $(IFS=', '; echo "${missing[*]}")
+
+The hook and the skill still work. The deterministic copy of the Jira body
+does not. To fix it, install the twg CLI:
+
+  https://developer.atlassian.com/cloud/twg-cli/getting-started/installation/
+
+Then run \`twg auth login\` and re-run \`chezmoi apply\`.
+
+EOF
+    exit 0
+fi
+
+# twg is present. Check that it holds a credential for the site.
+if ! twg jira workitem get GTI-1 --output json >/dev/null 2>&1; then
+    cat >&2 <<EOF
+
+⚠ todoist-ticket-sync: twg on $host cannot reach Jira.
+
+Run \`twg auth login\`, or check ~/.config/twg/auth.conf.
+
+EOF
+    exit 0
+fi
+
+echo "✓ todoist-ticket-sync: twg and python3 are ready on $host"
+{{ end -}}
