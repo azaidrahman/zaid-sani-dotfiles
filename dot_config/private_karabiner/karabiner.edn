@@ -60,7 +60,7 @@
        :clear-l3-help {:noti {:id "org.pqrs.notificaion_message_layer3"
                               :text ""}}
        :show-hyper-help {:noti {:id "org.pqrs.notificaion_message_hyper"
-                                :text "h:← ⇧prevTab ⌘sel ⌥word ⌥⌘selWord\nj:↓ ⇧nextApp ⌘sel ⌥⌘sel3 ⌃expose\nk:↑ ⇧prevApp ⌘sel ⌥⌘sel3\nl:→ ⇧nextTab ⌘sel ⌥word ⌥⌘selWord\nu:home ⌘sel\np:end ⌘sel\nx:⌫ ⇧⌦\nf:expose\nc:alfred clip\ns:alfred snippet\n-:alfred arc bookmarks\n=:alfred arc opentabs\n\\:alfred pin bookmarks\ne:alfred open windows\ni:mouseless overlay\n0:ice bar\nq:mouseless freekey (hold)\n⌘spa:emoji  esc:caps"}}
+                                :text "h:← ⇧prevTab ⌘sel ⌥word ⌥⌘selWord\nj:↓ ⇧nextApp ⌘sel ⌥⌘sel3 ⌃expose\nk:↑ ⇧prevApp ⌘sel ⌥⌘sel3\nl:→ ⇧nextTab ⌘sel ⌥word ⌥⌘selWord\nu:home ⌘sel\np:end ⌘sel\nx:⌫ ⇧⌦\nf:expose\nc:alfred clip\ns:alfred snippet\n-:alfred arc bookmarks\n=:alfred arc opentabs\n\\:alfred pin bookmarks\ne:alfred open windows\ni:mouseless overlay\n1:alfred todoist\n2:alfred jira\n0:ice bar\nq:mouseless freekey (hold)\n⌘spa:emoji  esc:caps"}}
        :clear-hyper-help {:noti {:id "org.pqrs.notificaion_message_hyper"
                                  :text ""}}
 }
@@ -204,6 +204,12 @@
 
     ;; i
     [:!QWERi           :!CTOSi]  ;; mouseless overlay
+
+    ;; 1
+    [:!QWER1           :!CTOS1]  ;; alfred todoist
+
+    ;; 2
+    [:!QWER2           :!CTOS2]  ;; alfred jira
 
     ;; 0
     [:!QWER0           :!QWER0]  ;; ice bar

@@ -98,6 +98,12 @@ hyper:
   i:
     -: "!CTOSi" # mouseless overlay
 
+  "1":
+    -: "!CTOS1" # alfred todoist
+
+  "2":
+    -: "!CTOS2" # alfred jira
+
   "0":
     -: "!QWER0" # ice bar
 
