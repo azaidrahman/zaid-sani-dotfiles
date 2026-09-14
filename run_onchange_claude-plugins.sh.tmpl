@@ -81,4 +81,45 @@ while IFS= read -r line; do
   fi
 done < "$PLUGIN_FILE"
 
+# --- Drift report ----------------------------------------------------------
+# The steps above only add. They never remove a plugin or a marketplace that
+# the manifests do not declare. An item that you install by hand on one device
+# stays there, and the other devices never get it. Two marketplaces that carry
+# the same plugin give you every skill of that plugin two times.
+#
+# This step finds each undeclared item and prints a warning. It removes
+# nothing. You decide to declare the item or to remove it.
+undeclared_plugins=""
+undeclared_markets=""
+
+declared_plugins=$(awk '!/^[[:space:]]*#/ && NF {print $1}' "$PLUGIN_FILE")
+while IFS= read -r plugin; do
+  [[ -z "$plugin" ]] && continue
+  grep -qxF "$plugin" <<<"$declared_plugins" || undeclared_plugins+="    $plugin"$'\n'
+done <<<"$(sed -n 's/.*❯ \([^ ]*\).*/\1/p' <<<"$(claude plugins list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')")"
+
+if [[ -f "$MARKETPLACE_FILE" ]]; then
+  declared_markets=$(awk '!/^[[:space:]]*#/ && NF {print $1}' "$MARKETPLACE_FILE")
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+    grep -qxF "$name" <<<"$declared_markets" || undeclared_markets+="    $name"$'\n'
+  done <<<"$(claude plugin marketplace list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | sed -n 's/.*❯ \([^ ]*\).*/\1/p')"
+fi
+
+if [[ -n "$undeclared_plugins" || -n "$undeclared_markets" ]]; then
+  echo
+  echo "  ⚠ This device has items that the manifests do not declare:"
+  [[ -n "$undeclared_markets" ]] && {
+    echo "  Marketplaces (add to dot_claude/marketplaces.txt, or run"
+    echo "  \`claude plugin marketplace remove <name>\`):"
+    printf '%s' "$undeclared_markets"
+  }
+  [[ -n "$undeclared_plugins" ]] && {
+    echo "  Plugins (add to dot_claude/plugins.txt, or run"
+    echo "  \`claude plugins uninstall <plugin@marketplace>\`):"
+    printf '%s' "$undeclared_plugins"
+  }
+  echo
+fi
+
 echo "Claude plugin sync complete."
