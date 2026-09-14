@@ -1,13 +1,17 @@
 ---
 name: todoist-ticket-sync
-description: Use when work on a Jira ticket starts or ends - a branch or worktree is created or deleted for a key like GTI-273, the user says "start GTI-NNN", "finish this branch", "I'm done with this ticket", or a hook reports that a ticket started or finished. Offers the matching Todoist update and asks the user before it writes.
+description: Use when work on a tracker ticket starts or ends (Jira today) - a branch or worktree is created or deleted for a key like GTI-273, the user says "start GTI-NNN", "finish this branch", "I'm done with this ticket", or a hook reports that a ticket started or finished. Offers the matching Todoist update and asks the user before it writes.
 ---
 
-# Keep Todoist level with Jira
+# Keep Todoist level with the tracker
 
-The Jira board holds every ticket. Todoist holds the small set of work that
-the user does now. The two drift apart when a ticket starts or ends and only
-Jira changes.
+The tracker holds every ticket. Todoist holds the small set of work that the
+user does now. The two drift apart when a ticket starts or ends and only the
+tracker changes.
+
+Jira is the tracker today. The script reaches it through a provider, so
+another tracker is one class and one registry entry away. Run
+`ticket-to-todoist.py --providers` to see which are present.
 
 This skill closes that gap. It runs at two moments:
 
@@ -30,7 +34,7 @@ proposes; it never acts alone.
 | `Learning` | Books and study. |
 
 In `Infra Work` and `Team Requests`, a top-level task is a **workstream**. Its
-subtasks are the Jira tickets in that stream. Each subtask title starts with
+subtasks are the tickets in that stream. Each subtask title starts with
 the key, for example `GTI-673 db: add Cloud SQL for GT Console prod`.
 
 Labels: every ticket carries `gti`. A ticket also carries a system label
@@ -56,8 +60,8 @@ the user and stop.
    - Set the due date to today.
 
    **The task does not exist.** The ticket is new since the last sweep. Read
-   the ticket in Jira. Propose a new subtask:
-   - Title: `<KEY> <the Jira summary>`
+   the ticket in the tracker. Propose a new subtask:
+   - Title: `<KEY> <the ticket summary>`
    - Parent: the workstream that fits. Name your choice and say why.
    - Labels: `gti`, plus the system and environment labels that fit.
    - Description: the body of the ticket, then the link. See below.
@@ -74,13 +78,13 @@ ticket always makes the same text.
 
 ```bash
 # Print the text for one ticket. Writes nothing.
-~/.claude/skills/todoist-ticket-sync/jira-to-todoist.py GTI-673
+~/.claude/skills/todoist-ticket-sync/ticket-to-todoist.py GTI-673
 
 # Write it to the matching Todoist task.
-~/.claude/skills/todoist-ticket-sync/jira-to-todoist.py GTI-673 --apply
+~/.claude/skills/todoist-ticket-sync/ticket-to-todoist.py GTI-673 --apply
 
 # Refresh every task whose title starts with a key.
-~/.claude/skills/todoist-ticket-sync/jira-to-todoist.py --all --apply
+~/.claude/skills/todoist-ticket-sync/ticket-to-todoist.py --all --apply
 ```
 
 The script reads the ticket through `twg`, converts the body from Atlassian
@@ -92,8 +96,8 @@ changes nothing.
 
 The script needs a Todoist token. Set `TODOIST_API_TOKEN`, or set
 `TODOIST_OP_REF` to a 1Password reference such as
-`op://Private/Todoist/credential`. It needs no Jira token, because `twg`
-already holds the Atlassian credential.
+`op://Private/Todoist/credential`. It needs no tracker token: the Jira
+provider reads through `twg`, which already holds the Atlassian credential.
 
 **What the script cannot decide.** It copies the ticket faithfully. It does
 not know that a ticket is unworkable as written, or that one item in a list

@@ -6,7 +6,7 @@
 # the Todoist steps. This hook closes that gap.
 #
 # The hook reads each Bash command after it runs. It looks for a git or
-# worktree command that carries a Jira key. If it finds one, it writes a note
+# worktree command that carries a ticket key. If it finds one, it writes a note
 # back to the session. The note asks the session to run the
 # todoist-ticket-sync skill.
 #
@@ -31,7 +31,7 @@ session=$(printf '%s' "$payload" | jq -r '.session_id // "nosession"' 2>/dev/nul
 
 [ -n "$command" ] || exit 0
 
-# The command must carry a Jira key. Read the first key only.
+# The command must carry a ticket key. Read the first key only.
 key=$(printf '%s' "$command" | grep -oE '[A-Z][A-Z0-9]+-[0-9]+' | head -1)
 [ -n "$key" ] || exit 0
 
