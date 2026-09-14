@@ -51,7 +51,8 @@ import sys
 import urllib.error
 import urllib.request
 
-TODOIST_API = "https://api.todoist.com/rest/v2"
+# The v1 API. The older rest/v2 endpoints now answer 410.
+TODOIST_API = "https://api.todoist.com/api/v1"
 
 
 # ===========================================================================
@@ -376,10 +377,27 @@ def api(path, token, payload=None):
         sys.exit(f"error: cannot reach Todoist: {exc.reason}")
 
 
+def all_tasks(token):
+    """Every active task. The v1 list endpoints page through a cursor."""
+    out = []
+    cursor = None
+    while True:
+        path = "/tasks?limit=200" + (f"&cursor={cursor}" if cursor else "")
+        page = api(path, token)
+        if isinstance(page, list):  # defensive: an older shape
+            out.extend(page)
+            break
+        out.extend(page.get("results", []))
+        cursor = page.get("next_cursor")
+        if not cursor:
+            break
+    return out
+
+
 def tasks_by_key(token, provider):
     """Map each key to the Todoist task whose title starts with that key."""
     found = {}
-    for task in api("/tasks", token):
+    for task in all_tasks(token):
         match = provider.key_re.match(task.get("content", ""))
         if match:
             found[match.group(0)] = task
