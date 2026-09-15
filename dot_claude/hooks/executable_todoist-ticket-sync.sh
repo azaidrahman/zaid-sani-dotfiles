@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # todoist-ticket-sync.sh - tell the session when a ticket starts or ends.
 #
-# This machine does not have the gtech-skills `start-ticket` and
-# `finish-branch` skills. Those skills carry the Jira steps. Nothing carries
-# the Todoist steps. This hook closes that gap.
+# The gtech-skills `start-ticket` and `finish-branch` skills carry the Jira
+# steps. Nothing carries the Todoist steps. This hook closes that gap.
 #
 # The hook reads each Bash command after it runs. It looks for a git or
 # worktree command that carries a ticket key. If it finds one, it writes a note
