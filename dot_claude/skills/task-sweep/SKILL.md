@@ -106,6 +106,12 @@ If no workstream clearly fits, **leave the subtask alone**. List it under
 > `projectId` on a subtask. Todoist reads either one as a move out of the
 > parent, and the subtask lands loose in the section with no `parentId`.
 >
+> A new parent in another project takes the subtask with it. Todoist sets the
+> project for you, and it keeps the labels and the date. Verified on 2026-09-15:
+> GTI-756 moved from `Team Requests` to `Ops & Firefighting` on `parentId`
+> alone. Tell the user that the project changes, because the plan does not
+> otherwise show it.
+>
 > To move a whole stream, move the **workstream parent** between `Now`, `Next`,
 > and `Blocked`. Its subtasks travel with it. Propose that as its own change.
 
@@ -125,8 +131,23 @@ Handle an overdue review anchor separately. A workstream parent that repeats
 weekly is a review, not a task. Ask whether the review happened. If it did,
 complete the occurrence. Do not clear its date.
 
-Use `reschedule-tasks` to change a date. Never use `update-tasks` for a date:
-it replaces the whole due string and destroys recurrence.
+Pick the date tool by what the task already has. Verified on 2026-09-15.
+
+| The task | The tool |
+|---|---|
+| Has a date. Move it. | `reschedule-tasks`. It keeps the repeat rule. |
+| Has no date. Give it one. | `update-tasks` with `dueString`. |
+
+`reschedule-tasks` fails on a task that has no date: "Rescheduling requires an
+existing due date". A parked subtask has no date, so promote it with
+`update-tasks`.
+
+**Never send `dueString` to a recurring task.** It replaces the whole due
+string and destroys the repeat rule. A review anchor repeats, so always move it
+with `reschedule-tasks`.
+
+One failed task fails the whole `reschedule-tasks` batch. Group the promotions
+that need `update-tasks` into their own call.
 
 ### 5. Safety-net checks
 
