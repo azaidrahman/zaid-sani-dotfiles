@@ -9,6 +9,9 @@
 # back to the session. The note asks the session to run the
 # todoist-ticket-sync skill.
 #
+# The session acts alone when the correct update is clear. The skill holds the
+# list of cases that need a question.
+#
 # The hook detects two events:
 #   start   - a branch or a worktree is created for a key
 #   finish  - a branch or a worktree is deleted for a key
@@ -51,9 +54,9 @@ mkdir -p "$MARKER_DIR" 2>/dev/null || exit 0
 : >"$marker" 2>/dev/null || exit 0
 
 if [ "$event" = "start" ]; then
-  note="Work on $key started in this session. Use the todoist-ticket-sync skill to offer the user a Todoist update for $key. Ask the user before you write to Todoist."
+  note="Work on $key started in this session. Use the todoist-ticket-sync skill to update Todoist for $key. If the correct update is clear, make it and report it in one line. Ask the user only if the skill calls the case unclear."
 else
-  note="Work on $key finished in this session. Use the todoist-ticket-sync skill to offer the user a Todoist update for $key. Ask the user before you write to Todoist."
+  note="Work on $key finished in this session. Use the todoist-ticket-sync skill to update Todoist for $key. If the correct update is clear, make it and report it in one line. Ask the user only if the skill calls the case unclear."
 fi
 
 jq -cn --arg note "$note" '{
