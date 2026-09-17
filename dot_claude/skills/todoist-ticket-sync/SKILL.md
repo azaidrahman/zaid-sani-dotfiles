@@ -1,6 +1,6 @@
 ---
 name: todoist-ticket-sync
-description: Use when work on a tracker ticket starts or ends (Jira today) - a branch or worktree is created or deleted for a key like GTI-273, the user says "start GTI-NNN", "finish this branch", "I'm done with this ticket", or a hook reports that a ticket started or finished. Offers the matching Todoist update and asks the user before it writes.
+description: Use when work on a tracker ticket starts or ends (Jira today) - a branch or worktree is created or deleted for a key like GTI-273, the user says "start GTI-NNN", "finish this branch", "I'm done with this ticket", or a hook reports that a ticket started or finished. Makes the matching Todoist update without a question when the update is clear, and asks only in the listed unclear cases.
 ---
 
 # Keep Todoist level with the tracker
@@ -18,8 +18,28 @@ This skill closes that gap. It runs at two moments:
 - A ticket starts. A branch or a worktree is created for a key.
 - A ticket ends. A branch or a worktree is deleted for a key.
 
-**Always ask before you write to Todoist.** The user decides. This skill
-proposes; it never acts alone.
+## Act alone, or ask
+
+Make the update without a question when the correct update is clear. Report
+what you did in one line. Do not describe the plan first.
+
+Ask the user only in these cases:
+
+- The key has no task in Todoist. A new task needs a workstream and labels
+  that you cannot read from the ticket alone.
+- More than one task matches the key.
+- The ticket looks like a live break, which changes the priority to `p1` and
+  moves the task to `Ops & Firefighting`.
+- The work of a finished ticket did not land, or you cannot tell that it
+  landed.
+- The finished subtask was the last open subtask of its workstream, and the
+  workstream can also close.
+- A write fails, or the result does not match what you sent.
+
+In an unclear case, use one `AskUserQuestion` call for the whole proposal.
+
+Ask nothing else. A question about a routine priority or due date wastes the
+time of the user.
 
 ## The board
 
@@ -52,10 +72,13 @@ the user and stop.
 
 2. Act on what you find.
 
-   **The task exists.** This is the normal case. The ticket is already a
-   subtask of a workstream. Propose these changes:
-   - Set the priority to `p2`, or to `p1` if the ticket is a live break.
+   **Exactly one task exists.** This is the normal case, and it is clear.
+   The ticket is already a subtask of a workstream. Make these changes now:
+   - Set the priority to `p2`.
    - Set the due date to today.
+
+   Then report the change in one line. If the ticket is a live break, stop
+   and ask instead, because a break also changes the project.
 
    A priority and a due date are enough. Both put the ticket in Today and in
    Upcoming, which is where the user looks.
@@ -74,17 +97,16 @@ the user and stop.
    > orphans the subtask, so say so, and offer to re-parent it under
    > `Fix broken alert routing` or the in-flight workstream there.
 
-   **The task does not exist.** The ticket is new since the last sweep. Read
-   the ticket in the tracker. Propose a new subtask:
+   **No task exists, or more than one matches.** This is unclear. Read the
+   ticket in the tracker and ask the user. For a new subtask, propose:
    - Title: `<KEY> <the ticket summary>`
    - Parent: the workstream that fits. Name your choice and say why.
    - Labels: `gti`, plus the system and environment labels that fit.
    - Description: the body of the ticket, then the link. See below.
 
-3. Ask the user. Show the ticket, the task you found or propose, and the
+3. In an unclear case, show the ticket, the task you propose, and the
    changes. Use one `AskUserQuestion` call. Give the user a way to skip.
-
-4. Write only what the user accepts.
+   Write only what the user accepts.
 
 ## What goes in the description
 
@@ -133,17 +155,24 @@ the script overwrites a subtask description.
 1. Find the task by key, as above.
 
 2. Check that the work landed. Do not complete a task for a branch that did
-   not merge. If you cannot tell, ask.
+   not merge.
 
-3. Ask the user. Propose these changes:
-   - Complete the subtask for the key.
-   - If the subtask was the last open subtask of its workstream, say so, and
-     ask whether to complete the workstream too.
+3. Act on what you find.
 
-4. Write only what the user accepts.
+   **One task, and the work landed.** This is clear. Complete the subtask for
+   the key and report it in one line.
+
+   **Anything else.** Ask the user. This covers a branch that did not merge, a
+   branch whose state you cannot read, and a key with no task or more than one
+   task.
+
+4. If the subtask was the last open subtask of its workstream, ask whether to
+   complete the workstream too. Never close a workstream alone.
 
 ## Rules
 
+- Ask only in the cases under "Act alone, or ask". Otherwise write the
+  change and report it.
 - One question, not a series. Put the whole proposal in one
   `AskUserQuestion` call.
 - Do not create a workstream. If no workstream fits, say so and ask.
@@ -153,6 +182,7 @@ the script overwrites a subtask description.
 - Do not set `sectionId` or `projectId` on a subtask. Either one takes it out
   of its workstream. Change the priority and the due date instead.
 - If the user declines, do nothing and do not ask again in this session.
+- If a write fails, say so. Do not retry the same call twice.
 
 ## Related
 
