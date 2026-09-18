@@ -70,10 +70,20 @@ writing subagent.
 
 Before any other write, create an isolated worktree.
 
-- If the work has a Jira ticket, use the `start-ticket` skill.
+- If the work has a Jira ticket, use the `start-ticket-worktree` skill.
 - If the work has no Jira ticket, use the `start-worktree` skill.
 - If the scope grows, stop writing in the current checkout. Start an isolated
   worktree before the next write.
+
+After you create the worktree, move the session into it. Use the
+`EnterWorktree` tool with the path that the skill reports.
+
+A `cd` command does not move the session. The session stays in the old
+directory. The `/diff` panel then shows no changes, because it reads the
+repository of the session directory.
+
+Skip this step if the skill opened a new tmux session or window in the
+worktree. That session already has the correct directory.
 
 One primary writing session owns each worktree. Do not send two writing agents
 to the same worktree.

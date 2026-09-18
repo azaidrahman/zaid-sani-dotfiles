@@ -126,7 +126,7 @@ Act on the exit code:
 | Exit | stdout | What it means / do next |
 |------|--------|--------------------------|
 | `0`  | `already-live: <name>` or `created: <name>` | Done - report it, next ticket. |
-| `3`  | `no-worktree: <KEY>` | No worktree yet. Invoke the `start-ticket` skill for `<KEY>` to create the branch + worktree, then **re-run the script** (it now finds the worktree and creates the session). When using start-ticket here, **skip its Step 8 tmux tagging** - that renames the *current* window (running worklog); the script names the new session itself. |
+| `3`  | `no-worktree: <KEY>` | No worktree yet. Invoke the `start-ticket-worktree` skill for `<KEY>` to create the branch + worktree, then **re-run the script** (it now finds the worktree and creates the session). When using start-ticket-worktree here, **skip its Step 8 tmux tagging** - that renames the *current* window (running worklog); the script names the new session itself. Also **skip its `EnterWorktree` step** - this session must stay put, and the new session starts in the worktree by itself. |
 | `2`  | error on stderr | Precondition failed (repo not found / no tmux server). Report and skip the whole sync - don't improvise. |
 
 The script is idempotent: it matches existing sessions on the `<KEY>` prefix (so
@@ -138,7 +138,7 @@ worktree directory, and roots them there with `tmux new-session -c`. Re-running
 ### Launch Claude in each session (opt-in)
 
 After the sessions exist, optionally kick off a Claude Code instance inside each
-one that immediately runs `/start-ticket` for its ticket - so attaching drops the
+one that immediately runs `/start-ticket-worktree` for its ticket - so attaching drops the
 user straight into an agent already oriented on that ticket. Ask once before
 doing this; act only if the user says yes.
 
@@ -147,13 +147,13 @@ value the script printed), so send the launch command straight to it. For each
 Jira focus ticket KEY with a live session `<SESSION>`:
 
 ```bash
-tmux send-keys -t "<SESSION>" "claude \"/start-ticket <KEY>\"" Enter
+tmux send-keys -t "<SESSION>" "claude \"/start-ticket-worktree <KEY>\"" Enter
 ```
 
 Notes:
 - Send only to sessions the script reported as `created`/`already-live` - never to
   a session that failed provisioning.
-- The worktree and branch already exist by this point, so `/start-ticket` finds
+- The worktree and branch already exist by this point, so `/start-ticket-worktree` finds
   them and reports the path rather than recreating - that is expected and fine.
 - This launches an interactive agent per session; do not wait on or drive them
   from the worklog session. Just report which sessions were launched.

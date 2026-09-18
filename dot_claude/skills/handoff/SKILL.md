@@ -10,7 +10,7 @@ A session ends with more open threads than it closes. The next window usually st
 You write the brief. The other skills do the rest:
 
 - [[writing-tickets]] — the ticket title and Why / What / Done-when body.
-- [[start-ticket]] — branch `<type>/<KEY>-<slug>` and worktree `.worktrees/<KEY>-<slug>`.
+- [[start-ticket-worktree]] — branch `<type>/<KEY>-<slug>` and worktree `.worktrees/<KEY>-<slug>`.
 - `handoff.sh` (next to this file) — the tmux window and the Claude boot.
 
 Not [[wrap-session]]. That one closes out *everything* the session touched. A handoff carries *one* thread forward and leaves the rest alone.
@@ -50,7 +50,9 @@ Ask the user to confirm the project and the title before you create it.
 
 ## Step 4 — Start the branch
 
-Invoke [[start-ticket]] with that `KEY`. Take its Mode A path — one ticket, no `--session` — because Step 5 opens a **window** in the session the user is already sitting in, not a detached session to attach to.
+Invoke [[start-ticket-worktree]] with that `KEY`. Take its Mode A path — one ticket, no `--session` — because Step 5 opens a **window** in the session the user is already sitting in, not a detached session to attach to.
+
+Skip its `EnterWorktree` step. This session must stay in the current checkout, because Step 5 opens a separate window for the new work. The window starts in the worktree by itself.
 
 Keep the worktree path and the branch name it reports. Both go in the brief.
 
@@ -130,6 +132,6 @@ If other threads were on the board, name them in one line so they stay visible. 
 | Rebuilding the harvest from the repo | The value is the reasoning, and that lives only in the transcript. Read the transcript. |
 | Writing the brief into the worktree | Repo files get committed. Briefs live in `~/.claude/handoffs/`. |
 | Hand-rolling `tmux new-window` + `send-keys` | Call `handoff.sh` — it roots the window with `-c`, sanitizes the label, and reuses an open window. |
-| Passing `--session` to start-ticket | That makes a detached session. This skill wants a window in the session the user is in. |
+| Passing `--session` to start-ticket-worktree | That makes a detached session. This skill wants a window in the session the user is in. |
 | Handing off every open thread | One thread per run. Several threads at once is [[wrap-session]]. |
 | Switching the user to the new window | Open it and report. The user chooses when to move. |

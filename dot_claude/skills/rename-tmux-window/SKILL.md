@@ -47,7 +47,7 @@ Apply in order to the raw Jira summary:
 **If the user gave a literal name in step 1, skip this — apply it directly.**
 
 When the name was *auto-derived* (from a ticket summary or session topic — e.g.
-invoked by `start-ticket`, not by an explicit "rename to X"), do not silently
+invoked by `start-ticket-worktree`, not by an explicit "rename to X"), do not silently
 apply it. Present the proposed name and let the user accept it or supply their
 own, using a single `AskUserQuestion`:
 
@@ -57,7 +57,7 @@ own, using a single `AskUserQuestion`:
 - The user can always pick "Other" and type a custom name — honor it verbatim,
   trimmed.
 
-Carry the chosen name into step 2. This makes start-ticket's rename a
+Carry the chosen name into step 2. This makes start-ticket-worktree's rename a
 confirmation point rather than a silent overwrite, while leaving explicit
 "rename to <X>" requests friction-free.
 
