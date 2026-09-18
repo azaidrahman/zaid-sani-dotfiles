@@ -13,6 +13,9 @@ import time
 from pathlib import Path
 
 GROUP_NAME = "Chezmoi-Managed"
+# Keyboard Maestro makes these groups. They show macros that other groups
+# hold, so a scan of every group counts each of their macros two times.
+SMART_GROUPS = ("All Macros", "Enabled Macros")
 MACROS_DIR = Path.home() / ".config/keyboardmaestro/macros"
 
 
@@ -111,3 +114,44 @@ def as_literal(s: str) -> str:
 def slugify(name: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
     return s or "macro"
+
+
+def parse_macro_locations(raw: str) -> dict:
+    """Map each macro UID to the name of the group that holds it.
+
+    Take the tab separated output of the scan of every group. Skip the
+    smart groups, because they repeat macros of other groups. Keep the
+    first group that holds a UID.
+    """
+    locations = {}
+    for line in raw.splitlines():
+        if "\t" not in line:
+            continue
+        uid, group = line.split("\t", 1)
+        if group in SMART_GROUPS:
+            continue
+        locations.setdefault(uid, group)
+    return locations
+
+
+def macro_locations() -> dict:
+    """Find the group of every macro in Keyboard Maestro.
+
+    km-apply must delete a macro before it imports the macro again. An
+    import that uses the UID of a macro in a different group does not
+    replace that macro. Keyboard Maestro gives the new copy a new UID,
+    and the copy becomes a stray on the next run. Look in each group to
+    prevent this.
+    """
+    script = '''
+    tell application "Keyboard Maestro"
+        set out to ""
+        repeat with g in macro groups
+            set gname to name of g
+            repeat with m in macros of g
+                set out to out & (id of m) & "\t" & gname & linefeed
+            end repeat
+        end repeat
+        return out
+    end tell'''
+    return parse_macro_locations(osascript(script))
