@@ -1,9 +1,12 @@
 # Hand-written bindings, for the key search HUD only.
 # Format: combo | label | description
 #
-# This file does NOT generate rules. The rules live in karabiner.base.edn
+# This file does NOT generate rules. Most rules live in karabiner.base.edn
 # (outside the BEGIN/END markers). When you add a hand-written rule there,
 # mirror it here so the key search HUD (caps+? / ctrl+shift+/) can find it.
+#
+# Keyboard Maestro hotkeys also go here. Karabiner does not make these keys.
+# The macros are in dot_config/keyboardmaestro/exact_macros/.
 
 extras:
   # Layer triggers
@@ -30,6 +33,9 @@ extras:
   - ⌥L. | vol+ | volume up (SoundSource on aqua)
   - ⌥L] | next app | cmd+tab
   - ⌥L[ | prev app | cmd+shift+tab
+
+  # Keyboard Maestro macros (not Karabiner rules)
+  - ⌥⌘\ | arc tab → window | move the current Arc tab to a new window
 
   # Help
   - layer / | layer help | hold a layer, press / = that layer's overlay

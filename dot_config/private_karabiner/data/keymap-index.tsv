@@ -131,5 +131,6 @@ extra		⌥L,	vol-	volume down (SoundSource on aqua)
 extra		⌥L.	vol+	volume up (SoundSource on aqua)
 extra		⌥L]	next app	cmd+tab
 extra		⌥L[	prev app	cmd+shift+tab
+extra		⌥⌘\	arc tab → window	move the current Arc tab to a new window
 extra		layer /	layer help	hold a layer, press / = that layer's overlay
 extra		⇪?	key search	this HUD (also ctrl+shift+/)
