@@ -88,7 +88,7 @@ return theURL</string>
 					<key>ActionUID</key>
 					<integer>122</integer>
 					<key>DisplayKind</key>
-					<string>None</string>
+					<string>Variable</string>
 					<key>HonourFailureSettings</key>
 					<true/>
 					<key>IncludeStdErr</key>
@@ -101,19 +101,21 @@ return theURL</string>
 					<string>set theURL to system attribute "KMVAR_ArcMoveURL"
 set oldWindow to system attribute "KMVAR_ArcMoveOldWindow"
 if theURL is "" then return "no url"
+set lastSeen to "none"
 tell application "Arc"
 	-- Wait for the new window to come to the front, then put the tab in it.
 	repeat 60 times
 		try
-			if (id of front window) is not oldWindow then
+			set lastSeen to id of front window
+			if lastSeen is not oldWindow then
 				tell front window to make new tab with properties {URL:theURL}
-				return "ok"
+				return "ok:" &amp; lastSeen
 			end if
 		end try
 		delay 0.05
 	end repeat
 end tell
-return "timeout"</string>
+return "timeout old=" &amp; oldWindow &amp; " last=" &amp; lastSeen</string>
 					<key>TimeOutAbortsMacro</key>
 					<true/>
 					<key>TrimResults</key>
@@ -122,6 +124,8 @@ return "timeout"</string>
 					<true/>
 					<key>UseText</key>
 					<true/>
+					<key>Variable</key>
+					<string>ArcMoveResult</string>
 				</dict>
 			</array>
 			<key>TimeOutAbortsMacro</key>
