@@ -51,10 +51,9 @@
 					<string></string>
 					<key>Text</key>
 					<string>tell application "Arc"
-	set theWindow to front window
-	set theURL to URL of active tab of theWindow
-	set oldWindow to id of theWindow
-	close active tab of theWindow
+	set theURL to URL of active tab of front window
+	set oldWindow to id of front window
+	close active tab of front window
 end tell
 tell application "Keyboard Maestro Engine" to setvariable "ArcMoveOldWindow" to oldWindow
 return theURL</string>
@@ -106,9 +105,8 @@ tell application "Arc"
 	-- Wait for the new window to come to the front, then put the tab in it.
 	repeat 60 times
 		try
-			set theWindow to front window
-			if (id of theWindow) is not oldWindow then
-				tell theWindow to make new tab with properties {URL:theURL}
+			if (id of front window) is not oldWindow then
+				tell front window to make new tab with properties {URL:theURL}
 				return "ok"
 			end if
 		end try
