@@ -38,55 +38,37 @@
 			<array>
 				<dict>
 					<key>ActionUID</key>
-					<integer>101</integer>
-					<key>KeyCode</key>
-					<integer>8</integer>
+					<integer>120</integer>
+					<key>DisplayKind</key>
+					<string>Variable</string>
+					<key>HonourFailureSettings</key>
+					<true/>
+					<key>IncludeStdErr</key>
+					<true/>
 					<key>MacroActionType</key>
-					<string>SimulateKeystroke</string>
-					<key>Modifiers</key>
-					<integer>768</integer>
-					<key>ReleaseAll</key>
-					<false/>
-					<key>TargetApplication</key>
-					<dict/>
-					<key>TargetingType</key>
-					<string>Front</string>
+					<string>ExecuteAppleScript</string>
+					<key>Path</key>
+					<string></string>
+					<key>Text</key>
+					<string>tell application "Arc"
+	set theURL to URL of active tab of front window
+	close active tab of front window
+	return theURL
+end tell</string>
+					<key>TimeOutAbortsMacro</key>
+					<true/>
+					<key>TrimResults</key>
+					<true/>
+					<key>TrimResultsNew</key>
+					<true/>
+					<key>UseText</key>
+					<true/>
+					<key>Variable</key>
+					<string>ArcMoveURL</string>
 				</dict>
 				<dict>
 					<key>ActionUID</key>
-					<integer>102</integer>
-					<key>MacroActionType</key>
-					<string>Pause</string>
-					<key>Time</key>
-					<string>0.3</string>
-				</dict>
-				<dict>
-					<key>ActionUID</key>
-					<integer>103</integer>
-					<key>KeyCode</key>
-					<integer>13</integer>
-					<key>MacroActionType</key>
-					<string>SimulateKeystroke</string>
-					<key>Modifiers</key>
-					<integer>256</integer>
-					<key>ReleaseAll</key>
-					<false/>
-					<key>TargetApplication</key>
-					<dict/>
-					<key>TargetingType</key>
-					<string>Front</string>
-				</dict>
-				<dict>
-					<key>ActionUID</key>
-					<integer>104</integer>
-					<key>MacroActionType</key>
-					<string>Pause</string>
-					<key>Time</key>
-					<string>0.2</string>
-				</dict>
-				<dict>
-					<key>ActionUID</key>
-					<integer>105</integer>
+					<integer>121</integer>
 					<key>KeyCode</key>
 					<integer>45</integer>
 					<key>MacroActionType</key>
@@ -102,75 +84,39 @@
 				</dict>
 				<dict>
 					<key>ActionUID</key>
-					<integer>106</integer>
+					<integer>122</integer>
+					<key>DisplayKind</key>
+					<string>None</string>
+					<key>HonourFailureSettings</key>
+					<true/>
+					<key>IncludeStdErr</key>
+					<true/>
 					<key>MacroActionType</key>
-					<string>Pause</string>
-					<key>Time</key>
-					<string>0.5</string>
-				</dict>
-				<dict>
-					<key>ActionUID</key>
-					<integer>107</integer>
-					<key>KeyCode</key>
-					<integer>37</integer>
-					<key>MacroActionType</key>
-					<string>SimulateKeystroke</string>
-					<key>Modifiers</key>
-					<integer>256</integer>
-					<key>ReleaseAll</key>
-					<false/>
-					<key>TargetApplication</key>
-					<dict/>
-					<key>TargetingType</key>
-					<string>Front</string>
-				</dict>
-				<dict>
-					<key>ActionUID</key>
-					<integer>108</integer>
-					<key>MacroActionType</key>
-					<string>Pause</string>
-					<key>Time</key>
-					<string>0.2</string>
-				</dict>
-				<dict>
-					<key>ActionUID</key>
-					<integer>109</integer>
-					<key>KeyCode</key>
-					<integer>9</integer>
-					<key>MacroActionType</key>
-					<string>SimulateKeystroke</string>
-					<key>Modifiers</key>
-					<integer>256</integer>
-					<key>ReleaseAll</key>
-					<false/>
-					<key>TargetApplication</key>
-					<dict/>
-					<key>TargetingType</key>
-					<string>Front</string>
-				</dict>
-				<dict>
-					<key>ActionUID</key>
-					<integer>110</integer>
-					<key>MacroActionType</key>
-					<string>Pause</string>
-					<key>Time</key>
-					<string>0.1</string>
-				</dict>
-				<dict>
-					<key>ActionUID</key>
-					<integer>111</integer>
-					<key>KeyCode</key>
-					<integer>36</integer>
-					<key>MacroActionType</key>
-					<string>SimulateKeystroke</string>
-					<key>Modifiers</key>
-					<integer>0</integer>
-					<key>ReleaseAll</key>
-					<false/>
-					<key>TargetApplication</key>
-					<dict/>
-					<key>TargetingType</key>
-					<string>Front</string>
+					<string>ExecuteAppleScript</string>
+					<key>Path</key>
+					<string></string>
+					<key>Text</key>
+					<string>set theURL to system attribute "KMVAR_ArcMoveURL"
+if theURL is "" then return "no url"
+tell application "Arc"
+	-- Wait for the new window to own a tab, then point it at the URL.
+	repeat 40 times
+		try
+			set URL of active tab of front window to theURL
+			return "ok"
+		end try
+		delay 0.05
+	end repeat
+end tell
+return "timeout"</string>
+					<key>TimeOutAbortsMacro</key>
+					<true/>
+					<key>TrimResults</key>
+					<true/>
+					<key>TrimResultsNew</key>
+					<true/>
+					<key>UseText</key>
+					<true/>
 				</dict>
 			</array>
 			<key>TimeOutAbortsMacro</key>
