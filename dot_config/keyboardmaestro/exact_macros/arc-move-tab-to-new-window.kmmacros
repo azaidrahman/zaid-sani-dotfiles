@@ -140,11 +140,11 @@ return "timeout old=" &amp; oldWindow &amp; " last=" &amp; lastSeen</string>
 			<key>FireType</key>
 			<string>Pressed</string>
 			<key>KeyCode</key>
-			<integer>45</integer>
+			<integer>42</integer>
 			<key>MacroTriggerType</key>
 			<string>HotKey</string>
 			<key>Modifiers</key>
-			<integer>4352</integer>
+			<integer>2304</integer>
 		</dict>
 	</array>
 	<key>UID</key>
