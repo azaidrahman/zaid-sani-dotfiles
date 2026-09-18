@@ -47,6 +47,22 @@ The command reports the branch and absolute worktree path. Use the new session o
 
 If the command returns exit code 4, stop. The path exists but is not the expected worktree. Do not overwrite or remove it.
 
+## Move the session into the worktree
+
+Run this step when you did not use `--session`. The session still works in the original checkout.
+
+Call the `EnterWorktree` tool with the reported path:
+
+```text
+EnterWorktree path=/abs/path/to/repo/.worktrees/<slug>
+```
+
+A `cd` command does not move the session. The shell directory returns to the original checkout after each command. The session then writes to the wrong tree, and the `/diff` panel shows no changes.
+
+Skip this step when you used `--session claude` or `--session omp`. That new session already starts in the worktree.
+
+To leave the worktree in the same session, call `ExitWorktree` with `action: keep`. This tool never deletes a worktree that `agent-worktree` created.
+
 ## Concurrent agents
 
 One primary writing session owns this worktree. Do not send two writing agents to it.

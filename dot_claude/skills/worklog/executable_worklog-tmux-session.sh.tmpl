@@ -3,7 +3,7 @@
 #
 # Ensures a detached tmux session exists for <KEY>, rooted in the ticket's git
 # worktree. Idempotent: safe to run repeatedly. The only non-deterministic part of
-# the worklog tmux flow (creating a missing worktree via the start-ticket skill,
+# the worklog tmux flow (creating a missing worktree via the start-ticket-worktree skill,
 # whose slug comes from the Jira summary) is intentionally NOT here — the caller
 # handles exit code 3.
 #
@@ -13,7 +13,7 @@
 # stdout:  one status line — "already-live: <name>" | "created: <name>"
 # Exit codes:
 #   0  session is now live (created, or already existed)
-#   3  no worktree for <KEY> yet  → caller runs start-ticket, then re-invokes
+#   3  no worktree for <KEY> yet  → caller runs start-ticket-worktree, then re-invokes
 #   2  precondition failure (bad key, repo not found, no tmux server) — msg on stderr
 set -euo pipefail
 

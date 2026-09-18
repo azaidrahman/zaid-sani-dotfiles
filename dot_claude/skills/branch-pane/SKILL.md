@@ -53,4 +53,4 @@ Both panes stay minimal. The split is the handoff; the history is the briefing.
 5. Titles the pane `fork:<short-id>` and reports.
 
 For ticket-anchored work in an isolated worktree (Jira key, proper base branch),
-use [[start-ticket]] instead — that forks the *workspace*, this forks the *chat*.
+use [[start-ticket-worktree]] instead — that forks the *workspace*, this forks the *chat*.
