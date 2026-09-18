@@ -42,13 +42,20 @@ def main() -> int:
         return 1
 
     live = kmlib.live_macros()
+    # A macro with the same UID in another group also blocks the import,
+    # so look for the UID in each group, not only in the managed group.
+    locations = kmlib.macro_locations()
 
     # Delete-then-import each managed macro (import with an existing UID
     # silently creates a duplicate under a new UID, so delete first).
     try:
         for fname, d in macro_dicts:
             uid = kmlib.as_literal(d["UID"])
-            if d["UID"] in live:
+            holder = locations.get(d["UID"])
+            if holder is not None:
+                if holder != kmlib.GROUP_NAME:
+                    print(f"note: {d['UID']} was in group '{holder}' — deleted it "
+                          f"so the import keeps the UID of the repo file")
                 kmlib.osascript(
                     f'tell application "Keyboard Maestro" to deleteMacro "{uid}"'
                 )
