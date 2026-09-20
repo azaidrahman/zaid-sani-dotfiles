@@ -6,7 +6,8 @@
 #               open. The `com.zaid.displayctl` launch agent watches for a
 #               change of the monitors. It turns the built-in display off when
 #               exactly two external displays are connected. It turns the
-#               display on again for any other number.
+#               display on again for any other number. It decides again after
+#               the Mac wakes, because the monitors can change during sleep.
 #
 #               This function passes the display commands to the tool. It adds
 #               the commands for the launch agent.
@@ -28,8 +29,9 @@
 #               Add `--dry-run` to `off`, `on`, or `toggle`. The tool then
 #               reports the change and makes no change.
 #
-#               A manual `off` holds only until the agent sees the next change
-#               of the monitors. To keep the display off, run `stop` first.
+#               A manual `off` holds only until the agent decides again. The
+#               agent decides after a change of the monitors, and after the Mac
+#               wakes. To keep the display off, run `stop` first.
 
 emulate -L zsh
 setopt local_options
@@ -38,7 +40,7 @@ local bin="$HOME/.config/displayctl/bin/displayctl"
 local label=com.zaid.displayctl
 local plist="$HOME/Library/LaunchAgents/$label.plist"
 local target="gui/$(id -u)/$label"
-local logfile=/tmp/displayctl.err
+local logfile="$HOME/Library/Logs/displayctl.log"
 local command=${1:-list}
 
 .displayctl-help() {

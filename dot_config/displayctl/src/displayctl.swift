@@ -5,7 +5,8 @@
 //
 // The `watch` command runs as an agent. It turns the built-in display off when
 // exactly two external displays are connected. It turns the display on again
-// for any other number.
+// for any other number. The agent decides after a change of the monitors, and
+// again after the Mac wakes.
 //
 // macOS gives no public function to disable a display. This tool uses three
 // private functions from the SkyLight framework. It finds them at run time. If
@@ -169,6 +170,12 @@ struct Latch {
     mutating func record(externals: Int, applied: Bool) {
         lastExternals = applied ? externals : nil
     }
+
+    // Drop the count. The agent calls this after a wake, because the monitors
+    // can change while the Mac sleeps and that change raises no event.
+    mutating func forget() {
+        lastExternals = nil
+    }
 }
 
 private func builtinState() -> BuiltinState {
@@ -325,6 +332,27 @@ private func installSignalHandlers() {
 
 private var signalSources: [DispatchSourceSignal] = []
 
+// A change of the display list is not the only reason to decide. When the last
+// external display goes away while the lid is closed, macOS sleeps about one
+// second later. That is less than the debounce, so the agent never looks at the
+// new desk. On wake the display list already holds the new state, so no event
+// arrives, and the built-in display stays off. The Mac then shows nothing.
+//
+// A wake is the second reason to decide. Drop the count of externals first. The
+// latch still holds the count from before the sleep, and a count that did not
+// change would stop the agent from acting.
+private func installWakeObserver() {
+    NSWorkspace.shared.notificationCenter.addObserver(
+        forName: NSWorkspace.didWakeNotification,
+        object: nil,
+        queue: .main
+    ) { _ in
+        log("the Mac woke up, so the set of monitors is not known any more")
+        latch.forget()
+        scheduleEvaluate(reason: "wake")
+    }
+}
+
 private func watch(dryRun: Bool) -> Never {
     watchDryRun = dryRun
     log("watch started\(dryRun ? " in dry run mode" : "")")
@@ -338,6 +366,7 @@ private func watch(dryRun: Bool) -> Never {
     NSApplication.shared.setActivationPolicy(.prohibited)
 
     installSignalHandlers()
+    installWakeObserver()
     CGDisplayRegisterReconfigurationCallback(reconfigCallback, nil)
     // Set the correct state at login, before any event arrives.
     evaluate(reason: "start")
@@ -383,6 +412,13 @@ private func selftest() -> Bool {
     var open = Latch()
     open.record(externals: 2, applied: false)
     check("latch after a change that failed", open.isUnchanged(externals: 2), false)
+
+    // A wake must always lead to a decision. The monitors can change while the
+    // Mac sleeps, and the same count must not look like no change.
+    var woken = Latch()
+    woken.record(externals: 2, applied: true)
+    woken.forget()
+    check("latch after a wake", woken.isUnchanged(externals: 2), false)
 
     print(failures == 0 ? "all checks passed" : "\(failures) check(s) failed")
     return failures == 0

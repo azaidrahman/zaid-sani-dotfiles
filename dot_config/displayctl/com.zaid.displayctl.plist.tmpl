@@ -19,7 +19,10 @@
        change, and the record of the display in the window server becomes
        unusable. The panel stays off until the next logout. -->
   <key>ExitTimeOut</key><integer>20</integer>
+  <!-- The log is the only record of what the agent did. A black panel makes
+       the user restart the Mac, and a restart empties /tmp. The log must not
+       live there, or the record of the failure goes away with it. -->
   <key>StandardErrorPath</key>
-  <string>/tmp/displayctl.err</string>
+  <string>{{ .chezmoi.homeDir }}/Library/Logs/displayctl.log</string>
 </dict>
 </plist>
