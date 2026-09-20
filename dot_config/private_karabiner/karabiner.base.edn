@@ -36,6 +36,7 @@
              :hide-timer    "killall timer-hud 2>/dev/null"
              :toggle-topbar "~/.config/karabiner/scripts/toggle-top-bar"
              :key-search    "~/.config/karabiner/scripts/show-key-search.sh"
+             :display-rescue "~/.config/karabiner/scripts/displayctl-rescue.sh"
             }
 
 ;; BEGIN HELP-TEXT (auto-generated from config/help-text.yaml)
@@ -132,7 +133,11 @@
   {:des "Hyper shell commands"
    :rules
    [;; hyper+t → toggle mouse between current position and top of screen
-    [:!QWERt [:toggle-topbar]]]}
+    [:!QWERt [:toggle-topbar]]
+    ;; hyper+shift+escape → emergency: bring the built-in display back.
+    ;; The built-in panel can stay off after the dock goes away. This key needs
+    ;; no picture, so it works when the screen shows nothing.
+    [:!QWERSescape [:display-rescue]]]}
 
   {:des "Volume (Left Option layer)"
    :rules
