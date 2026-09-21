@@ -27,6 +27,9 @@ run "git worktree remove"    finish 'git worktree remove ../wt-gti780 # GTI-780'
 # 4. skill names in command position
 run "finish-branch cmd"      finish 'finish-branch GTI-790'
 run "start-ticket after &&"  start  'cd /repo && start-ticket GTI-791'
+run "start-ticket-worktree"  start  'start-ticket-worktree GTI-791'
+run "start-ticket-branch"    start  'cd /repo && start-ticket-branch GTI-791'
+run "start-worktree"         start  'start-worktree GTI-791'
 # 5-7. data, not commands
 run "skill name in prose"    none   'echo "run `finish-branch` when GTI-792 is done"'
 run "skill name in a path"   none   'cat ~/.claude/skills/start-ticket/SKILL.md | grep GTI-793'

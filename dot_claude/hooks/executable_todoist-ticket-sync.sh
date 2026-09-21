@@ -71,6 +71,11 @@ key=$(printf '%s' "$scan" | grep -oE '[A-Z][A-Z0-9]+-[0-9]+' | head -1)
 
 # A skill name counts only in command position: at the start, or after a
 # separator such as ; && || | or (. Prose and quoted text never match.
+#
+# Name every suffix. The real skills are `start-ticket-worktree` and
+# `start-ticket-branch`; plain `start-ticket` is not one. An anchor that
+# demands a space after the name makes the hook blind to the longer names,
+# which is what happened on 2026-09-21 when this guard was first added.
 cmdpos='(^|[;&|(])[[:space:]]*'
 word='([[:space:]]|$)'
 
@@ -79,7 +84,7 @@ word='([[:space:]]|$)'
 event=""
 if printf '%s' "$scan" | grep -qE "git +branch +-[dD]|git +worktree +remove|${cmdpos}finish-branch${word}"; then
   event="finish"
-elif printf '%s' "$scan" | grep -qE "git +checkout +-b|git +switch +-c|git +worktree +add|${cmdpos}(agent-worktree|start-ticket)${word}"; then
+elif printf '%s' "$scan" | grep -qE "git +checkout +-b|git +switch +-c|git +worktree +add|${cmdpos}(agent-worktree|start-worktree|start-ticket(-worktree|-branch)?)${word}"; then
   event="start"
 fi
 [ -n "$event" ] || exit 0
