@@ -21,6 +21,16 @@
 #
 # The hook never blocks the session. On any problem it exits 0 and says
 # nothing.
+#
+# False positives. The hook reads a command, not the text that the command
+# writes. Two rules keep data out of the scan:
+#   1. The hook drops every heredoc body first. A command that writes a file
+#      often carries a ticket key in that file. The key is data there.
+#   2. A skill name counts only in command position. Prose that names
+#      `finish-branch` is data, not a call.
+# Both rules come from one misfire on 2026-09-21. A write of SKILL.md carried
+# the key GTI-273 and the word finish-branch in its heredoc, and the hook
+# reported that work on GTI-273 had finished.
 set -u
 
 MARKER_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/todoist-ticket-sync"
@@ -33,16 +43,43 @@ session=$(printf '%s' "$payload" | jq -r '.session_id // "nosession"' 2>/dev/nul
 
 [ -n "$command" ] || exit 0
 
+# Drop every heredoc body. What a command writes is data, not a command.
+scan=$(printf '%s\n' "$command" | awk '
+  {
+    if (inbody) {
+      stripped = $0
+      sub(/^[ \t]+/, "", stripped)
+      sub(/[ \t]+$/, "", stripped)
+      if (stripped == term) { inbody = 0 }
+      next
+    }
+    line = $0
+    if (match(line, /<<-?[ \t]*("[^"]+"|'"'"'[^'"'"']+'"'"'|[A-Za-z_][A-Za-z0-9_]*)/)) {
+      term = substr(line, RSTART, RLENGTH)
+      sub(/^<<-?[ \t]*/, "", term)
+      gsub(/["'"'"']/, "", term)
+      if (term != "") { inbody = 1 }
+    }
+    print line
+  }
+')
+[ -n "$scan" ] || exit 0
+
 # The command must carry a ticket key. Read the first key only.
-key=$(printf '%s' "$command" | grep -oE '[A-Z][A-Z0-9]+-[0-9]+' | head -1)
+key=$(printf '%s' "$scan" | grep -oE '[A-Z][A-Z0-9]+-[0-9]+' | head -1)
 [ -n "$key" ] || exit 0
+
+# A skill name counts only in command position: at the start, or after a
+# separator such as ; && || | or (. Prose and quoted text never match.
+cmdpos='(^|[;&|(])[[:space:]]*'
+word='([[:space:]]|$)'
 
 # Decide the event. A delete wins over a create, because `agent-worktree`
 # prints both words in one line when it replaces a worktree.
 event=""
-if printf '%s' "$command" | grep -qE 'git +branch +-[dD]|git +worktree +remove|finish-branch'; then
+if printf '%s' "$scan" | grep -qE "git +branch +-[dD]|git +worktree +remove|${cmdpos}finish-branch${word}"; then
   event="finish"
-elif printf '%s' "$command" | grep -qE 'agent-worktree|git +checkout +-b|git +switch +-c|git +worktree +add|start-ticket'; then
+elif printf '%s' "$scan" | grep -qE "git +checkout +-b|git +switch +-c|git +worktree +add|${cmdpos}(agent-worktree|start-ticket)${word}"; then
   event="start"
 fi
 [ -n "$event" ] || exit 0
