@@ -25,15 +25,13 @@ what you did in one line. Do not describe the plan first.
 
 Ask the user only in these cases:
 
-- The key has no task in Todoist. A new task needs a workstream and labels
-  that you cannot read from the ticket alone.
+- The key has no task in Todoist. A new task needs a project, a section, and
+  labels that you cannot read from the ticket alone.
 - More than one task matches the key.
 - The ticket looks like a live break, which changes the priority to `p1` and
   moves the task to `Ops & Firefighting`.
 - The work of a finished ticket did not land, or you cannot tell that it
   landed.
-- The finished subtask was the last open subtask of its workstream, and the
-  workstream can also close.
 - A write fails, or the result does not match what you sent.
 
 In an unclear case, use one `AskUserQuestion` call for the whole proposal.
@@ -47,19 +45,56 @@ time of the user.
 
 | Project | Holds |
 |---|---|
-| `Infra Work` | Build streams that the user owns. Sections: `Now`, `Next`, `Blocked`. |
+| `Infra Work` | Build work that the user owns. One section for each epic. |
 | `Team Requests` | Requests from other teams. |
-| `Ops & Firefighting` | Broken things, incidents, and work already in flight. |
+| `Ops & Firefighting` | Broken things and incidents. |
 | `Admin & Compliance` | Process, documentation, audits, and reports. |
 | `Learning` | Books and study. |
 
-In `Infra Work` and `Team Requests`, a top-level task is a **workstream**. Its
-subtasks are the tickets in that stream. Each subtask title starts with
-the key, for example `GTI-673 db: add Cloud SQL for GT Console prod`.
+### Every ticket is a top-level task
 
-Labels: every ticket carries `gti`. A ticket also carries a system label
+One ticket is one task. The task sits at the top level of its project. The
+title starts with the key, for example
+`GTI-673 db: add Cloud SQL for GT Console prod`.
+
+**Never create a task that only groups other tasks.** A first-level task
+that reads `Finish in-flight work`, `Platform hygiene backlog`, or any other
+status name is banned. Such a task holds no work of its own. It repeats the
+tickets below it, and it goes stale when the status changes. The user
+deleted the last one on 2026-09-21.
+
+A section does the grouping instead. A section carries no date and no
+priority, so a reader cannot mistake it for work.
+
+### Sections are epics
+
+In `Infra Work`, each section is one epic. Name the section for the epic,
+and put the key in brackets, for example
+`GT Console prod re-platform (GTI-671)`.
+
+```
+Infra Work
+  GT Console prod re-platform (GTI-671)
+    GTI-673 db: add Cloud SQL for GT Console prod
+    GTI-714 sec: decide the GT Console prod OIDC issuer
+  Hermes consolidation (GTI-611)
+    GTI-626 gke: add nodeSelector support to platform-lib
+```
+
+Urgency does not live in a section. The priority and the due date carry it.
+A ticket that the user works on today is `p2` and due today, whatever
+section holds it.
+
+A blocked ticket keeps its epic section and takes the `blocked` label. A
+section cannot show that a ticket is blocked, because the ticket already
+sits in the section for its epic.
+
+### Labels
+
+Every ticket carries `gti`. A ticket also carries a system label
 (`gtconsole`, `hermes`, `ufb`, `llmrag`, `iris`, `obs`, `platform`) and an
-environment label (`dev`, `stg`, `prd`) when the ticket names one.
+environment label (`dev`, `stg`, `prd`) when the ticket names one. A blocked
+ticket also carries `blocked`.
 
 ## Which tool to use
 
@@ -73,7 +108,7 @@ the user and stop.
 2. Act on what you find.
 
    **Exactly one task exists.** This is the normal case, and it is clear.
-   The ticket is already a subtask of a workstream. Make these changes now:
+   Make these changes now:
    - Set the priority to `p2`.
    - Set the due date to today.
 
@@ -81,26 +116,15 @@ the user and stop.
    and ask instead, because a break also changes the project.
 
    A priority and a due date are enough. Both put the ticket in Today and in
-   Upcoming, which is where the user looks.
-
-   > **Never set `sectionId` on a subtask.** Todoist treats a section move as
-   > a move out of the parent, so the subtask silently leaves its workstream
-   > and lands loose in the section. The same is true of `projectId`. Verified
-   > on 2026-09-14: a child moved to a section came back with no `parentId`.
-   >
-   > If a whole stream becomes active, move the **workstream parent** to the
-   > `Now` section instead. A parent has no parent to lose, and its subtasks
-   > travel with it. Propose that as a separate change and say why.
-   >
-   > A live break is the one case for a project move, because the ticket
-   > belongs in `Ops & Firefighting` rather than its build stream. That move
-   > orphans the subtask, so say so, and offer to re-parent it under
-   > `Fix broken alert routing` or the in-flight workstream there.
+   Upcoming, which is where the user looks. Do not change the section. The
+   epic of the ticket does not change when the work starts.
 
    **No task exists, or more than one matches.** This is unclear. Read the
-   ticket in the tracker and ask the user. For a new subtask, propose:
+   ticket in the tracker and ask the user. For a new task, propose:
    - Title: `<KEY> <the ticket summary>`
-   - Parent: the workstream that fits. Name your choice and say why.
+   - Project: the project that fits.
+   - Section: the section for the epic of the ticket. Name your choice and
+     say why.
    - Labels: `gti`, plus the system and environment labels that fit.
    - Description: the body of the ticket, then the link. See below.
 
@@ -146,9 +170,10 @@ which already holds the Atlassian credential.
 
 **What the script cannot decide.** It copies the ticket faithfully. It does
 not know that a ticket is unworkable as written, or that one item in a list
-must come first. When you read a ticket and find something like that, add one
-short line at the top of the **parent** task, not the subtask. The next run of
-the script overwrites a subtask description.
+must come first. When you read a ticket and find something like that, add a
+comment to the task with `add-comments`. Do not put it in the description,
+because the next run of the script overwrites the description. Do not make a
+task to hold it.
 
 ## When a ticket ends
 
@@ -159,15 +184,29 @@ the script overwrites a subtask description.
 
 3. Act on what you find.
 
-   **One task, and the work landed.** This is clear. Complete the subtask for
+   **One task, and the work landed.** This is clear. Complete the task for
    the key and report it in one line.
 
    **Anything else.** Ask the user. This covers a branch that did not merge, a
    branch whose state you cannot read, and a key with no task or more than one
    task.
 
-4. If the subtask was the last open subtask of its workstream, ask whether to
-   complete the workstream too. Never close a workstream alone.
+4. If the task was the last open task in its section, say so in the report.
+   Leave the empty section. The user removes a section when the epic closes.
+
+## Working with the Todoist API
+
+These three facts cost a session each to find. Trust them.
+
+- **`update-tasks` cannot set `parentId` to null.** The call fails. To lift
+  an old subtask to the top level, send `update-tasks` with the `projectId`
+  that the task already has. Todoist reads any `projectId` or `sectionId` as
+  a move, and a move drops the parent. Verified on 2026-09-21.
+- **A delete removes every subtask.** Before you delete an old grouping
+  task, read it and confirm that it reports `children: []`.
+- **`reschedule-tasks` needs `date`, not `dueString`.** To clear a date, use
+  `update-tasks` with `dueString` set to `no date`. `reschedule-tasks`
+  rejects that value.
 
 ## Rules
 
@@ -175,12 +214,13 @@ the script overwrites a subtask description.
   change and report it.
 - One question, not a series. Put the whole proposal in one
   `AskUserQuestion` call.
-- Do not create a workstream. If no workstream fits, say so and ask.
+- Never create a task that only groups other tasks. Use a section.
+- Do not create a section. If no section fits, say so and ask.
 - Do not change a Jira status here. `finish-branch` owns the Jira
   transition where that skill exists.
-- Do not move a ticket out of `Blocked` unless the blocker is gone.
-- Do not set `sectionId` or `projectId` on a subtask. Either one takes it out
-  of its workstream. Change the priority and the due date instead.
+- Do not remove the `blocked` label unless the blocker is gone.
+- If you find an old grouping task with subtasks below it, do not rebuild
+  it and do not silently flatten it. Report it, and offer to flatten it.
 - If the user declines, do nothing and do not ask again in this session.
 - If a write fails, say so. Do not retry the same call twice.
 
