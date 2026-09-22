@@ -9,8 +9,9 @@
 set -u
 dir="${1:-next}"; cur="${2:-}"
 
-# Same exclusions as tv-tmux-windows.sh, plus held sessions: a session marked
-# `[HOLD] ` is blocked on something, so rotation must step over it.
+# Rotation covers the `active` group of tv-tmux-windows.sh only. It steps over
+# a utility session, an `md:` window, and a session marked `[HOLD] `, because a
+# held session is blocked on something.
 # Stable order: session, then window idx.
 mapfile -t t < <(
   tmux list-windows -a -F '#{session_name}	#{window_index}	#{window_name}' \

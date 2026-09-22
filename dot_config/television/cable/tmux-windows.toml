@@ -6,11 +6,13 @@ requirements = ["tmux"]
 [source]
 no_sort = true
 ansi = true
-# Two sources: working windows first, held ones second. ctrl-s cycles between
-# them, so a [HOLD] session stays reachable without sitting in the default view.
+# Three sources: working windows first, held ones second, utility sessions
+# last. ctrl-s cycles between them, so a [HOLD] session and a utility session
+# stay reachable without sitting in the default view.
 command = [
   "~/.tmux/scripts/tv-tmux-windows.sh active",
   "~/.tmux/scripts/tv-tmux-windows.sh hold",
+  "~/.tmux/scripts/tv-tmux-windows.sh other",
 ]
 watch = 0.5
 output = "{strip_ansi|split:\t:1}"

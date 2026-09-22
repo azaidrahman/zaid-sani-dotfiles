@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Tests for the [HOLD] session marker (prefix+b).
+# Tests for the groups of the window picker: active, hold (prefix+b), and the
+# utility sessions.
 #
 # Runs against a private tmux socket, so it cannot touch the live server.
 set -u
@@ -65,18 +66,24 @@ session_names() { tm list-sessions -F '#{session_name}' | sort | tr '\n' ' ' | s
 # --- fixture ----------------------------------------------------------------
 # Headless, tmux treats the newest session as current, and toggle-hold.sh acts
 # on the current session. Create bravo last so the toggle lands on it.
+tm new-session -d -s quickterminal
 tm new-session -d -s alpha
 tm new-session -d -s charlie
 tm new-session -d -s bravo
 
-check "active source lists every session" "alpha:0 bravo:0 charlie:0" "$(picker active)"
+check "active source lists every work session" "alpha:0 bravo:0 charlie:0" "$(picker active)"
 check "hold source is empty"              ""                          "$(picker hold | grep -o '.*' || true)"
-check "rotation covers every session"     "alpha:0 bravo:0 charlie:0" "$(rotation_set alpha:0)"
+check "rotation covers every work session" "alpha:0 bravo:0 charlie:0" "$(rotation_set alpha:0)"
+
+# --- utility sessions -------------------------------------------------------
+
+check "other source lists the utility session" "quickterminal:0"       "$(picker other)"
+check "rotation steps over the utility session" "alpha:0 bravo:0 charlie:0" "$(rotation_set alpha:0)"
 
 # --- toggle on --------------------------------------------------------------
 run "$TOGGLE" >/dev/null
 
-check "toggle marks the current session"     "[HOLD] bravo alpha charlie" "$(session_names)"
+check "toggle marks the current session"     "[HOLD] bravo alpha charlie quickterminal" "$(session_names)"
 check "held session leaves the active source" "alpha:0 charlie:0"         "$(picker active)"
 check "held session appears in the hold source" "[HOLD] bravo:0"          "$(picker hold)"
 check "rotation steps over the held session"  "alpha:0 charlie:0"         "$(rotation_set alpha:0)"
@@ -84,7 +91,7 @@ check "rotation steps over the held session"  "alpha:0 charlie:0"         "$(rot
 # --- toggle off -------------------------------------------------------------
 run "$TOGGLE" >/dev/null
 
-check "toggle clears the marker"            "alpha bravo charlie"       "$(session_names)"
+check "toggle clears the marker"            "alpha bravo charlie quickterminal"       "$(session_names)"
 check "session returns to the active source" "alpha:0 bravo:0 charlie:0" "$(picker active)"
 check "rotation covers it again"             "alpha:0 bravo:0 charlie:0" "$(rotation_set alpha:0)"
 
@@ -92,6 +99,11 @@ check "rotation covers it again"             "alpha:0 bravo:0 charlie:0" "$(rota
 check "hold source explains an empty list" \
     "no sessions on hold" \
     "$(run "$PICKER" hold | sed 's/\x1b\[[0-9;]*m//g' | cut -f3)"
+
+tm kill-session -t quickterminal
+check "other source explains an empty list" \
+    "no other sessions" \
+    "$(run "$PICKER" other | sed 's/\x1b\[[0-9;]*m//g' | cut -f3)"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

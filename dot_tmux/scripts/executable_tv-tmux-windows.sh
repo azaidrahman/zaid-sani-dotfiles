@@ -11,14 +11,17 @@
 # Code), matched to tmux windows by walking each session's process ancestry.
 # No hooks or tmux window-options needed for state.
 #
-# The first argument selects which half of the windows to emit:
-#   active  (default)  windows whose session is not held
+# The first argument selects which group of windows to emit:
+#   active  (default)  windows of a normal session that is not held
 #   hold               windows whose session name starts with `[HOLD] `
-# The channel declares both as two sources, so ctrl-s switches between them.
+#   other              windows of a utility session (mobile, quickterminal)
+# The channel declares all three as sources, so ctrl-s switches between them.
 set -u
 
 MODE="${1:-active}"
 HOLD_PREFIX="[HOLD] "
+# Utility sessions. They are not work, so they get their own group.
+UTIL_SESSIONS="mobile quickterminal"
 
 ALERTS="$HOME/.tmux/alerts"
 SESSIONS_DIR="${CLAUDE_SESSIONS_DIR:-$HOME/.claude/sessions}"
@@ -70,7 +73,7 @@ done
 tmux list-windows -a -F '#{window_stack_index}	#{session_last_attached}	#{session_name}	#{window_index}	#{window_name}	#{window_id}' \
   | sort -t$'\t' -k1,1n -k2,2nr \
   | cut -f3- \
-  | awk -F'\t' -v A="$ALERTS" -v SF="$state_file" -v MODE="$MODE" -v HP="$HOLD_PREFIX" '
+  | awk -F'\t' -v A="$ALERTS" -v SF="$state_file" -v MODE="$MODE" -v HP="$HOLD_PREFIX" -v UTIL="$UTIL_SESSIONS" '
       BEGIN {
         while ((getline l < SF) > 0) {
           split(l, p, "\t")
@@ -86,15 +89,19 @@ tmux list-windows -a -F '#{window_stack_index}	#{session_last_attached}	#{sessio
         DIM = "\033[2;37m"
         RST = "\033[0m"
         nrows = 0
+        split(UTIL, u, " ")
+        for (i in u) util[u[i]] = 1
       }
       {
         sess = $1; idx = $2; wname = $3; wid = $4
-        if (sess == "mobile" || sess == "quickterminal") next
         if (wname ~ /^md:/) next
 
-        # A held session belongs only to the `hold` source, and vice versa.
-        held = (index(sess, HP) == 1)
-        if (held != (MODE == "hold")) next
+        # Each window belongs to one group only. A utility session is never
+        # work, so it wins over the hold marker.
+        if (sess in util)            group = "other"
+        else if (index(sess, HP) == 1) group = "hold"
+        else                         group = "active"
+        if (group != MODE) next
 
         # Map JSON status to color: waiting=red, busy=blue, idle=green
         state = wstate[wid]
@@ -120,7 +127,9 @@ tmux list-windows -a -F '#{window_stack_index}	#{session_last_attached}	#{sessio
       }
       END {
         if (nrows == 0) {
-          msg = (MODE == "hold") ? "no sessions on hold" : "no working sessions"
+          if      (MODE == "hold")  msg = "no sessions on hold"
+          else if (MODE == "other") msg = "no other sessions"
+          else                      msg = "no working sessions"
           printf "%s\t\t%s\n", DIM "-" RST, DIM msg RST
         }
       }
