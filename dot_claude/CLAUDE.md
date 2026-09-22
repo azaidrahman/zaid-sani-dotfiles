@@ -60,6 +60,24 @@ file. Some formats have a fixed shape. Keep that shape, and write STE inside it.
 - Conventional commits keep `type(scope): subject`. Write the subject in STE.
 - Ticket templates keep their headings. Write the body text in STE.
 
+## Approval before git history changes
+
+Do not commit, push, merge, or open a pull request without my approval.
+This applies when the work is complete and the tests pass. It applies when
+a skill tells you to commit. It applies when I approved the plan, because
+approval of a plan is not approval of the commit.
+
+Do this instead:
+
+1. Stage the files.
+2. Write the commit message.
+3. Show me the message and the list of staged files.
+4. Stop, and wait for my answer.
+
+If I ask you to commit, push, merge, or open a pull request, do it. A direct
+request is the approval. One approval covers one action, and it does not
+carry over to the next action or to a later commit.
+
 ## Worktree policy
 
 Use the current checkout for read-only work.
