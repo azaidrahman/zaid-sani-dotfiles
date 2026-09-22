@@ -10,7 +10,15 @@
 # State comes directly from ~/.claude/sessions/<pid>.json (written by Claude
 # Code), matched to tmux windows by walking each session's process ancestry.
 # No hooks or tmux window-options needed for state.
+#
+# The first argument selects which half of the windows to emit:
+#   active  (default)  windows whose session is not held
+#   hold               windows whose session name starts with `[HOLD] `
+# The channel declares both as two sources, so ctrl-s switches between them.
 set -u
+
+MODE="${1:-active}"
+HOLD_PREFIX="[HOLD] "
 
 ALERTS="$HOME/.tmux/alerts"
 SESSIONS_DIR="${CLAUDE_SESSIONS_DIR:-$HOME/.claude/sessions}"
@@ -62,7 +70,7 @@ done
 tmux list-windows -a -F '#{window_stack_index}	#{session_last_attached}	#{session_name}	#{window_index}	#{window_name}	#{window_id}' \
   | sort -t$'\t' -k1,1n -k2,2nr \
   | cut -f3- \
-  | awk -F'\t' -v A="$ALERTS" -v SF="$state_file" '
+  | awk -F'\t' -v A="$ALERTS" -v SF="$state_file" -v MODE="$MODE" -v HP="$HOLD_PREFIX" '
       BEGIN {
         while ((getline l < SF) > 0) {
           split(l, p, "\t")
@@ -83,6 +91,10 @@ tmux list-windows -a -F '#{window_stack_index}	#{session_last_attached}	#{sessio
         sess = $1; idx = $2; wname = $3; wid = $4
         if (sess == "mobile" || sess == "quickterminal") next
         if (wname ~ /^md:/) next
+
+        # A held session belongs only to the `hold` source, and vice versa.
+        held = (index(sess, HP) == 1)
+        if (held != (MODE == "hold")) next
 
         # Map JSON status to color: waiting=red, busy=blue, idle=green
         state = wstate[wid]
@@ -107,6 +119,9 @@ tmux list-windows -a -F '#{window_stack_index}	#{session_last_attached}	#{sessio
         nrows++
       }
       END {
-        if (nrows == 0) printf "%s\t\t%s\n", DIM "-" RST, DIM "no working sessions" RST
+        if (nrows == 0) {
+          msg = (MODE == "hold") ? "no sessions on hold" : "no working sessions"
+          printf "%s\t\t%s\n", DIM "-" RST, DIM msg RST
+        }
       }
     '
