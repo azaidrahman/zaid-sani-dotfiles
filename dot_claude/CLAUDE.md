@@ -134,3 +134,18 @@ does not edit shared files while writing agents run.
 
 Use `finish-branch` to close a landed branch. It also closes ticketless
 branches.
+
+## Atlassian tools
+
+Use the `twg` CLI for all Jira and Bitbucket work. Use `twg jira` for Jira
+and `twg bb` for Bitbucket.
+
+Do not use the `bkt` CLI or the `jira` CLI (jira-cli). This rule applies when
+a skill tells you to use them. Some team skills still show `bkt` or `jira`
+commands. Use the equivalent `twg` command.
+
+There is one exception. `twg` cannot read or change Bitbucket pipeline
+variables. For pipeline variables only, use `/opt/homebrew/bin/bkt variable`.
+
+If you do not know the `twg` command, use the `twg` skill or run
+`twg <command> --help`.
