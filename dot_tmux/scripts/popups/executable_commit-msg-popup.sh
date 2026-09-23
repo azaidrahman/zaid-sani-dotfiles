@@ -8,7 +8,7 @@
 # Two modes:
 #
 #   commit-msg-popup.sh <pane path>      gate, run by run-shell (formats expand)
-#   commit-msg-popup.sh --edit <file>    inside the popup: nvim, then "commit now?"
+#   commit-msg-popup.sh --edit <file>    inside the popup: `git commit -v` in nvim
 #
 # The gate owns the status messages:
 #
@@ -16,34 +16,35 @@
 #   no proposed message   -> tmux status message, no popup
 #   message exists        -> popup
 #
-# On "y" the popup runs `git commit -F <file>` against what is staged, and removes
-# the file when the commit succeeds. On any other answer the edited file stays,
-# so Claude reads your version when you tell it to commit.
+# The popup runs `git commit -v -e -F <file>`. Git opens nvim on COMMIT_EDITMSG
+# with the proposed message at the top, and the status and staged diff below it,
+# the same as a plain `git commit -v`.
+#
+#   :wq            commit, then remove the proposed message file
+#   :cq            abort, and save your edits to the proposed message file
+#   empty message  abort (the rule of git), the proposed message file stays
+#
+# After an abort, Claude reads your edited version when you tell it to commit.
 set -euo pipefail
 
 if [[ "${1:-}" == "--edit" ]]; then
   msg=${2:?message file required}
-  nvim -c 'setfiletype gitcommit' "$msg"
+  editmsg="$(dirname "$msg")/COMMIT_EDITMSG"
 
-  if [[ -z "$(grep -v '^[[:space:]]*$' "$msg" 2>/dev/null || true)" ]]; then
-    echo "Message is empty. Nothing to commit."
-    read -rsn1 -p "Press any key to close."
-    exit 0
-  fi
-
-  echo "Staged files:"
-  if ! git diff --cached --name-status | sed 's/^/  /' | grep .; then
-    echo "  (none)"
-  fi
-  echo
-  read -rn1 -p "Commit now? [y/N] " answer
-  echo
-  if [[ "$answer" == [yY] ]]; then
-    if git commit -F "$msg"; then
-      rm -f "$msg"
+  if GIT_EDITOR=nvim git commit -v -e -F "$msg"; then
+    rm -f "$msg"
+  elif [[ "$editmsg" -nt "$msg" ]]; then
+    # Git leaves the edited buffer in COMMIT_EDITMSG. Copy the message part back,
+    # without the comments and the diff under the scissors line. The -nt test
+    # skips a stale file from an earlier commit. Git also writes the file when
+    # nothing is staged, so save only when the text changed.
+    edited=$(sed '/^# -* >8 -*$/,$d' "$editmsg" | git stripspace --strip-comments)
+    if [[ -n "$edited" && "$edited" != "$(git stripspace --strip-comments <"$msg")" ]]; then
+      printf '%s\n' "$edited" >"$msg"
+      echo "Not committed. Your edits are saved for Claude."
     fi
-    read -rsn1 -p "Press any key to close."
   fi
+  read -rsn1 -p "Press any key to close."
   exit 0
 fi
 
