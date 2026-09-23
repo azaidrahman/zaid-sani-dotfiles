@@ -70,13 +70,36 @@ approval of a plan is not approval of the commit.
 Do this instead:
 
 1. Stage the files.
-2. Write the commit message.
+2. Write the commit message to the message file (see below).
 3. Show me the message and the list of staged files.
 4. Stop, and wait for my answer.
 
 If I ask you to commit, push, merge, or open a pull request, do it. A direct
 request is the approval. One approval covers one action, and it does not
 carry over to the next action or to a later commit.
+
+### The message file
+
+Always write the proposed commit message to this file:
+
+```bash
+"$(git rev-parse --absolute-git-dir)/CLAUDE_COMMIT_MSG"
+```
+
+The file is in the git directory, so git does not track it. Each worktree has
+its own file. Replace the full contents each time you propose a message. Write
+only the message text, with no comment lines.
+
+I can edit the file in a tmux popup with `prefix+y`. The popup can also do the
+commit. Thus, the file can change after you write it.
+
+When I approve the commit, do these steps:
+
+1. If the file does not exist, check `git log -1`. If I did the commit in the
+   popup, do not commit again.
+2. Read the file again. Do not use your earlier copy of the message.
+3. Run `git commit -F <file>`.
+4. If the commit succeeds, delete the file.
 
 ## Worktree policy
 
