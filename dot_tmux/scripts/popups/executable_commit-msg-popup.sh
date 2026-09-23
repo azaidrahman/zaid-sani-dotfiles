@@ -9,6 +9,7 @@
 #
 #   commit-msg-popup.sh <pane path>      gate, run by run-shell (formats expand)
 #   commit-msg-popup.sh --edit <file>    inside the popup: `git commit -v` in nvim
+#   commit-msg-popup.sh --editor <file>  the GIT_EDITOR that --edit gives to git
 #
 # The gate owns the status messages:
 #
@@ -21,19 +22,37 @@
 # the same as a plain `git commit -v`.
 #
 #   :wq            commit, then remove the proposed message file
+#   :q             abort, the proposed message file stays
 #   :cq            abort, and save your edits to the proposed message file
 #   empty message  abort (the rule of git), the proposed message file stays
 #
+# The buffer already holds the message, so git commits on any clean nvim exit,
+# :q too. The --editor wrapper stops that: if you did not write the buffer, it
+# exits 1, and git aborts.
+#
 # After an abort, Claude reads your edited version when you tell it to commit.
 set -euo pipefail
+
+if [[ "${1:-}" == "--editor" ]]; then
+  file=${2:?file required}
+  # Set an old mtime. If nvim writes the file, the mtime changes.
+  touch -t 200001010000 "$file"
+  before=$(stat -f %m "$file")
+  nvim "$file" || exit 1
+  [[ "$(stat -f %m "$file")" != "$before" ]]
+  exit
+fi
 
 if [[ "${1:-}" == "--edit" ]]; then
   msg=${2:?message file required}
   editmsg="$(dirname "$msg")/COMMIT_EDITMSG"
 
-  if GIT_EDITOR=nvim git commit -v -e -F "$msg"; then
+  if GIT_EDITOR="bash '${BASH_SOURCE[0]}' --editor" git commit -v -e -F "$msg"; then
     rm -f "$msg"
-  elif [[ "$editmsg" -nt "$msg" ]]; then
+  else
+    echo "Not committed."
+  fi
+  if [[ -f "$msg" && "$editmsg" -nt "$msg" ]]; then
     # Git leaves the edited buffer in COMMIT_EDITMSG. Copy the message part back,
     # without the comments and the diff under the scissors line. The -nt test
     # skips a stale file from an earlier commit. Git also writes the file when
@@ -41,7 +60,7 @@ if [[ "${1:-}" == "--edit" ]]; then
     edited=$(sed '/^# -* >8 -*$/,$d' "$editmsg" | git stripspace --strip-comments)
     if [[ -n "$edited" && "$edited" != "$(git stripspace --strip-comments <"$msg")" ]]; then
       printf '%s\n' "$edited" >"$msg"
-      echo "Not committed. Your edits are saved for Claude."
+      echo "Your edits are saved for Claude."
     fi
   fi
   read -rsn1 -p "Press any key to close."
