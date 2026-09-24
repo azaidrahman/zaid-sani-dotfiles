@@ -44,7 +44,9 @@ Harvest each of these, or write "none" for it:
 
 Invoke [[writing-tickets]] and create the issue. Feed it the harvest: **Theory** and **Established** are the Why, **Next step** is the What, and the observable state that ends the thread is the Done-when.
 
-Ask the user to confirm the project and the title before you create it.
+[[writing-tickets]] also runs the procedure in `references/ticket-fields.md` of the `general` plugin. That procedure checks for a duplicate ticket and sets the parent, Priority, Action Type, the labels, the estimate, and the dates. Do not skip it because the thread is small. If the procedure finds a duplicate, use that ticket and go to Step 4.
+
+Ask the user to confirm the project, the title, and the proposal table before you create it.
 
 **Done when:** you hold a real `KEY` returned by Jira.
 
