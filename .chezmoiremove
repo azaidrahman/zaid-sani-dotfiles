@@ -11,3 +11,5 @@
 .tmux/conf.d/visual-mobile.conf
 .config/zsh/starship-mobile.toml
 .claude/skills/todoist-ticket-sync/jira-to-todoist.py
+# The ctx rule moved to ~/.agents/AGENTS.md (source: dot_agents/AGENTS.md).
+CLAUDE.md

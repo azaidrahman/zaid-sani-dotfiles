@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# chezmoi modify_ script for ~/.codex/config.toml
+#
+# Codex writes to this file at run time: trust levels, hook hashes, plugins,
+# and the model. Thus, chezmoi does not own the full file. This script only
+# makes sure that one key is present, and passes the rest through unchanged.
+#
+# project_doc_fallback_filenames lets Codex read a repository CLAUDE.md when
+# the repository has no AGENTS.md. Many repositories have only CLAUDE.md.
+#
+# The key goes at the top of the file. A top-level TOML key must come before
+# the first table, so the top is always a correct position.
+set -euo pipefail
+
+key='project_doc_fallback_filenames'
+line="${key} = [\"CLAUDE.md\"]"
+
+current=$(cat)
+
+if printf '%s\n' "$current" | grep -qE "^[[:space:]]*${key}[[:space:]]*="; then
+    printf '%s\n' "$current"
+elif [ -z "$current" ]; then
+    printf '%s\n' "$line"
+else
+    printf '%s\n%s\n' "$line" "$current"
+fi
