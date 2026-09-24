@@ -16,7 +16,8 @@
       "Bash(tail *)",
       "Bash(ls *)",
       "WebSearch",
-      "WebFetch"
+      "WebFetch",
+      "Edit(~/**/.git/worktrees/*/CLAUDE_COMMIT_MSG)"
     ],
     "defaultMode": "auto"
   },
