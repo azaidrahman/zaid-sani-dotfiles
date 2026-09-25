@@ -1,21 +1,28 @@
 #!/usr/bin/env bash
-# prefix+y: edit the commit message that Claude proposed, then optionally commit.
+# prefix+y: edit a draft that Claude proposed. A draft is a commit message or a
+# pull request. The commit popup can also do the commit.
 #
-# Claude writes each proposed message to $(git rev-parse --git-dir)/CLAUDE_COMMIT_MSG
-# (see "Approval before git history changes" in ~/.claude/CLAUDE.md). The file
-# lives inside the git dir, so git never tracks it, and each worktree has its own.
+# Claude writes each draft into the git dir (see "Approval before git history
+# changes" in ~/.agents/AGENTS.md). Git never tracks the files, and each
+# worktree has its own:
 #
-# Two modes:
+#   $(git rev-parse --absolute-git-dir)/CLAUDE_COMMIT_MSG   commit message
+#   $(git rev-parse --absolute-git-dir)/CLAUDE_PR_MSG       pull request draft
 #
-#   commit-msg-popup.sh <pane path>      gate, run by run-shell (formats expand)
-#   commit-msg-popup.sh --edit <file>    inside the popup: `git commit -v` in nvim
-#   commit-msg-popup.sh --editor <file>  the GIT_EDITOR that --edit gives to git
+# Modes:
+#
+#   commit-msg-popup.sh <pane path> [commit|pr]  gate, run by run-shell
+#   commit-msg-popup.sh --edit <file>     inside the popup: `git commit -v` in nvim
+#   commit-msg-popup.sh --editor <file>   the GIT_EDITOR that --edit gives to git
+#   commit-msg-popup.sh --edit-pr <file>  inside the popup: nvim on the PR draft
 #
 # The gate owns the status messages:
 #
 #   not a git work tree   -> tmux status message, no popup
-#   no proposed message   -> tmux status message, no popup
-#   message exists        -> popup
+#   no draft              -> tmux status message, no popup
+#   one draft             -> popup for that draft
+#   both drafts           -> menu to choose the draft. The menu runs the gate
+#                            again with commit or pr, which opens that popup.
 #
 # The popup runs `git commit -v -e -F <file>`. Git opens nvim on COMMIT_EDITMSG
 # with the proposed message at the top, and the status and staged diff below it,
@@ -31,7 +38,23 @@
 # exits 1, and git aborts.
 #
 # After an abort, Claude reads your edited version when you tell it to commit.
+#
+# The pull request popup only edits the draft. Claude reads the file again when
+# you tell it to open the pull request.
 set -euo pipefail
+
+if [[ "${1:-}" == "--edit-pr" ]]; then
+  draft=${2:?draft file required}
+  before=$(cksum <"$draft")
+  nvim "$draft" || true
+  if [[ -f "$draft" && "$(cksum <"$draft")" != "$before" ]]; then
+    echo "Your edits are saved for Claude."
+  else
+    echo "No change."
+  fi
+  read -rsn1 -p "Press any key to close."
+  exit 0
+fi
 
 if [[ "${1:-}" == "--editor" ]]; then
   file=${2:?file required}
@@ -68,8 +91,10 @@ if [[ "${1:-}" == "--edit" ]]; then
 fi
 
 cwd=${1:?pane path required}
+kind=${2:-}
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+self="$script_dir/commit-msg-popup.sh"
 source "$script_dir/git-popup-size.sh"
 
 if ! git_dir=$(git -C "$cwd" rev-parse --absolute-git-dir 2>/dev/null); then
@@ -78,12 +103,40 @@ if ! git_dir=$(git -C "$cwd" rev-parse --absolute-git-dir 2>/dev/null); then
 fi
 
 msg="$git_dir/CLAUDE_COMMIT_MSG"
-if [[ ! -s "$msg" ]]; then
-  tmux display-message "prefix+y: no proposed commit message in $(basename "$cwd")"
+pr="$git_dir/CLAUDE_PR_MSG"
+
+if [[ -z "$kind" ]]; then
+  if [[ -s "$msg" && -s "$pr" ]]; then
+    tmux display-menu -x C -y C -T ' edit which draft? ' \
+      "commit message" c "run-shell \"'$self' '$cwd' commit\"" \
+      "pull request draft" p "run-shell \"'$self' '$cwd' pr\""
+    exit 0
+  elif [[ -s "$msg" ]]; then
+    kind="commit"
+  elif [[ -s "$pr" ]]; then
+    kind="pr"
+  else
+    tmux display-message "prefix+y: no commit message or pull request draft in $(basename "$cwd")"
+    exit 0
+  fi
+fi
+
+case "$kind" in
+  commit) file=$msg mode=--edit title="commit message" ;;
+  pr) file=$pr mode=--edit-pr title="pull request draft" ;;
+  *)
+    tmux display-message "prefix+y: unknown draft kind: $kind"
+    exit 0
+    ;;
+esac
+
+# Claude can remove the file while the menu is open.
+if [[ ! -s "$file" ]]; then
+  tmux display-message "prefix+y: no $title in $(basename "$cwd")"
   exit 0
 fi
 
 # display-popup -E passes on the inner exit status. The gate must always give
 # run-shell a zero status, or tmux prints a `returned 1` banner.
-tmux display-popup -E -w "$POPUP_W" -h "$POPUP_H" -d "$cwd" -T ' commit message ' \
-  -- "$script_dir/commit-msg-popup.sh" --edit "$msg" || true
+tmux display-popup -E -w "$POPUP_W" -h "$POPUP_H" -d "$cwd" -T " $title " \
+  -- "$self" "$mode" "$file" || true

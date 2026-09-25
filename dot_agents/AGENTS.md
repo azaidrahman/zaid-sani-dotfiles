@@ -120,8 +120,8 @@ description after the empty line. Include the target branch in your message to
 me, not in the file. The other rules of the message file also apply to this
 file.
 
-I can edit the file before I approve. Thus, the file can change after you
-write it.
+I can edit the file in the same tmux popup, with `prefix+y`. Thus, the file
+can change after you write it.
 
 When I approve the pull request, do these steps:
 
