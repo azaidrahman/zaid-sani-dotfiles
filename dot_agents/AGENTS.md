@@ -75,9 +75,13 @@ Do this instead:
 3. Show me the message and the list of staged files.
 4. Stop, and wait for my answer.
 
-If I ask you to commit, push, merge, or open a pull request, do it. A direct
-request is the approval. One approval covers one action, and it does not
-carry over to the next action or to a later commit.
+If I ask you to commit, push, or merge, do it. A direct request is the
+approval. One approval covers one action, and it does not carry over to the
+next action or to a later commit.
+
+A pull request always needs a draft first, also when I ask for the pull
+request. Write the draft to the pull request file (see below), show it to me,
+and stop. Open the pull request only after I approve the draft.
 
 ### The message file
 
@@ -101,6 +105,32 @@ When I approve the commit, do these steps:
 2. Read the file again. Do not use your earlier copy of the message.
 3. Run `git commit -F <file>`.
 4. If the commit succeeds, delete the file.
+
+### The pull request file
+
+Before you open a pull request, write the proposed title and description to
+this file:
+
+```bash
+"$(git rev-parse --absolute-git-dir)/CLAUDE_PR_MSG"
+```
+
+Put the title on the first line. Put one empty line after the title. Put the
+description after the empty line. Include the target branch in your message to
+me, not in the file. The other rules of the message file also apply to this
+file.
+
+I can edit the file before I approve. Thus, the file can change after you
+write it.
+
+When I approve the pull request, do these steps:
+
+1. If the file does not exist, check for an open pull request on the branch.
+   If I opened it myself, do not open a second one.
+2. Read the file again. Do not use your earlier copy of the draft.
+3. Open the pull request. Use the first line as the title, and the text after
+   the empty line as the description.
+4. If the pull request opens, delete the file.
 
 ## Worktree policy
 
