@@ -56,3 +56,9 @@ archive/
 .local/bin/displayctl
 .config/zsh/functions/,displayctl
 {{ end }}
+
+# The autoclicker HUD is on aqua only. On other machines, the hyper+F1
+# binding stays in karabiner.json, but the command finds no binary.
+{{ if ne .chezmoi.hostname "aqua" }}
+.config/karabiner/src/autoclick-hud.swift
+{{ end }}

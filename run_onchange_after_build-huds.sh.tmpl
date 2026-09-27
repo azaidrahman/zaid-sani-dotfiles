@@ -13,6 +13,12 @@ SRC="$HOME/.config/karabiner/src"
 OUT="$HOME/.config/karabiner/scripts"
 
 for name in timer-hud time-hud toggle-top-bar autoclick-hud; do
+  # .chezmoiignore keeps some sources off some machines, for example
+  # autoclick-hud is on aqua only.
+  if [ ! -f "$SRC/$name.swift" ]; then
+    echo "build-huds: no source for $name, skipping"
+    continue
+  fi
   echo "build-huds: compiling $name"
   swiftc -O "$SRC/$name.swift" -o "$OUT/$name"
 done
