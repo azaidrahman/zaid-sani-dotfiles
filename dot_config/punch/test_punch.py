@@ -202,3 +202,35 @@ def test_a_resync_that_cannot_start_does_not_end_the_flow(monkeypatch):
 
     monkeypatch.setattr(punch.subprocess, "Popen", boom)
     assert punch.start_resync() is False
+
+
+def _moodist_flow(monkeypatch, choice, fail=False):
+    import punch
+    opened = []
+    monkeypatch.setattr(punch, "choose", lambda *a, **k: choice)
+
+    def fake_run(args, **k):
+        if fail:
+            raise OSError("no open")
+        opened.append(args)
+
+    monkeypatch.setattr(punch.subprocess, "run", fake_run)
+    punch.offer_moodist()
+    return opened
+
+
+def test_the_return_key_opens_moodist(monkeypatch):
+    import punch
+    assert _moodist_flow(monkeypatch, punch.MOODIST_OPEN) == [
+        ["open", punch.MOODIST_URL]]
+
+def test_a_skipped_prompt_does_not_open_moodist(monkeypatch):
+    assert _moodist_flow(monkeypatch, "Skip") == []
+
+def test_a_closed_prompt_does_not_open_moodist(monkeypatch):
+    # Escape and a timeout give no choice.
+    assert _moodist_flow(monkeypatch, None) == []
+
+def test_a_failed_open_does_not_stop_the_session(monkeypatch):
+    import punch
+    assert _moodist_flow(monkeypatch, punch.MOODIST_OPEN, fail=True) == []

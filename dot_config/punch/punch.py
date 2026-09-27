@@ -47,6 +47,12 @@ DIALOG_TIMEOUT = 180
 # The score a session takes when nobody answers the distraction dialog.
 AWAY_DISTRACTION = 5
 
+# A live session offers to open the Moodist ambient sound page. The page
+# cannot start the sound itself, because the browser blocks audio that no
+# click starts. The user presses play or shuffle on the page.
+MOODIST_URL = "https://moodist.mvze.net/"
+MOODIST_OPEN = "Open Moodist"
+
 # The interactive start asks three questions: the topic, the timebox, and
 # the start time. The user walks the steps with the n and the p keys.
 STEPS = 3
@@ -540,8 +546,23 @@ def start_interactive() -> None:
     kind, _ = punchtime.classify(start_at, m, datetime.now())
     if kind == "live":
         start_live(topic, m, start_at)
+        offer_moodist()
     else:
         log_retro(topic, m, start_at)
+
+
+def offer_moodist() -> None:
+    """Ask to open Moodist, and open it on the return key.
+
+    Escape, a timeout, and Skip leave it closed. The session is already
+    running, so a failure here is logged and passed over.
+    """
+    if choose("Play ambient sound?", [MOODIST_OPEN, "Skip"]) != MOODIST_OPEN:
+        return
+    try:
+        subprocess.run(["open", MOODIST_URL], check=True)
+    except Exception as e:
+        log.warning("failed to open Moodist: %s", e)
 
 
 def notify(text: str) -> None:
