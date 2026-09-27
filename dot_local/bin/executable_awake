@@ -1,0 +1,73 @@
+#!/bin/bash
+# Keep the Mac awake and show a badge on top of all windows.
+#
+#   awake            stay awake until you click the badge
+#   awake 90m        stay awake for 90 minutes (also: 45, 2h, 1h30m, 30s)
+#   awake off        stop now
+#   awake status     tell if it is on
+#
+# The badge is the awake-hud binary. The build-huds chezmoi script compiles
+# it from ~/.config/karabiner/src/awake-hud.swift.
+set -euo pipefail
+
+HUD="$HOME/.config/karabiner/scripts/awake-hud"
+
+usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; }
+
+# Print the number of seconds in a duration such as 90, 90m, 2h, or 1h30m.
+# A bare number is minutes.
+to_seconds() {
+  local d="$1" total=0 n unit
+  if [[ "$d" =~ ^[0-9]+$ ]]; then echo $((d * 60)); return; fi
+  [[ "$d" =~ ^([0-9]+[hms])+$ ]] || return 1
+  while [[ "$d" =~ ^([0-9]+)([hms])(.*)$ ]]; do
+    n="${BASH_REMATCH[1]}" unit="${BASH_REMATCH[2]}" d="${BASH_REMATCH[3]}"
+    case "$unit" in
+      h) total=$((total + n * 3600)) ;;
+      m) total=$((total + n * 60)) ;;
+      s) total=$((total + n)) ;;
+    esac
+  done
+  ((total > 0)) || return 1
+  echo "$total"
+}
+
+running() { pgrep -x awake-hud >/dev/null; }
+
+case "${1:-}" in
+  off|stop)
+    if running; then killall awake-hud; echo "awake: off"; else echo "awake: not on"; fi
+    exit 0 ;;
+  status)
+    if running; then echo "awake: on"; else echo "awake: off"; exit 1; fi
+    exit 0 ;;
+  -h|--help|help)
+    usage; exit 0 ;;
+esac
+
+args=()
+if [[ -n "${1:-}" ]]; then
+  if ! secs="$(to_seconds "$1")"; then
+    echo "awake: bad duration '$1'" >&2
+    usage >&2
+    exit 2
+  fi
+  args=("$secs")
+fi
+
+if [[ ! -x "$HUD" ]]; then
+  echo "awake: $HUD not found. Run 'chezmoi apply' to build it." >&2
+  exit 1
+fi
+
+# A new start replaces the old badge, so the new duration applies.
+if running; then killall awake-hud; sleep 0.2; fi
+
+# Bash 3.2 with `set -u` rejects an empty "${args[@]}", so expand it this way.
+nohup "$HUD" ${args[@]+"${args[@]}"} >/dev/null 2>&1 &
+disown
+if [[ ${#args[@]} -gt 0 ]]; then
+  echo "awake: on until $(date -v+"${args[0]}"S '+%H:%M')"
+else
+  echo "awake: on until you click the badge"
+fi

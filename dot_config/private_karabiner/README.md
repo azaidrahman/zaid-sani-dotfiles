@@ -22,6 +22,7 @@ Goku-based Karabiner-Elements config managed by chezmoi.
 │   ├── show-time.sh       # Time HUD launcher
 │   └── time-hud           # Compiled time HUD binary
 ├── src/                   # Swift sources (compile when needed)
+│   ├── awake-hud.swift    # Keep-awake badge (run by ~/.local/bin/awake)
 │   ├── help-hud.swift
 │   └── time-hud.swift
 └── data/
