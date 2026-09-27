@@ -12,7 +12,7 @@ fi
 SRC="$HOME/.config/karabiner/src"
 OUT="$HOME/.config/karabiner/scripts"
 
-for name in timer-hud time-hud toggle-top-bar; do
+for name in timer-hud time-hud toggle-top-bar autoclick-hud; do
   echo "build-huds: compiling $name"
   swiftc -O "$SRC/$name.swift" -o "$OUT/$name"
 done

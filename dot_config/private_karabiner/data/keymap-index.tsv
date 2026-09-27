@@ -127,6 +127,7 @@ extra		⌥R ⌥R	time	double-tap Right Option = time HUD
 extra		⇧⌥R 2x	timer	double-tap Shift+Right Option = timer HUD
 extra		\ \	notif centre	double-tap backslash = Notification Centre
 extra		⇪t	top bar	toggle mouse to top of screen
+extra		⇪f1	autoclick	toggle autoclicker at the pointer
 extra		⇪space	lang	language switch (ctrl+space)
 extra		⌥L,	vol-	volume down (SoundSource on aqua)
 extra		⌥L.	vol+	volume up (SoundSource on aqua)

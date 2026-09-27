@@ -26,6 +26,7 @@ extras:
 
   # Hyper shell commands (rules in base.edn, not hyperkeys.yaml)
   - ⇪t | top bar | toggle mouse to top of screen
+  - ⇪f1 | autoclick | toggle autoclicker at the pointer
   - ⇪space | lang | language switch (ctrl+space)
 
   # Left Option layer one-offs
