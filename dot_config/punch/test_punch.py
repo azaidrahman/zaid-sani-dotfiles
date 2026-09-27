@@ -234,3 +234,19 @@ def test_a_closed_prompt_does_not_open_moodist(monkeypatch):
 def test_a_failed_open_does_not_stop_the_session(monkeypatch):
     import punch
     assert _moodist_flow(monkeypatch, punch.MOODIST_OPEN, fail=True) == []
+
+def test_the_moodist_prompt_comes_before_the_timer(monkeypatch):
+    # The start waits for the Clock.app plist. A prompt after it comes
+    # when the user has already moved on.
+    import punch
+    from datetime import datetime
+    calls = []
+    answers = iter(["Go", "25", datetime.now()])
+    monkeypatch.setattr(punch, "open_state", lambda: None)
+    monkeypatch.setattr(punch, "ask_topic", lambda *a: next(answers))
+    monkeypatch.setattr(punch, "ask_minutes", lambda *a: next(answers))
+    monkeypatch.setattr(punch, "ask_start", lambda *a: next(answers))
+    monkeypatch.setattr(punch, "offer_moodist", lambda: calls.append("moodist"))
+    monkeypatch.setattr(punch, "start_live", lambda *a: calls.append("timer"))
+    punch.start_interactive()
+    assert calls == ["moodist", "timer"]

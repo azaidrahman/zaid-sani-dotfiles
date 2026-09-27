@@ -545,8 +545,10 @@ def start_interactive() -> None:
     m = int(minutes)
     kind, _ = punchtime.classify(start_at, m, datetime.now())
     if kind == "live":
-        start_live(topic, m, start_at)
+        # Ask before the timer starts. The start waits for the Clock.app
+        # plist, so a prompt after it comes too late.
         offer_moodist()
+        start_live(topic, m, start_at)
     else:
         log_retro(topic, m, start_at)
 
@@ -554,8 +556,8 @@ def start_interactive() -> None:
 def offer_moodist() -> None:
     """Ask to open Moodist, and open it on the return key.
 
-    Escape, a timeout, and Skip leave it closed. The session is already
-    running, so a failure here is logged and passed over.
+    Escape, a timeout, and Skip leave it closed. The page is only a
+    help, so a failure here is logged and the session starts anyway.
     """
     if choose("Play ambient sound?", [MOODIST_OPEN, "Skip"]) != MOODIST_OPEN:
         return
