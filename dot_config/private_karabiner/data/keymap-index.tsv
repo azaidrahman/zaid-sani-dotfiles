@@ -111,6 +111,7 @@ hyper	⇪	r	alfred bitbucket repos	!CTOSr
 hyper	⇪	i	mouseless overlay	!CTOSi
 hyper	⇪	1	alfred todoist	!CTOS1
 hyper	⇪	2	alfred jira	!CTOS2
+hyper	⇪	⇧2	alfred bitbucket prs	!CTOSp
 hyper	⇪	0	ice bar	!QWER0
 hyper	⇪	q	mouseless freekey (hold)	!QWERq
 hyper	⇪	⌘spacebar	emoji	!TCspacebar

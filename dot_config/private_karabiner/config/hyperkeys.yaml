@@ -106,6 +106,7 @@ hyper:
 
   "2":
     -: "!CTOS2" # alfred jira
+    shift: "!CTOSp" # alfred bitbucket prs
 
   "0":
     -: "!QWER0" # ice bar
