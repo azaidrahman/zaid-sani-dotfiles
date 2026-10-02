@@ -2,7 +2,7 @@
 #
 #   ,gt ctx <frag>              Show the kube context that <frag> selects.
 #   ,gt k <frag> <args...>      Run kubectl on that context.
-#   ,gt ar|argocd <args...>     Run `argocd --core` on the ArgoCD cluster.
+#   ,gt ar|argocd <args...>     Run `argocd --core`. `,gt ar get <app>` = app get.
 #   ,gt apps [filter]           List ArgoCD apps: sync, health, revision.
 #   ,gt refresh <app>           Tell ArgoCD to read git again for <app>.
 #   ,gt reset                   Delete the cache (ArgoCD context, kubeconfig).
@@ -85,10 +85,19 @@ _gt_k() {
   command kubectl --context "$ctx" "$@"
 }
 
+# A word that is not an argocd command is an app command:
+# `,gt ar get emp-stg` runs `argocd app get emp-stg`.
+# ARGOCD_OPTS gives --core. A --core before the command makes argocd
+# look for a plugin.
 _gt_argocd() {
   local kc
   kc="$(_gt_argocd_kubeconfig)" || return
-  KUBECONFIG="$kc" command argocd --core "$@"
+  local -a top=( account admin app appset cert cluster completion configure
+                 context gpg help login logout proj relogin repo repocreds version )
+  if [[ -n "$1" && "$1" != -* ]] && (( ! ${top[(Ie)$1]} )); then
+    set -- app "$@"
+  fi
+  KUBECONFIG="$kc" ARGOCD_OPTS="--core${ARGOCD_OPTS:+ $ARGOCD_OPTS}" command argocd "$@"
 }
 
 _gt_apps() {
