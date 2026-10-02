@@ -1,0 +1,134 @@
+# ,gt - Run cluster tools against the GKE clusters of the kubeconfig.
+#
+#   ,gt ctx <frag>              Show the kube context that <frag> selects.
+#   ,gt k <frag> <args...>      Run kubectl on that context.
+#   ,gt ar|argocd <args...>     Run `argocd --core` on the ArgoCD cluster.
+#   ,gt apps [filter]           List ArgoCD apps: sync, health, revision.
+#   ,gt refresh <app>           Tell ArgoCD to read git again for <app>.
+#   ,gt reset                   Delete the cache (ArgoCD context, kubeconfig).
+#
+# <frag> is a part of a context name, for example `gke-stg`. It must select
+# one context. A Connect Gateway context wins over a gke_ context.
+#
+# The ArgoCD cluster is found one time: the first context that serves
+# the argocd-cm ConfigMap in the argocd namespace. To skip the search, set
+# GT_ARGOCD_CONTEXT. No company values are in this file, because the
+# repository is public.
+#
+# To add a command, add a `_gt_<name>` function and a line above. To add a
+# short name, add it to `short` below.
+
+emulate -L zsh
+setopt local_options pipe_fail
+
+local cache="${XDG_CACHE_HOME:-$HOME/.cache}/gt"
+
+_gt_resolve() {
+  local frag="$1"
+  [[ -n "$frag" ]] || { print -u2 ",gt: give a context fragment"; return 2 }
+  local -a all hits
+  all=( ${(f)"$(command kubectl config get-contexts -o name)"} )
+  if (( ${all[(Ie)$frag]} )); then print -r -- "$frag"; return; fi
+  hits=( ${(M)all:#*${frag}*} )
+  if (( $#hits > 1 )); then
+    local -a cg=( ${(M)hits:#connectgateway_*} )
+    (( $#cg )) && hits=( $cg )
+  fi
+  case $#hits in
+    0) print -u2 ",gt: no context matches '$frag'"; return 1 ;;
+    1) print -r -- "$hits[1]" ;;
+    *) print -u2 ",gt: '$frag' matches more than one context:"
+       print -u2 -l -- "  "${^hits}
+       return 1 ;;
+  esac
+}
+
+_gt_argocd_context() {
+  if [[ -n "$GT_ARGOCD_CONTEXT" ]]; then print -r -- "$GT_ARGOCD_CONTEXT"; return; fi
+  if [[ -s "$cache/argocd-context" ]]; then print -r -- "$(<"$cache/argocd-context")"; return; fi
+  local c
+  for c in ${(M)${(f)"$(command kubectl config get-contexts -o name)"}:#connectgateway_*}; do
+    print -u2 ",gt: look for ArgoCD on $c"
+    if command kubectl --context "$c" --request-timeout=8s -n argocd \
+        get configmap argocd-cm -o name >/dev/null 2>&1; then
+      mkdir -p "$cache" && print -r -- "$c" >| "$cache/argocd-context"
+      print -r -- "$c"
+      return
+    fi
+  done
+  print -u2 ",gt: found no ArgoCD cluster; set GT_ARGOCD_CONTEXT"
+  return 1
+}
+
+# `argocd --core` reads the current context and its namespace. A private
+# kubeconfig gives it both, and the global kubeconfig stays as it is.
+_gt_argocd_kubeconfig() {
+  local ctx kc
+  ctx="$(_gt_argocd_context)" || return
+  kc="$cache/argocd-$ctx.kubeconfig"
+  if [[ ! -s "$kc" ]]; then
+    mkdir -p "$cache"
+    ( umask 077
+      command kubectl config view --minify --flatten --context="$ctx" >| "$kc" &&
+        KUBECONFIG="$kc" command kubectl config set-context --current --namespace=argocd >/dev/null
+    ) || { print -u2 ",gt: cannot write $kc"; return 1 }
+  fi
+  print -r -- "$kc"
+}
+
+_gt_ctx() { _gt_resolve "$1" }
+
+_gt_k() {
+  local ctx
+  ctx="$(_gt_resolve "$1")" || return
+  shift
+  command kubectl --context "$ctx" "$@"
+}
+
+_gt_argocd() {
+  local kc
+  kc="$(_gt_argocd_kubeconfig)" || return
+  KUBECONFIG="$kc" command argocd --core "$@"
+}
+
+_gt_apps() {
+  local ctx
+  ctx="$(_gt_argocd_context)" || return
+  # A multi-source app keeps its commits in revisions[], not in revision.
+  command kubectl --context "$ctx" -n argocd get applications.argoproj.io -o json |
+    command jq -r --arg f "${1:-}" '
+      ["NAME", "SYNC", "HEALTH", "REVISION"],
+      (.items[] | select(.metadata.name | contains($f)) | [
+        .metadata.name,
+        (.status.sync.status // "-"),
+        (.status.health.status // "-"),
+        ((.status.sync.revision // .status.sync.revisions[0]? // "-") | .[0:8])
+      ]) | @tsv' |
+    command column -t -s $'\t'
+}
+
+_gt_refresh() {
+  [[ -n "$1" ]] || { print -u2 ",gt refresh: give an app name"; return 2 }
+  local ctx
+  ctx="$(_gt_argocd_context)" || return
+  command kubectl --context "$ctx" -n argocd annotate applications.argoproj.io "$1" \
+    argocd.argoproj.io/refresh=normal --overwrite
+}
+
+_gt_reset() { rm -rf -- "$cache" && print ",gt: cache deleted" }
+
+_gt_help() { sed -n '3,9s/^#   //p' "${functions_source[,gt]:-$HOME/.config/zsh/functions/,gt}" }
+
+# Short names for commands.
+local -A short=( ar argocd )
+
+local cmd="${1:-help}"
+cmd="${short[$cmd]:-$cmd}"
+(( $# )) && shift
+if (( ${+functions[_gt_$cmd]} )); then
+  _gt_$cmd "$@"
+else
+  print -u2 ",gt: unknown command '$cmd'"
+  _gt_help >&2
+  return 2
+fi
