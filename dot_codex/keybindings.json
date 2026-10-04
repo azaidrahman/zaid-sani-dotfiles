@@ -1,0 +1,7 @@
+[
+    {
+        "command": "openFolder",
+        "key": null
+    },
+    { "command": "openAvatarOverlay", "key": null }
+]
