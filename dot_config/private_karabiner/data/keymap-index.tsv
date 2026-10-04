@@ -58,6 +58,7 @@ l1	⇧⌥R	s	cleanshotx	CleanShot X capture
 l1	⇧⌥R	l	todoist	Todoist quick add
 l1	⇧⌥R	c	claude	Claude quick
 l1	⇧⌥R	g	gemini	Gemini quick
+l1	⇧⌥R	x	codex	Codex quick
 l1	⇧⌥R	w	punch	Start punch session (KM macro)
 l1	⇧⌥R	1	pin-screen	F14 (via KM/Alfred)
 l1	⇧⌥R	2	capture-text	ctrl+F14 (via KM/Alfred)
@@ -71,6 +72,7 @@ l2	⌃⌥R	s	cleanshotx	CleanShot X (alt)
 l2	⌃⌥R	l	todoist	Todoist (alt)
 l2	⌃⌥R	c	claude	open:Claude
 l2	⌃⌥R	g	gemini	open:Gemini
+l2	⌃⌥R	x	codex	open:Codex
 l3	⌘⌥R	[	b prev-space	Browser previous space
 l3	⌘⌥R	]	b next-space	Browser next space
 l3	⌘⌥R	-	b prev-tab	cmd+opt+shift+F13 (via KM/Alfred)

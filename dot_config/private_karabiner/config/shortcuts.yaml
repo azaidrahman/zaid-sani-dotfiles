@@ -17,6 +17,7 @@ l1:
   - l | todoist | Todoist quick add
   - c | claude | Claude quick
   - g | gemini | Gemini quick
+  - x | codex | Codex quick
   - w | punch | Start punch session (KM macro)
   - 1 | pin-screen
   - 2 | capture-text
@@ -32,6 +33,7 @@ l2:
   - l | todoist | Todoist (alt)
   - c | claude | open:Claude
   - g | gemini | open:Gemini
+  - x | codex | open:Codex
 
 l3:
   - [ | b prev-space | Browser previous space

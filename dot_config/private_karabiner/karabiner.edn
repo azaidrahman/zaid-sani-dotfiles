@@ -50,11 +50,11 @@
        :clear-ws-help {:noti {:id "org.pqrs.notificaion_message_workspace"
                               :text ""}}
        :show-l1-help {:noti {:id "org.pqrs.notificaion_message_layer1"
-                             :text "w:punch, o:1p, p:dot, s:cleanshotx, g:gemini, l:todoist, c:claude, ,:soundsource, 1:pin-screen, 2:capture-text, 3:full-screen, 4:capture-area, 5:record"}}
+                             :text "w:punch, o:1p, p:dot, s:cleanshotx, g:gemini, l:todoist, x:codex, c:claude, ,:soundsource, 1:pin-screen, 2:capture-text, 3:full-screen, 4:capture-area, 5:record"}}
        :clear-l1-help {:noti {:id "org.pqrs.notificaion_message_layer1"
                               :text ""}}
        :show-l2-help {:noti {:id "org.pqrs.notificaion_message_layer2"
-                             :text "o:1p, p:dot, s:cleanshotx, g:gemini, l:todoist, c:claude"}}
+                             :text "o:1p, p:dot, s:cleanshotx, g:gemini, l:todoist, x:codex, c:claude"}}
        :clear-l2-help {:noti {:id "org.pqrs.notificaion_message_layer2"
                               :text ""}}
        :show-l3-help {:noti {:id "org.pqrs.notificaion_message_layer3"
@@ -102,6 +102,7 @@
 ;; BEGIN SHORTCUT-DIRECT (auto-generated from config/shortcuts.yaml)
     [:!T#Oc    [:open "Claude"]    :shortcut-l2]   ;; l2+c → open:Claude
     [:!T#Og    [:open "Gemini"]    :shortcut-l2]   ;; l2+g → open:Gemini
+    [:!T#Ox    [:open "Codex"]     :shortcut-l2]   ;; l2+x → open:Codex
 ;; END SHORTCUT-DIRECT
 
 ;; BEGIN APP-RULES (auto-generated from config/app.yaml)
