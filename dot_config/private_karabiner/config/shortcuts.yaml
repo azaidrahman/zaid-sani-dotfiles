@@ -33,7 +33,7 @@ l2:
   - l | todoist | Todoist (alt)
   - c | claude | open:Claude
   - g | gemini | open:Gemini
-  - x | codex | open:Codex
+  - x | codex | open-id:com.openai.codex
 
 l3:
   - [ | b prev-space | Browser previous space

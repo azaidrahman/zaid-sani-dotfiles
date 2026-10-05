@@ -28,6 +28,7 @@
                               "^com\\.utmapp\\.UTM$"]}
 
  :templates {:open          "open -a '%s'",
+             :open-id       "open -b '%s'"
              :open-vivaldi  "open -n -a Vivaldi --args --profile-directory='%s'"
              :aero          "/opt/homebrew/bin/aerospace %s"
              :show-time     "~/.config/karabiner/scripts/show-time.sh"
@@ -102,7 +103,7 @@
 ;; BEGIN SHORTCUT-DIRECT (auto-generated from config/shortcuts.yaml)
     [:!T#Oc    [:open "Claude"]    :shortcut-l2]   ;; l2+c → open:Claude
     [:!T#Og    [:open "Gemini"]    :shortcut-l2]   ;; l2+g → open:Gemini
-    [:!T#Ox    [:open "Codex"]     :shortcut-l2]   ;; l2+x → open:Codex
+    [:!T#Ox    [:open-id "com.openai.codex"]:shortcut-l2]   ;; l2+x → open-id:com.openai.codex
 ;; END SHORTCUT-DIRECT
 
 ;; BEGIN APP-RULES (auto-generated from config/app.yaml)

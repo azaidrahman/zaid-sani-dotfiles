@@ -27,7 +27,8 @@ Flags:
   -action   target, by layer:
               app        app name (open -a), or a !gokuCombo
               workspace  aerospace command (e.g. "workspace 1")
-              l1/l2/l3   omit → auto-assign an F-key combo; or open:App; or !gokuCombo
+              l1/l2/l3   omit → auto-assign an F-key combo; or open:App;
+                         or open-id:bundle.id; or !gokuCombo
               hyper      goku key code, or comma-separated sequence (required)
   -mod      hyper only: - shift cmd opt ctrl opt+cmd ctrl+shift   (default "-")
   -shift    workspace only: write the opt+shift variant
@@ -154,9 +155,11 @@ func validateCLI(o cliOpts) (layer Layer, section, extra string, err error) {
 			return
 		}
 	}
-	if strings.HasPrefix(extra, "open:") && strings.TrimSpace(extra[len("open:"):]) == "" {
-		err = fmt.Errorf("open: target is empty")
-		return
+	for _, prefix := range []string{"open:", "open-id:"} {
+		if strings.HasPrefix(extra, prefix) && strings.TrimSpace(extra[len(prefix):]) == "" {
+			err = fmt.Errorf("%s target is empty", prefix)
+			return
+		}
 	}
 	return
 }

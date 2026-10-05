@@ -17,6 +17,7 @@ func TestValidateCLIErrors(t *testing.T) {
 		{"uppercase key on l1", cliOpts{layer: "l1", key: "G", label: "x"}},
 		{"bad combo action", cliOpts{layer: "l1", key: "g", label: "x", action: "!Zfoo"}},
 		{"empty open target", cliOpts{layer: "l1", key: "g", label: "x", action: "open:"}},
+		{"empty open-id target", cliOpts{layer: "l1", key: "g", label: "x", action: "open-id:"}},
 		{"pipe in action", cliOpts{layer: "app", key: "g", label: "x", action: "a|b"}},
 		{"hyper needs action", cliOpts{layer: "hyper", key: "m", label: "x", mod: "cmd"}},
 		{"hyper bad mod", cliOpts{layer: "hyper", key: "m", label: "x", action: "left_arrow", mod: "hyper"}},

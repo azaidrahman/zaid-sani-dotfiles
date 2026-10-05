@@ -106,6 +106,24 @@ def generate_app_rules(entries, existing_block):
 
 # -- Shortcut layer rules -----------------------------------------------------
 
+def direct_to(action):
+    """Goku `to` for a direct shortcut action, or None for an F-key pool entry.
+
+    open:App          -> open -a (by app name)
+    open-id:bundle.id -> open -b (by bundle id; works when the app name differs per Mac)
+    !gokuCombo        -> the combo itself
+    """
+    if not action:
+        return None
+    if action.startswith('open:'):
+        return f'[:open "{action[len("open:"):]}"]'
+    if action.startswith('open-id:'):
+        return f'[:open-id "{action[len("open-id:"):]}"]'
+    if action.startswith('!'):
+        return f':{action}'
+    return None
+
+
 def generate_layer(pool_map, layer_name, entries):
     """Generate a complete Goku rule block for a shortcut layer."""
     from_mod, condition, des = LAYERS[layer_name]
@@ -118,12 +136,8 @@ def generate_layer(pool_map, layer_name, entries):
         key, label, action = parse_entry(entry)
         gk = GOKU_NAMES.get(key, key)
         from_str = f":{from_mod}{gk}"
-        if action and action.startswith('open:'):
-            app = action[len('open:'):]
-            goku_to = f'[:open "{app}"]'
-            direct_rules.append((key, label, from_str, goku_to))
-        elif action and action.startswith('!'):
-            goku_to = f':{action}'
+        goku_to = direct_to(action)
+        if goku_to:
             direct_rules.append((key, label, from_str, goku_to))
         else:
             pool_entries.append((key, label))
@@ -229,12 +243,8 @@ def generate_shortcut_direct_rules(shortcut_sections):
                 continue
             gk = GOKU_NAMES.get(key, key)
             from_str = f":{from_mod}{gk}"
-            if action.startswith('open:'):
-                app = action[len('open:'):]
-                to_str = f'[:open "{app}"]'
-            elif action.startswith('!'):
-                to_str = f':{action}'
-            else:
+            to_str = direct_to(action)
+            if not to_str:
                 continue
             w = 28 if len(gk) > 1 else 10
             lines.append(f'    [{from_str:<{w}s}{to_str:<20s}:{condition}]   ;; {ln}+{key} → {action}')

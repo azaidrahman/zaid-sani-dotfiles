@@ -131,7 +131,9 @@ right YAML, runs `./build.sh`, reports the assigned key/F-key combo, and offers 
 `chezmoi apply && goku`.
 
 For shortcut layers (l1/l2/l3) you can pick an auto-assigned **F-key combo** (to bind
-in Alfred/Keyboard Maestro) or a **direct action** (`open:App` or a raw goku combo).
+in Alfred/Keyboard Maestro) or a **direct action** (`open:App`, `open-id:bundle.id`, or a raw goku combo).
+Use `open-id:` when the app has a different name on each Mac. For example,
+`open-id:com.openai.codex` opens Codex, also where the app is named ChatGPT.
 
 ### One-liner (non-interactive)
 
@@ -150,7 +152,7 @@ add-keymap -layer l3 -key '[' -label prev -action '!Sf13' -overwrite -deploy
 
 `-action` semantics per layer: **app** = app name or `!gokuCombo`; **workspace** =
 aerospace command (`-shift` writes the opt+shift variant); **l1/l2/l3** = omit for an
-F-key pool slot, or `open:App` / `!gokuCombo` for a direct action; **hyper** = a goku
+F-key pool slot, or `open:App` / `open-id:bundle.id` / `!gokuCombo` for a direct action; **hyper** = a goku
 key code or comma-separated sequence, placed under `-mod` (default `-`).
 
 **Rebuild the binary after changing Go source** (`src/add-keymap/`):

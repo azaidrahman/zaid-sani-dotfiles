@@ -72,7 +72,7 @@ l2	⌃⌥R	s	cleanshotx	CleanShot X (alt)
 l2	⌃⌥R	l	todoist	Todoist (alt)
 l2	⌃⌥R	c	claude	open:Claude
 l2	⌃⌥R	g	gemini	open:Gemini
-l2	⌃⌥R	x	codex	open:Codex
+l2	⌃⌥R	x	codex	open-id:com.openai.codex
 l3	⌘⌥R	[	b prev-space	Browser previous space
 l3	⌘⌥R	]	b next-space	Browser next space
 l3	⌘⌥R	-	b prev-tab	cmd+opt+shift+F13 (via KM/Alfred)

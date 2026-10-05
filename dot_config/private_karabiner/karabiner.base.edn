@@ -28,6 +28,7 @@
                               "^com\\.utmapp\\.UTM$"]}
 
  :templates {:open          "open -a '%s'",
+             :open-id       "open -b '%s'"
              :open-vivaldi  "open -n -a Vivaldi --args --profile-directory='%s'"
              :aero          "/opt/homebrew/bin/aerospace %s"
              :show-time     "~/.config/karabiner/scripts/show-time.sh"
