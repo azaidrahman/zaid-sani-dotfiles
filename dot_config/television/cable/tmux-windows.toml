@@ -15,25 +15,25 @@ command = [
   "~/.tmux/scripts/tv-tmux-windows.sh other",
 ]
 watch = 0.5
-output = "{strip_ansi|split:\t:1}"
+output = "{strip_ansi|split:│:0|split:●:1|trim}:{strip_ansi|split:│:1|trim}"
 
 [keybindings]
 enter = "actions:select"
 
 [preview]
 # Colored legend pinned at the top of the preview, then the live pane capture.
-command = "printf '\\033[1;34m●\\033[0m busy   \\033[1;31m●\\033[0m waiting   \\033[1;32m●\\033[0m idle\\n\\n'; tmux capture-pane -t '{strip_ansi|split:\t:1}' -p 2>/dev/null || echo 'No preview available'"
+command = "printf '\\033[1;38;2;96;165;250m●\\033[0m busy   \\033[1;38;2;255;85;85m●\\033[0m waiting   \\033[1;38;2;74;222;128m●\\033[0m idle\\n\\n'; tmux capture-pane -t '{strip_ansi|split:│:0|split:●:1|trim}:{strip_ansi|split:│:1|trim}' -p 2>/dev/null || echo 'No preview available'"
 
 [ui.preview_panel]
 # Header shows just the window name (3rd column), no dot or session:idx.
-header = "{strip_ansi|split:\t:2}"
+header = "{strip_ansi|split:│:2|trim}"
 
 [actions.select]
 description = "Switch to the selected window"
-command = "tmux switch-client -t '{strip_ansi|split:\t:1}'"
+command = "tmux switch-client -t '{strip_ansi|split:│:0|split:●:1|trim}:{strip_ansi|split:│:1|trim}'"
 mode = "execute"
 
 [actions.kill]
 description = "Kill the selected window"
-command = "tmux kill-window -t '{strip_ansi|split:\t:1}'"
+command = "tmux kill-window -t '{strip_ansi|split:│:0|split:●:1|trim}:{strip_ansi|split:│:1|trim}'"
 mode = "fork"
