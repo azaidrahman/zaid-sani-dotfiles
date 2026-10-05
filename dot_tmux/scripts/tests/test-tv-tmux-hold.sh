@@ -44,8 +44,8 @@ chmod +x "$shim_dir/tmux"
 
 # An empty HOME gives the picker no alert log and no Claude state, so every
 # row comes out undecorated and the test reads only the filtering.
-# TMPDIR keeps the cache of the last output out of the real one.
-run() { PATH="$shim_dir:$PATH" HOME="$alerts_home" TMPDIR="$cache_tmp" CLAUDE_SESSIONS_DIR="$sessions_dir" bash "$@"; }
+# XDG_CACHE_HOME keeps the cache of the last output out of the real one.
+run() { PATH="$shim_dir:$PATH" HOME="$alerts_home" XDG_CACHE_HOME="$cache_tmp" CLAUDE_SESSIONS_DIR="$sessions_dir" bash "$@"; }
 
 # Rows look like `●  <session> │ <idx> │ <window> │ ...`. This rebuilds the
 # `session:index` target the same way as the channel, minus the colour codes.
@@ -143,6 +143,12 @@ jq -c '.status = "waiting" | .waitingFor = "input needed"' "$sessions_dir/${pane
 check "a waiting pane wins and the row says why it waits" \
     "2× ◆ input needed · older pane" \
     "$(strip active | awk -F' │ ' '$1 ~ /delta/ { print $4 }')"
+
+# The cache holds transcript text, so only the owner can read it.
+check "the cache directory is private" \
+    "700" "$(stat -f '%Lp' "$cache_tmp/tv-tmux-windows")"
+check "each cache file is private" \
+    "600" "$(stat -f '%Lp' "$cache_tmp/tv-tmux-windows"/* | sort -u | tr '\n' ' ' | sed 's/ *$//')"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

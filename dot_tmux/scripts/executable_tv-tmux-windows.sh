@@ -22,7 +22,7 @@
 #   active  (default)  windows of a normal session that is not held
 #   hold               windows whose session name starts with `[HOLD] `
 #   other              windows of a utility session (mobile, quickterminal)
-# The channel declares all three as sources, so ctrl-s switches between them.
+# The channel declares all three as sources, so ctrl-f switches between them.
 set -u
 
 MODE="${1:-active}"
@@ -33,7 +33,9 @@ UTIL_SESSIONS="mobile quickterminal"
 ALERTS="$HOME/.tmux/alerts"
 SESSIONS_DIR="${CLAUDE_SESSIONS_DIR:-$HOME/.claude/sessions}"
 PROJECTS_DIR="${CLAUDE_PROJECTS_DIR:-$HOME/.claude/projects}"
-CACHE_DIR="${TMPDIR:-/tmp}/tv-tmux-windows"
+# The cache holds text from the transcripts, so it must be private. It is
+# under the home directory, not in a shared temporary directory.
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tv-tmux-windows"
 
 # --- Build window_id → claude_status map from live JSON session files --------
 # Walks each session pid up the process tree until it hits a known tmux pane,
@@ -128,14 +130,24 @@ if [ "${#transcripts[@]}" -gt 0 ]; then
     while read -r s; do stamps+=("$s"); done < <(
         stat -f '%m.%z' "${transcripts[@]}" 2>/dev/null || stat -c '%Y.%s' "${transcripts[@]}" 2>/dev/null
     )
-    mkdir -p "$CACHE_DIR"
+    # Use the cache only if this user owns it and it is not a symlink.
+    # Without a safe cache, the script reads each transcript every time.
+    use_cache=0
+    if (umask 077; mkdir -p "$CACHE_DIR") 2>/dev/null \
+        && [ -O "$CACHE_DIR" ] && [ ! -L "$CACHE_DIR" ] && chmod 700 "$CACHE_DIR"; then
+        use_cache=1
+    fi
     for i in "${!transcripts[@]}"; do
-        cache="$CACHE_DIR/${sids[$i]}"
+        cache="$CACHE_DIR/${sids[$i]//[^A-Za-z0-9-]/_}"
         cached_stamp=""; out=""
-        [ -f "$cache" ] && { read -r cached_stamp; read -r out; } < "$cache"
-        if [ "$cached_stamp" != "${stamps[$i]:-}" ]; then
+        [ "$use_cache" -eq 1 ] && [ -f "$cache" ] && { read -r cached_stamp; read -r out; } < "$cache"
+        if [ "$use_cache" -eq 0 ] || [ "$cached_stamp" != "${stamps[$i]:-}" ]; then
             out=$(tail -n 300 "${transcripts[$i]}" | jq -Rr "$LAST_OUTPUT_JQ" 2>/dev/null | tail -n 1)
-            printf '%s\n%s\n' "${stamps[$i]:-}" "$out" > "$cache"
+            # Write a new file and move it into place, so a symlink at the
+            # cache path is replaced and never followed. mktemp gives mode 0600.
+            if [ "$use_cache" -eq 1 ] && tmp=$(mktemp "$CACHE_DIR/.tmp.XXXXXX" 2>/dev/null); then
+                printf '%s\n%s\n' "${stamps[$i]:-}" "$out" > "$tmp" && mv -f "$tmp" "$cache"
+            fi
         fi
         [ -n "$out" ] && printf '%s\t%s\n' "${wids[$i]}" "$out" >> "$preview_file"
     done
