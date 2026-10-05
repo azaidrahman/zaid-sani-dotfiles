@@ -14,7 +14,9 @@ command = [
   "~/.tmux/scripts/tv-tmux-windows.sh hold",
   "~/.tmux/scripts/tv-tmux-windows.sh other",
 ]
-watch = 0.5
+# tv runs the source again at this interval while the picker is open. Each
+# reload can move the list while you type, so do not reload more often.
+watch = 1.0
 output = "{strip_ansi|split:│:0|split:●:1|trim}:{strip_ansi|split:│:1|trim}"
 
 [keybindings]

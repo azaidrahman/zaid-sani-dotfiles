@@ -16,7 +16,7 @@
 #
 # The last output is the most recent text or tool call of the assistant in the
 # transcript of the session. It is cached by the mtime and size of the
-# transcript, because tv runs this script every 0.5 seconds.
+# transcript, because tv runs this script every second.
 #
 # The first argument selects which group of windows to emit:
 #   active  (default)  windows of a normal session that is not held
@@ -42,57 +42,70 @@ CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tv-tmux-windows"
 # then records the window. Most-urgent status wins per window. If two panes
 # have the same status, the one whose status changed last wins, so the last
 # output shows the newest activity.
-
-panes=$(tmux list-panes -a -F '#{pane_pid}	#{window_id}' 2>/dev/null)
-ps_tree=$(ps -eo pid=,ppid= 2>/dev/null)
-
-# state_rank: higher number = more urgent (determines winner per window)
-state_rank() { case "$1" in waiting) echo 3;; busy) echo 2;; idle) echo 1;; *) echo 0;; esac; }
+#
+# tv runs this script every second, and a process start costs about 5 ms. So
+# one jq call reads all session files, and one awk call does the rest. The
+# script starts the same number of processes for 1 session or for 200.
 
 state_file=$(mktemp)
 preview_file=$(mktemp)
 # One line per Claude pane, with its window ID. Used to count the panes.
 pane_file=$(mktemp)
-trap 'rm -f "$state_file" "${state_file}.tmp" "$preview_file" "$pane_file"' EXIT
+panes_file=$(mktemp)
+ps_file=$(mktemp)
+sessions_file=$(mktemp)
+trap 'rm -f "$state_file" "$preview_file" "$pane_file" "$panes_file" "$ps_file" "$sessions_file"' EXIT
 
-for f in "$SESSIONS_DIR"/*.json; do
-    [ -e "$f" ] || continue
-    # waitingFor says why a `waiting` session needs you, for example
-    # "input needed" or the name of a permission dialog.
-    IFS=$'\t' read -r pid status kind sid cwd changed waiting_for < <(
-        jq -r '[(.pid|tostring), (.status//""), (.kind//""), (.sessionId//""), (.cwd//""),
-                ((.statusUpdatedAt // .updatedAt // 0)|tostring),
-                ((.waitingFor // "") | gsub("[\\t│]"; " "))] | join("\t")' "$f" 2>/dev/null
-    ) || continue
-    [ "$kind" = "interactive" ] || continue
-    kill -0 "$pid" 2>/dev/null || continue
+tmux list-panes -a -F '#{pane_pid}	#{window_id}' > "$panes_file" 2>/dev/null
+ps -eo pid=,ppid= > "$ps_file" 2>/dev/null
 
-    r=$(state_rank "$status")
-    [ "$r" -eq 0 ] && continue
+# waitingFor says why a `waiting` session needs you, for example
+# "input needed" or the name of a permission dialog.
+SESSION_JQ='select(.kind == "interactive")
+    | [(.pid|tostring), (.status//""), (.sessionId//""), (.cwd//""),
+       ((.statusUpdatedAt // .updatedAt // 0)|tostring),
+       ((.waitingFor // "") | gsub("[\\t│]"; " "))] | join("\t")'
+session_files=("$SESSIONS_DIR"/*.json)
+if [ -e "${session_files[0]}" ]; then
+    # A parse error stops jq, and the files after the bad one are lost. Claude
+    # Code can be in the middle of a write, so awk puts each file on one line,
+    # and `fromjson?` skips only the line that does not parse. A newline in
+    # JSON is only whitespace, so a join with a space keeps the JSON valid.
+    awk 'FNR == 1 && NR > 1 { print "" } { printf "%s ", $0 } END { if (NR) print "" }' \
+        "${session_files[@]}" 2>/dev/null \
+        | jq -rR "fromjson? | $SESSION_JQ" > "$sessions_file" 2>/dev/null
+fi
 
-    # Walk process ancestry until we land on a tmux pane
-    cur="$pid"; depth=0
-    while [ -n "$cur" ] && [ "$cur" -gt 1 ] 2>/dev/null && [ "$depth" -lt 30 ]; do
-        wid=$(awk -F'\t' -v p="$cur" '$1==p { print $2; exit }' <<< "$panes")
-        if [ -n "$wid" ]; then
-            printf '%s\n' "$wid" >> "$pane_file"
-            IFS=$'\t' read -r existing_rank existing_changed < <(
-                awk -F'\t' -v w="$wid" '$1==w { print $3 "\t" $6; exit }' "$state_file"
-            )
-            if [ -z "${existing_rank:-}" ] || [ "$r" -gt "$existing_rank" ] \
-                || { [ "$r" -eq "$existing_rank" ] && [ "${changed:-0}" -gt "${existing_changed:-0}" ]; }; then
-                # grep exits 1 when no other line remains, so do not chain mv on it.
-                grep -v "^${wid}	" "$state_file" > "${state_file}.tmp" 2>/dev/null
-                mv "${state_file}.tmp" "$state_file"
-                printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-                    "$wid" "$status" "$r" "$sid" "$cwd" "$changed" "$waiting_for" >> "$state_file"
-            fi
-            break
-        fi
-        cur=$(awk -v p="$cur" '$1==p { print $2; exit }' <<< "$ps_tree")
-        depth=$((depth + 1))
-    done
-done
+awk -v PANES="$panes_file" -v PS="$ps_file" -v SF="$state_file" -v CF="$pane_file" '
+    # Higher number = more urgent. The most urgent session wins the window.
+    function rank(s) { return s == "waiting" ? 3 : s == "busy" ? 2 : s == "idle" ? 1 : 0 }
+    BEGIN {
+        FS = "\t"
+        while ((getline l < PANES) > 0) { split(l, p, "\t"); panewin[p[1]] = p[2] }
+        # ps pads the pid on the left, so split on blanks.
+        while ((getline l < PS) > 0) { split(l, p, " "); parent[p[1]] = p[2] }
+    }
+    {
+        pid = $1; r = rank($2)
+        # ps lists each live process, so a pid that is not in it is dead.
+        if (r == 0 || !(pid in parent)) next
+        # Walk the process ancestry until we land on a tmux pane.
+        cur = pid
+        for (depth = 0; cur > 1 && depth < 30; depth++) {
+            if (cur in panewin) {
+                wid = panewin[cur]
+                print wid > CF
+                if (!(wid in best) || r > best[wid] || (r == best[wid] && $5 + 0 > bchg[wid] + 0)) {
+                    best[wid] = r; bchg[wid] = $5 + 0
+                    row[wid] = wid "\t" $2 "\t" r "\t" $3 "\t" $4 "\t" $5 "\t" $6
+                }
+                break
+            }
+            cur = parent[cur]
+        }
+    }
+    END { for (w in row) print row[w] > SF }
+' "$sessions_file"
 
 # --- Last output of the Claude session that won each window -----------------
 
