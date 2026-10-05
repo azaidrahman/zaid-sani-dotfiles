@@ -1,7 +1,14 @@
 [
-    {
-        "command": "openFolder",
-        "key": null
-    },
-    { "command": "openAvatarOverlay", "key": null }
+  {
+    "command": "hotkeyWindow",
+    "key": "Ctrl+Command+Alt+F17"
+  },
+  {
+    "command": "openAvatarOverlay",
+    "key": null
+  },
+  {
+    "command": "openFolder",
+    "key": null
+  }
 ]
