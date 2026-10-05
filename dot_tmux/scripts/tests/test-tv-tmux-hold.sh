@@ -150,5 +150,30 @@ check "the cache directory is private" \
 check "each cache file is private" \
     "600" "$(stat -f '%Lp' "$cache_tmp/tv-tmux-windows"/* | sort -u | tr '\n' ' ' | sed 's/ *$//')"
 
+# --- order by state ---------------------------------------------------------
+# Waiting windows come first, then idle, then busy, then windows without
+# Claude. Make the states in the reverse order, so the input order of tmux
+# does not give the expected result by chance.
+for pair in echo:busy foxtrot:idle golf:waiting; do
+    sess=${pair%%:*} status=${pair#*:}
+    tm new-session -d -s "$sess" 'sleep 300'
+    pid=$(tm list-panes -t "$sess" -F '#{pane_pid}')
+    printf '{"pid":%s,"sessionId":"%s-%s","cwd":"/tmp/delta","kind":"interactive","status":"%s","statusUpdatedAt":3000}\n' \
+        "$pid" "$sess" "$$" "$status" > "$sessions_dir/$pid.json"
+done
+# Print the state of each row from the color of its dot, and join a run of the
+# same state into one word.
+row_states() {
+    run "$PICKER" active | awk '
+        /^\033\[1;38;2;255;85;85m●/  { print "waiting"; next }
+        /^\033\[1;38;2;74;222;128m●/ { print "idle"; next }
+        /^\033\[1;38;2;96;165;250m●/ { print "busy"; next }
+        { print "none" }' | uniq | tr '\n' ' ' | sed 's/ *$//'
+}
+check "rows are in the order waiting, idle, busy, then no Claude" \
+    "waiting idle busy none" "$(row_states)"
+check "each waiting window is in the first group" \
+    "delta golf" "$(strip active | sed -n '1,2p' | awk -F' │ ' '{ s = $1; sub(/^● +/, "", s); sub(/ +$/, "", s); print s }' | sort | tr '\n' ' ' | sed 's/ *$//')"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

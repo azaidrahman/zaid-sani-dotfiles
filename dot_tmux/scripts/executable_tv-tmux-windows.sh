@@ -263,6 +263,12 @@ tmux list-windows -a -F '#{window_stack_index}	#{session_last_attached}	#{sessio
 
         # The dot is always printed: the channel splits the first column on it.
         nrows++
+        # The list shows the windows that need you first: waiting (red), then
+        # idle (green), then busy (blue), then windows without Claude.
+        if      (col == RED) r_rank[nrows] = 0
+        else if (col == GRN) r_rank[nrows] = 1
+        else if (col == BLU) r_rank[nrows] = 2
+        else                 r_rank[nrows] = 3
         r_dot[nrows]  = ((col != "") ? col : GRY) "●" RST
         r_sess[nrows] = sess
         r_idx[nrows]  = idx
@@ -275,7 +281,14 @@ tmux list-windows -a -F '#{window_stack_index}	#{session_last_attached}	#{sessio
         if (length(r_name[nrows]) > wname_w) wname_w = length(r_name[nrows])
       }
       END {
+        # Give the session colors in the order of recency. If the print order
+        # gave them, a session could change color when a window changes state.
+        for (i = 1; i <= nrows; i++) sess_color(r_sess[i])
+        # One pass for each state. The input is in order of recency, and each
+        # pass keeps that order, so the newest window of each state is first.
+        for (rank = 0; rank <= 3; rank++)
         for (i = 1; i <= nrows; i++) {
+          if (r_rank[i] != rank) continue
           # The session name is never cut, because the channel needs the full
           # name for the tmux target.
           line = r_dot[i] "  " sess_color(r_sess[i]) pad(r_sess[i], wsess) RST \
