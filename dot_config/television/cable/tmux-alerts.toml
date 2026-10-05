@@ -16,8 +16,10 @@ watch = 3.0
 frecency = false
 no_sort = true
 
+# `replace:s/'/?/g` stops a `'` in a session name from ending the single
+# quotes of the shell command. See the same comment in tmux-windows.toml.
 [preview]
-command = "tmux capture-pane -t '{split:\t:0}' -p -e 2>/dev/null || echo 'No preview'"
+command = "tmux capture-pane -t '{split:\t:0|replace:s/'/?/g}' -p -e 2>/dev/null || echo 'No preview'"
 header = "{split:\t:0} - {split:\t:1}"
 
 [keybindings]
@@ -25,5 +27,5 @@ enter = "actions:switch"
 
 [actions.switch]
 description = "Switch to window"
-command = "tmux switch-client -t '{split:\t:0}'"
+command = "tmux switch-client -t '{split:\t:0|replace:s/'/?/g}'"
 mode = "execute"

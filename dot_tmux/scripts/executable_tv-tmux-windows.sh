@@ -117,7 +117,9 @@ LAST_OUTPUT_JQ='
 # no other process, because the slug and the cache read use bash builtins.
 wids=(); sids=(); transcripts=()
 while IFS=$'\t' read -r wid _ _ sid cwd _; do
-    [ -n "$sid" ] || continue
+    # The session ID goes into two paths: the transcript and the cache. Accept
+    # only a plain ID, so neither path can point outside its directory.
+    case "$sid" in ''|*[!A-Za-z0-9-]*) continue ;; esac
     # Claude Code names the project directory after the cwd, with each
     # character that is not alphanumeric changed to `-`.
     t="$PROJECTS_DIR/${cwd//[^A-Za-z0-9]/-}/$sid.jsonl"
@@ -132,13 +134,14 @@ if [ "${#transcripts[@]}" -gt 0 ]; then
     )
     # Use the cache only if this user owns it and it is not a symlink.
     # Without a safe cache, the script reads each transcript every time.
+    # Check for a symlink before mkdir and chmod, because both follow one.
     use_cache=0
-    if (umask 077; mkdir -p "$CACHE_DIR") 2>/dev/null \
-        && [ -O "$CACHE_DIR" ] && [ ! -L "$CACHE_DIR" ] && chmod 700 "$CACHE_DIR"; then
+    if [ ! -L "$CACHE_DIR" ] && (umask 077; mkdir -p "$CACHE_DIR") 2>/dev/null \
+        && [ ! -L "$CACHE_DIR" ] && [ -O "$CACHE_DIR" ] && chmod 700 "$CACHE_DIR"; then
         use_cache=1
     fi
     for i in "${!transcripts[@]}"; do
-        cache="$CACHE_DIR/${sids[$i]//[^A-Za-z0-9-]/_}"
+        cache="$CACHE_DIR/${sids[$i]}"
         cached_stamp=""; out=""
         [ "$use_cache" -eq 1 ] && [ -f "$cache" ] && { read -r cached_stamp; read -r out; } < "$cache"
         if [ "$use_cache" -eq 0 ] || [ "$cached_stamp" != "${stamps[$i]:-}" ]; then

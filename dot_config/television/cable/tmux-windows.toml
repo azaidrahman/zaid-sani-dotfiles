@@ -24,9 +24,13 @@ enter = "actions:select"
 # the rows of one step, so the indicator and the rows do not agree.
 ctrl-f = "cycle_sources"
 
+# Each shell command puts the target between single quotes. tv does not
+# escape it, so a `'` in a session name could end the quotes and run text as
+# a command. `replace:s/'/?/g` changes each `'` to `?`. tmux treats a target
+# that has no exact match as a pattern, so `x?y` still finds the session `x'y`.
 [preview]
 # Colored legend pinned at the top of the preview, then the live pane capture.
-command = "printf '\\033[1;38;2;96;165;250m●\\033[0m busy   \\033[1;38;2;255;85;85m●\\033[0m waiting   \\033[1;38;2;74;222;128m●\\033[0m idle\\n\\n'; tmux capture-pane -t '{strip_ansi|split:│:0|split:●:1|trim}:{strip_ansi|split:│:1|trim}' -p 2>/dev/null || echo 'No preview available'"
+command = "printf '\\033[1;38;2;96;165;250m●\\033[0m busy   \\033[1;38;2;255;85;85m●\\033[0m waiting   \\033[1;38;2;74;222;128m●\\033[0m idle\\n\\n'; tmux capture-pane -t '{strip_ansi|split:│:0|split:●:1|trim|replace:s/'/?/g}:{strip_ansi|split:│:1|trim|replace:s/'/?/g}' -p 2>/dev/null || echo 'No preview available'"
 
 [ui.preview_panel]
 # Header shows just the window name (3rd column), no dot or session:idx.
@@ -34,10 +38,10 @@ header = "{strip_ansi|split:│:2|trim}"
 
 [actions.select]
 description = "Switch to the selected window"
-command = "tmux switch-client -t '{strip_ansi|split:│:0|split:●:1|trim}:{strip_ansi|split:│:1|trim}'"
+command = "tmux switch-client -t '{strip_ansi|split:│:0|split:●:1|trim|replace:s/'/?/g}:{strip_ansi|split:│:1|trim|replace:s/'/?/g}'"
 mode = "execute"
 
 [actions.kill]
 description = "Kill the selected window"
-command = "tmux kill-window -t '{strip_ansi|split:│:0|split:●:1|trim}:{strip_ansi|split:│:1|trim}'"
+command = "tmux kill-window -t '{strip_ansi|split:│:0|split:●:1|trim|replace:s/'/?/g}:{strip_ansi|split:│:1|trim|replace:s/'/?/g}'"
 mode = "fork"
