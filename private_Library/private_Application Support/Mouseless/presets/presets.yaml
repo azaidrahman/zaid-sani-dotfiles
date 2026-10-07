@@ -1,4 +1,4 @@
-app_version: 0.4.3
+app_version: 1.1.0-preview.1
 classname: PresetColl
 name: ''
 preset_data:
@@ -25,7 +25,6 @@ preset_data:
       name: position_based
       nudges_per_cell: 8
       strategy: subgrid
-      subgrid_dims:
-      - 8
-      - 3
+      subgrid_cols: 8
       subgrid_mouse_action_keys: QWER UIOP ASDF JKL; ZXCV M,./
+      subgrid_rows: 3
