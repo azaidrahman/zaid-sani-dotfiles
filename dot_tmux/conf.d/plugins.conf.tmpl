@@ -28,6 +28,12 @@ set -g @continuum-restore 'on'
 # Auto-save every minute (default is 15) so a crash restores a near-current
 # session rather than one up to 15 min stale. Resurrect saves are cheap text.
 set -g @continuum-save-interval '1'
+# The autosave job lives in status-right, and the theme replaces status-right
+# after continuum adds it. status-jobs.sh (run from hooks.conf) adds it again.
+# Resurrect keeps a save only if it differs from the last one. Claude changes
+# its pane titles while it works, so most minutes make a new file. Keep 7 days
+# of files (the default is 30) so the directory stays small.
+set -g @resurrect-delete-backup-after '7'
 # Bring Claude panes back too. Resurrect restores a pane by replaying its command
 # line, which is wrong twice over for Claude: the saved line carries the original
 # prompt (re-sending it would start the whole task again) and it says nothing

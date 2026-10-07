@@ -1,0 +1,24 @@
+[metadata]
+name = "tmux-closed"
+description = "Tmux windows that closed, newest first. Enter opens one again"
+requirements = ["tmux", "jq"]
+
+# Each line is "<id>\t<text>". The id has only digits and a dash, so the
+# shell commands below can use it without quotes.
+[source]
+command = "~/.tmux/scripts/closed-windows.sh list"
+display = "{split:\t:1}"
+output = "{split:\t:0}"
+no_sort = true
+frecency = false
+
+[preview]
+command = "~/.tmux/scripts/closed-windows.sh preview {split:\t:0}"
+
+[keybindings]
+enter = "actions:reopen"
+
+[actions.reopen]
+description = "Open the window again"
+command = "~/.tmux/scripts/closed-windows.sh reopen {split:\t:0}"
+mode = "execute"
