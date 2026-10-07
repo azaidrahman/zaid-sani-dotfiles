@@ -37,6 +37,8 @@
              :hide-timer    "killall timer-hud 2>/dev/null"
              :toggle-topbar "~/.config/karabiner/scripts/toggle-top-bar"
              :autoclick     "~/.config/karabiner/scripts/autoclick-hud --radius 30 --limit 30 >/dev/null 2>&1 &"
+             :autoclick-hold "~/.config/karabiner/scripts/autoclick-hud --hold --rate 5 --limit 30 >/dev/null 2>&1 &"
+             :autoclick-stop "~/.config/karabiner/scripts/autoclick-hud --stop"
              :key-search    "~/.config/karabiner/scripts/show-key-search.sh"
              :display-rescue "~/.config/karabiner/scripts/displayctl-rescue.sh"
             }
@@ -140,6 +142,15 @@
     ;; clicks each second. It stops if the mouse moves past --radius points,
     ;; or after --limit minutes.
     [:!QWERf1 [:autoclick]]
+    ;; right_shift+click, held → autoclick at the pointer until the button
+    ;; goes up. The scroll wheel changes the rate. A short
+    ;; right_shift+click stays a usual shift+click.
+    [{:pkey :button1 :modi {:mandatory [:right_shift]}}
+     nil nil
+     {:alone   [{:pkey :button1 :modi [:right_shift]}]
+      :held    [:autoclick-hold]
+      :afterup [:autoclick-stop]
+      :params  {:held 300}}]
     ;; hyper+shift+escape → emergency: bring the built-in display back.
     ;; The built-in panel can stay off after the dock goes away. This key needs
     ;; no picture, so it works when the screen shows nothing.

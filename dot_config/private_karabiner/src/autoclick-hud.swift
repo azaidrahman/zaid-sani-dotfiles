@@ -4,32 +4,53 @@ import ApplicationServices
 // autoclick-hud
 //
 // An autoclicker with an on-screen indicator. The first run asks for the
-// number of clicks each second. It then clicks at the pointer until one of
-// these events occurs:
+// number of clicks each second, or takes it from --rate. It then clicks at
+// the pointer until one of these events occurs:
 //
 //   - A second run of this binary. The second run stops the first run.
 //   - The pointer moves more than the radius from the start point.
 //   - The time limit ends. In the last minute, the time shows in orange.
 //
-//   autoclick-hud [--radius <points>] [--limit <minutes>]
+//   autoclick-hud [--radius <points>] [--limit <minutes>] [--rate <clicks>]
+//   autoclick-hud --hold --rate <clicks> [--limit <minutes>]
+//   autoclick-hud --stop
 //
 // The default radius is 10 points. The default limit is 30 minutes. The
-// Karabiner binding sets both values.
+// Karabiner bindings set both values. If --rate is set, the binary starts
+// at once and does not show the prompt.
+//
+// Hold mode is for a key that is held down. Karabiner starts it when Right
+// Shift and the mouse button are held, and runs --stop when the button goes
+// up. It does not stop when the pointer moves, and it does not stop an
+// active run. Each hold starts at --rate.
+//
+// --stop also touches stopFile. A hold run stops if stopFile is newer than
+// its start. Thus a quick release that runs --stop before the hold run
+// writes its pid file still stops the hold run.
+//
+// While it clicks, the scroll wheel changes the rate. Scroll up to click
+// faster, and scroll down to click slower. The binary keeps the scroll
+// events, so the window below does not scroll. One step occurs each
+// scrollStepInterval at most, thus one long scroll changes the rate by
+// about 5.
 //
 // First-run permission: needs Accessibility (System Settings → Privacy &
 // Security → Accessibility), because the binary posts mouse events. The
 // binary opens the system prompt on first run.
 
 let pidFile = "/tmp/autoclick-hud.pid"
+let stopFile = "/tmp/autoclick-hud.stop"
+let launchTime = Date()
 let stateDir = ("~/.local/state/autoclick-hud" as NSString).expandingTildeInPath
 let rateFile = stateDir + "/rate"
 
 let defaultRadius: CGFloat = 10
 let defaultLimitMinutes = 30.0
 let maxRate = 100
+let scrollStepInterval = 0.08
 
-// Toggle: if a run is active, stop it and exit. The name check makes sure
-// that a stale pid file never stops an unrelated process that got the pid.
+// The pid of the active run. The name check makes sure that a stale pid
+// file never stops an unrelated process that got the pid.
 func runningPid() -> pid_t? {
     guard let raw = try? String(contentsOfFile: pidFile, encoding: .utf8),
           let pid = pid_t(raw.trimmingCharacters(in: .whitespacesAndNewlines)),
@@ -38,11 +59,6 @@ func runningPid() -> pid_t? {
     var name = [CChar](repeating: 0, count: 256)
     proc_name(pid, &name, UInt32(name.count))
     return String(cString: name) == "autoclick-hud" ? pid : nil
-}
-
-if let pid = runningPid() {
-    kill(pid, SIGTERM)
-    exit(0)
 }
 
 func positiveFlag(_ name: String) -> Double? {
@@ -55,6 +71,28 @@ func positiveFlag(_ name: String) -> Double? {
 
 let radius = positiveFlag("--radius").map { CGFloat($0) } ?? defaultRadius
 let limit = (positiveFlag("--limit") ?? defaultLimitMinutes) * 60
+let hold = CommandLine.arguments.contains("--hold")
+
+func readRate(_ path: String) -> Int? {
+    (try? String(contentsOfFile: path, encoding: .utf8))
+        .flatMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+}
+
+func clampRate(_ rate: Int) -> Int { min(maxRate, max(1, rate)) }
+
+let fixedRate = positiveFlag("--rate").map { clampRate(Int($0)) }
+
+if CommandLine.arguments.contains("--stop") {
+    FileManager.default.createFile(atPath: stopFile, contents: nil)
+    if let pid = runningPid() { kill(pid, SIGTERM) }
+    exit(0)
+}
+
+// Toggle: if a run is active, stop it and exit. In hold mode, keep it.
+if let pid = runningPid() {
+    if !hold { kill(pid, SIGTERM) }
+    exit(0)
+}
 
 let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
 if !AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary) {
@@ -142,6 +180,7 @@ final class PromptDelegate: NSObject, NSTextFieldDelegate {
 
 // The indicator is a pill at the top of the screen under the pointer. It
 // ignores mouse events, so a click on it goes to the window below.
+var titleLabel: NSTextField!
 var timeLabel: NSTextField!
 
 func clock(_ seconds: Double) -> String {
@@ -150,7 +189,7 @@ func clock(_ seconds: Double) -> String {
 }
 
 func showIndicator(rate: Int) -> NSPanel {
-    let width: CGFloat = 300
+    let width: CGFloat = 330
     let height: CGFloat = 52
 
     let root = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
@@ -171,11 +210,11 @@ func showIndicator(rate: Int) -> NSPanel {
     dot.layer?.add(pulse, forKey: "pulse")
     root.addSubview(dot)
 
-    let title = NSTextField(labelWithString: "Autoclicking · \(rate)/s")
-    title.font = hudFont(ofSize: 14, weight: .medium)
-    title.textColor = hudGray(1, 1)
-    title.frame = NSRect(x: 36, y: 25, width: 160, height: 18)
-    root.addSubview(title)
+    titleLabel = NSTextField(labelWithString: "Autoclicking · \(rate)/s")
+    titleLabel.font = hudFont(ofSize: 14, weight: .medium)
+    titleLabel.textColor = hudGray(1, 1)
+    titleLabel.frame = NSRect(x: 36, y: 25, width: 180, height: 18)
+    root.addSubview(titleLabel)
 
     timeLabel = NSTextField(labelWithString: "0:00 / \(clock(limit))")
     timeLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
@@ -185,7 +224,9 @@ func showIndicator(rate: Int) -> NSPanel {
     root.addSubview(timeLabel)
 
     let hint = NSTextField(
-        labelWithString: "hyper+F1 or move the mouse to stop")
+        labelWithString: hold
+            ? "Scroll to change speed · release to stop"
+            : "Scroll to change speed · move the mouse to stop")
     hint.font = hudFont(ofSize: 11, weight: .regular)
     hint.textColor = hudGray(1, 0.4)
     hint.frame = NSRect(x: 36, y: 8, width: width - 52, height: 15)
@@ -224,24 +265,87 @@ func postClick(at point: CGPoint) {
         // Each click is a single click. Without this, an app can read two
         // fast clicks at one point as a double click.
         event.setIntegerValueField(.mouseEventClickState, value: 1)
+        // The trigger can be a shift+click. Clear the flags, so that a
+        // shift key that is still down does not make a shift+click.
+        event.flags = []
         event.post(tap: .cghidEventTap)
     }
 }
 
+// The stop of the previous hold occurs at least one held-down threshold
+// before this start. The margin covers the time from the press to launch.
+func stopRequested() -> Bool {
+    guard let attrs = try? FileManager.default.attributesOfItem(atPath: stopFile),
+          let modified = attrs[.modificationDate] as? Date
+    else { return false }
+    return modified > launchTime.addingTimeInterval(-0.15)
+}
+
 var clickTimer: Timer?
+var currentRate = 0
+var anchor = CGPoint.zero
+var indicator: NSPanel?
 
-func startClicking(rate: Int) {
-    let anchor = pointerLocation()
-    let indicator = showIndicator(rate: rate)
-
+func scheduleClicks(rate: Int) {
+    currentRate = rate
+    clickTimer?.invalidate()
     let timer = Timer(timeInterval: 1.0 / Double(rate), repeats: true) { _ in
         let p = pointerLocation()
-        if hypot(p.x - anchor.x, p.y - anchor.y) > radius {
-            indicator.orderOut(nil)
+        if (hold && stopRequested()) || (!hold && hypot(p.x - anchor.x, p.y - anchor.y) > radius) {
+            indicator?.orderOut(nil)
             quit()
         }
         postClick(at: p)
     }
+    // The common mode keeps the timer active while a menu or a drag is open.
+    RunLoop.main.add(timer, forMode: .common)
+    clickTimer = timer
+    titleLabel?.stringValue = "Autoclicking · \(rate)/s"
+}
+
+// MARK: - Scroll to change the rate
+
+var lastScrollStep = Date.distantPast
+var scrollTap: CFMachPort?
+
+func handleScroll(_ event: CGEvent) {
+    // A trackpad sends momentum events after the fingers lift. Ignore them,
+    // so that one gesture does not continue to change the rate.
+    guard event.getIntegerValueField(.scrollWheelEventMomentumPhase) == 0 else { return }
+    let delta = event.getDoubleValueField(.scrollWheelEventPointDeltaAxis1)
+    guard delta != 0, Date().timeIntervalSince(lastScrollStep) >= scrollStepInterval
+    else { return }
+    lastScrollStep = Date()
+    let rate = clampRate(currentRate + (delta > 0 ? 1 : -1))
+    if rate != currentRate { scheduleClicks(rate: rate) }
+}
+
+func startScrollTap() {
+    let mask = CGEventMask(1 << CGEventType.scrollWheel.rawValue)
+    let callback: CGEventTapCallBack = { _, type, event, _ in
+        // The system turns off a tap that is too slow. Turn it on again.
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let tap = scrollTap { CGEvent.tapEnable(tap: tap, enable: true) }
+            return Unmanaged.passUnretained(event)
+        }
+        handleScroll(event)
+        return nil
+    }
+    guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap,
+                                      options: .defaultTap, eventsOfInterest: mask,
+                                      callback: callback, userInfo: nil)
+    else { return }
+    scrollTap = tap
+    let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
+    CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+    CGEvent.tapEnable(tap: tap, enable: true)
+}
+
+func startClicking(rate: Int) {
+    anchor = pointerLocation()
+    indicator = showIndicator(rate: rate)
+    scheduleClicks(rate: rate)
+    startScrollTap()
 
     // A separate clock timer updates the time, so that a slow click rate
     // does not make the time jump.
@@ -249,24 +353,27 @@ func startClicking(rate: Int) {
     let clockTimer = Timer(timeInterval: 0.25, repeats: true) { _ in
         let elapsed = Date().timeIntervalSince(start)
         if elapsed >= limit {
-            indicator.orderOut(nil)
+            indicator?.orderOut(nil)
             quit()
         }
         timeLabel.stringValue = "\(clock(elapsed)) / \(clock(limit))"
         if limit - elapsed <= 60 { timeLabel.textColor = hudOrange }
     }
 
-    // The common mode keeps the timers active while a menu or a drag is open.
-    RunLoop.main.add(timer, forMode: .common)
     RunLoop.main.add(clockTimer, forMode: .common)
-    clickTimer = timer
+}
+
+// With --rate, start at once and do not open the prompt. app.run() does not
+// return, because each stop goes through quit().
+if let rate = fixedRate {
+    DispatchQueue.main.async { startClicking(rate: rate) }
+    app.run()
 }
 
 // MARK: - Prompt
 
 let previous = NSWorkspace.shared.frontmostApplication
-let lastRate = (try? String(contentsOfFile: rateFile, encoding: .utf8))
-    .flatMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) } ?? 10
+let lastRate = readRate(rateFile) ?? 10
 
 let panelWidth: CGFloat = 470
 let panelHeight: CGFloat = 118
