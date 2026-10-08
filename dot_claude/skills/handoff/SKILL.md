@@ -102,12 +102,15 @@ SH=~/.claude/skills/handoff/handoff.sh
 "$SH" "$KEY" "<worktree>" ~/.claude/handoffs/"$KEY".md "<KEY> <short label>"
 ```
 
-The script opens a tmux window rooted in the worktree and starts `claude` with a prompt that points at the brief. It selects an existing window instead if one already carries the key. The window runs a shell under `claude`, so the window stays open in the worktree when the user leaves `claude`.
+The script opens a tmux window rooted in the worktree and starts `claude` with a prompt that points at the brief. The window runs a shell under `claude`, so the window stays open in the worktree when the user leaves `claude`.
+
+The script tags each window with the key. If a window with that tag is open, the script selects it and opens no second window. The user can rename the window and the tag stays.
 
 | stdout / exit | Means | Do |
 |---|---|---|
 | `window: created` | New window is running Claude on the brief. | Report it. |
 | `window: reused` | A window for this key was already open; it is now selected. | Say so — the brief is on disk either way. |
+| exit 2 | Bad input: a missing argument, a path that does not exist, or a control character in the key or in the path of the brief. | Read the message on stderr, correct the input, and run the script again. |
 | `no-tmux` (exit 3) | No tmux, or you are outside it. | Report the brief path and the `cd` command. The handoff still holds. |
 
 **Done when:** the window is open, or you have told the user exactly how to resume by hand.

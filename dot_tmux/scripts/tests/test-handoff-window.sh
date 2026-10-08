@@ -108,4 +108,60 @@ out=$(run GTI-7 "$TMP/wt" "$TMP/brief.md" "GTI-7 bare")
 check "a window named only with the key is reused" "window: reused GTI-7 bare" "$out"
 check "claude does not start for a reused bare window" "$before" "$(calls)"
 
+# --- the window is found by a tag, not by its name ----------------------------
+# The script tags each window that it opens with the key. The name is only a
+# label. It is cleaned and cut short, and the user can rename it.
+check "the window carries the key as a tag" "GTI-1" "$(T show-options -wqv -t "$WIN" @handoff_key)"
+
+T rename-window -t "$WIN" "renamed by hand"
+T select-window -t t:keep
+before=$(calls)
+out=$(run GTI-1 "$TMP/wt" "$BDIR/GTI-1.md" "GTI-1 keep")
+check "a renamed window is still reused" "window: reused GTI-1 keep" "$out"
+check "the renamed window is the one that is selected" "$WIN" "$(T display-message -p -t t: '#{window_id}')"
+check "claude does not start for a renamed window" "$before" "$(calls)"
+
+# A key that is longer than the label limit (25 characters) has no whole key in
+# the name of its window. A second run must still find the window.
+LONG="LONGKEY-12345678901234567890"
+LONG_LABEL=$(printf '%s' "$LONG label" | cut -c1-25)
+out=$(run "$LONG" "$TMP/wt" "$TMP/brief.md" "$LONG label")
+check "a long key creates a window" "window: created $LONG_LABEL" "$out"
+out=$(run "$LONG" "$TMP/wt" "$TMP/brief.md" "$LONG label")
+check "a long key finds its window again" "window: reused $LONG_LABEL" "$out"
+check "a long key has one window" "1" "$(T list-windows -t t -F '#{@handoff_key}' | grep -cxF "$LONG")"
+
+# A character that the label does not keep is changed in the name only.
+out=$(run 'AB/1' "$TMP/wt" "$TMP/brief.md" "AB/1 slash")
+check "a slash in the key creates a window" "window: created AB-1 slash" "$out"
+out=$(run 'AB/1' "$TMP/wt" "$TMP/brief.md" "AB/1 slash")
+check "a slash in the key finds its window again" "window: reused AB-1 slash" "$out"
+check "a slash in the key has one window" "1" "$(T list-windows -t t -F '#{@handoff_key}' | grep -cxF 'AB/1')"
+
+# A window with a tag of another key is not reused for the text in its name.
+T new-window -d -t t: -n "GTI-8 weird"
+T set-option -w -t "$(window_by_name 'GTI-8 weird')" @handoff_key GTI-80
+out=$(run GTI-8 "$TMP/wt" "$TMP/brief.md" "GTI-8 mine")
+check "a tagged window of another key is not reused by its name" "window: created GTI-8 mine" "$out"
+
+# --- a control character is refused --------------------------------------------
+# The key and the brief path are typed into a shell, so a control character in
+# them would act as a key press. The script must refuse them before it opens a
+# window.
+refused() { # label key brief
+	local wins calls_before rc
+	wins=$(T list-windows -t t | wc -l | tr -d ' ')
+	calls_before=$(calls)
+	run "$2" "$TMP/wt" "$3" "label" >/dev/null 2>&1
+	rc=$?
+	check "$1: exit 2" "2" "$rc"
+	check "$1: no window" "$wins" "$(T list-windows -t t | wc -l | tr -d ' ')"
+	check "$1: claude does not start" "$calls_before" "$(calls)"
+}
+CTL_BRIEF="$TMP/brief"$'\003'".md"
+echo brief >"$CTL_BRIEF"
+refused "a newline in the key" $'GTI-5\nGTI-6' "$TMP/brief.md"
+refused "an escape in the key" $'GTI-5\033[A' "$TMP/brief.md"
+refused "a control character in the brief path" GTI-5 "$CTL_BRIEF"
+
 exit "$fail"
