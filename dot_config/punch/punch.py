@@ -24,6 +24,17 @@ STATE = Path.home() / ".local/state/punch.json"
 # at both files.
 CLAIM = STATE.with_suffix(".ending.json")
 SHORTCUT = "Start Study Timer"
+# Shortcuts on the Mac has no Cancel Timer action, and the timer daemon
+# only talks to Apple's own apps. The stop script clicks Cancel in the
+# Timers tab of Clock.app, so Clock comes to the front for a moment.
+STOP_SCRIPT = Path(__file__).with_name("stop_timer.applescript")
+# Seconds that the start waits for the Clock.app plist, and that a stop
+# waits for the timer to leave it.
+START_TRIES = 20
+STOP_TRIES = 10
+# The options of the prompt after a start that found no new timer.
+TIMER_RESET = "Reset timer & retry"
+TIMER_GIVE_UP = "Give up"
 TOPICS = Path.home() / "vaults/Polaris/5-Workbook/worklog/Topics.md"
 WORKLOG = TOPICS.parent
 PRESETS = ["25", "50", "60", "90"]
@@ -120,10 +131,117 @@ def open_state():
     return None
 
 
-def _start_timer(minutes: int) -> None:
-    url = (f"shortcuts://run-shortcut?name={SHORTCUT.replace(' ', '%20')}"
-           f"&input=text&text={minutes}")
+def _run_shortcut(name: str, text: str = "") -> None:
+    url = f"shortcuts://run-shortcut?name={name.replace(' ', '%20')}"
+    if text:
+        url += f"&input=text&text={text}"
     subprocess.run(["open", url], check=True)
+
+
+def _start_timer(minutes: int) -> None:
+    _run_shortcut(SHORTCUT, str(minutes))
+
+
+def _stop_timer() -> None:
+    """Cancel the running Clock.app timer through its window.
+
+    The script stops the one timer that runs. It takes no timer id, so
+    the caller checks that the running one is the right one.
+    """
+    r = subprocess.run(["osascript", str(STOP_SCRIPT)],
+                       capture_output=True, text=True, timeout=30)
+    if r.returncode != 0:
+        raise RuntimeError(f"the stop script failed: {r.stderr.strip()}")
+    if r.stdout.strip() != "stopped":
+        log.warning("the stop script found no running timer")
+
+
+def stale_timer(minutes: int, found: list[dict]):
+    """Return the active timer with the length of the new session, or None.
+
+    Clock.app keeps one timer per length. A start with the same length as a
+    timer that still runs does nothing, so that timer is stale: a session
+    that closed before its timer ended left it behind.
+    """
+    want = minutes * 60
+    return next((t for t in timers.active(found) if t["duration"] == want),
+                None)
+
+
+def _wait_for_timer(before: set, tries: int) -> str:
+    """Return the id of a timer that is active and not in `before`."""
+    for _ in range(tries):
+        time.sleep(1)
+        new = [t for t in timers.active(timers.load()) if t["id"] not in before]
+        if new:
+            return new[0]["id"]
+    return ""
+
+
+def _wait_until_stopped(timer_id: str, tries: int) -> bool:
+    for _ in range(tries):
+        time.sleep(1)
+        if all(t["id"] != timer_id for t in timers.active(timers.load())):
+            return True
+    return False
+
+
+def _stop_stale_timer(stale: dict) -> None:
+    """Stop a stale timer and wait until the plist shows it stopped.
+
+    The caller takes its snapshot after this, because Clock.app can give
+    the restarted timer the id of the stopped one.
+    """
+    log.warning("a stale %d min timer %s still runs; stopping it",
+                stale["duration"] // 60, stale["id"])
+    _stop_timer()
+    if not _wait_until_stopped(stale["id"], STOP_TRIES):
+        log.warning("the stale timer %s did not stop in time", stale["id"])
+
+
+def restart_timer(minutes: int) -> str:
+    """Stop the timer that blocks a start, then start a new one.
+
+    This is the reset of a start that found no new timer. Return the id
+    of the new timer, or an empty string.
+    """
+    stale = stale_timer(minutes, timers.load())
+    if stale is not None:
+        _stop_stale_timer(stale)
+    else:
+        log.warning("no stale %d min timer found; stopping the recent one",
+                    minutes)
+        _stop_timer()
+    before = {t["id"] for t in timers.active(timers.load())}
+    _start_timer(minutes)
+    return _wait_for_timer(before, START_TRIES)
+
+
+def ask_timer_reset(topic: str) -> bool:
+    """Ask whether to stop the blocking timer and start again.
+
+    The return key takes the reset, because the common cause is a timer
+    that a closed session left behind. Escape and a timeout give up.
+    """
+    prompt = f"{topic} — Clock.app started no timer"
+    return choose(prompt, [TIMER_RESET, TIMER_GIVE_UP]) == TIMER_RESET
+
+
+def stop_session_timer(s: dict) -> None:
+    """Stop the timer of a session that closes before its timer ends.
+
+    A timer that already fired is left alone. A failure is logged, because
+    the close must go on without the timer.
+    """
+    timer_id = s.get("timer_id", "")
+    if not timer_id:
+        return
+    try:
+        if any(t["id"] == timer_id for t in timers.active(timers.load())):
+            _stop_timer()
+            log.info("timer %s stopped", timer_id)
+    except Exception as e:
+        log.warning("failed to stop the timer %s: %s", timer_id, e)
 
 
 def day_notes(day) -> list:
@@ -229,6 +347,11 @@ def start_live(topic: str, minutes: int, start_at: datetime,
     if kind != "live":
         raise SystemExit("The timebox already ended. This is a retro session.")
 
+    # A timer of the same length that still runs blocks the start, so it
+    # goes first.
+    stale = stale_timer(remaining, timers.load())
+    if stale is not None:
+        _stop_stale_timer(stale)
     before = {t["id"] for t in timers.active(timers.load())}
     _start_timer(remaining)
     log.info("timer requested: topic=%r minutes=%d start=%s",
@@ -258,17 +381,14 @@ def start_live(topic: str, minutes: int, start_at: datetime,
     # timer running with no session to log it.
     try:
         # Give the Shortcuts app time to write the plist.
-        timer_id = ""
-        for _ in range(20):
-            time.sleep(1)
-            new = [t for t in timers.active(timers.load()) if t["id"] not in before]
-            if new:
-                timer_id = new[0]["id"]
-                break
+        timer_id = _wait_for_timer(before, START_TRIES)
+        if not timer_id and ask_timer_reset(topic):
+            timer_id = restart_timer(remaining)
         if not timer_id:
             raise RuntimeError(
-                "the timer never showed up in the Clock.app plist. Check "
-                f"that the shortcut '{SHORTCUT}' exists on this machine.")
+                "no new timer showed up in the Clock.app plist. A timer of "
+                "the same length may still run, or the shortcut "
+                f"'{SHORTCUT}' is missing on this machine.")
 
         uid = cal.create_event(topic, start_at, planned_end)
     except Exception as e:
@@ -777,6 +897,11 @@ def finish(s: dict, status: str, end_at: datetime, distraction) -> None:
     hours = round((end_at - start_at).total_seconds() / 3600, 2)
     notify(f"{s['topic']} {status} — {hours} h logged")
 
+    if status == "cancelled":
+        # A cancelled session leaves its timer running. That timer would
+        # block the next start of the same length, so it goes first.
+        stop_session_timer(s)
+
     if status == "cancelled" and s.get("event_uid"):
         marked = time.monotonic()
         try:
@@ -817,6 +942,8 @@ def reset() -> str:
 
     path.unlink()
     if choice == "discard":
+        # The timer would block the next start of the same length.
+        stop_session_timer(s)
         log.info("session discarded: topic=%r", s["topic"])
         notify(f"{s['topic']} discarded — nothing logged")
         return "discard"
