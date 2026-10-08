@@ -53,9 +53,17 @@ AWAY_DISTRACTION = 5
 MOODIST_URL = "https://moodist.mvze.net/"
 MOODIST_OPEN = "Open Moodist"
 
-# The interactive start asks three questions: the topic, the timebox, and
-# the start time. The user walks the steps with the n and the p keys.
-STEPS = 3
+# The interactive start asks four questions: the topic, the focus, the
+# timebox, and the start time. The user walks the steps with the n and the
+# p keys.
+STEPS = 4
+
+# The pill is a small floating HUD that shows the title and the time left
+# of the open session. Its flag file hides it. The pill reads the flag on
+# each tick, so the toggle needs no restart.
+PILL_FLAG = Path.home() / ".local/state/punch-pill.hidden"
+PILL_HIDE = "Hide pill"
+PILL_SHOW = "Show pill"
 
 
 class _Back:
@@ -210,7 +218,8 @@ def ask_start(minutes: int, step: str = ""):
         return start_at
 
 
-def start_live(topic: str, minutes: int, start_at: datetime) -> None:
+def start_live(topic: str, minutes: int, start_at: datetime,
+               focus: str = "") -> None:
     if open_state() is not None:
         raise SystemExit("A session is already open. Run 'punch reset' first.")
 
@@ -224,6 +233,25 @@ def start_live(topic: str, minutes: int, start_at: datetime) -> None:
     _start_timer(remaining)
     log.info("timer requested: topic=%r minutes=%d start=%s",
              topic, remaining, start_at.isoformat())
+
+    # The wait for the Clock.app plist and the Calendar event take seconds.
+    # A pending state file lets the pill show at once. check() skips a
+    # pending session, because it has no timer to judge yet.
+    session = {
+        "topic": topic,
+        "focus": focus,
+        "start": start_at.isoformat(),
+        "planned_end": planned_end.isoformat(),
+        "minutes": minutes,
+        "timer_id": "",
+        "event_uid": "",
+        "source": "live",
+    }
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    STATE.write_text(json.dumps({**session, "pending": True}, indent=2))
+    # A new session always shows its pill, even when the last one was hidden.
+    PILL_FLAG.unlink(missing_ok=True)
+    start_pill()
 
     # The timer above is already running. Everything past this point can
     # still fail, so a failure here must be loud — a silent one leaves the
@@ -244,28 +272,57 @@ def start_live(topic: str, minutes: int, start_at: datetime) -> None:
 
         uid = cal.create_event(topic, start_at, planned_end)
     except Exception as e:
+        # The pending state goes away, so the pill quits and no ghost
+        # session waits for a check() that can never end it.
+        STATE.unlink(missing_ok=True)
         log.error("session tracking failed after the timer started: %s",
                   e, exc_info=True)
         notify(f"{topic} timer is running, but session logging failed — "
                "see the log")
         raise
 
-    STATE.parent.mkdir(parents=True, exist_ok=True)
     STATE.write_text(json.dumps({
-        "topic": topic,
-        "start": start_at.isoformat(),
-        "planned_end": planned_end.isoformat(),
-        "minutes": minutes,
-        "timer_id": timer_id,
-        "event_uid": uid,
-        "source": "live",
+        **session, "timer_id": timer_id, "event_uid": uid,
     }, indent=2))
     log.info("session started: topic=%r minutes=%d timer_id=%s event_uid=%s",
              topic, minutes, timer_id, uid)
     notify(f"{topic} — timer running, ends {planned_end:%H:%M}")
 
 
-def log_retro(topic: str, minutes: int, start_at: datetime) -> None:
+def start_pill() -> None:
+    """Start the pill for the open session. A pill that runs is replaced.
+
+    The pill quits by itself when the session closes, so there is no
+    stop call. A machine with no HUD binary has no pill.
+    """
+    if not HUD.exists():
+        return
+    subprocess.run(["pkill", "-f", "timer-hud pill"], capture_output=True)
+    try:
+        subprocess.Popen([str(HUD), "pill"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+    except Exception as e:
+        log.warning("the pill failed to start: %s", e)
+
+
+def toggle_pill() -> None:
+    """Hide the pill, or show it. A show restarts the pill if it has quit."""
+    if PILL_FLAG.exists():
+        PILL_FLAG.unlink()
+        log.info("pill shown")
+        alive = subprocess.run(["pgrep", "-f", "timer-hud pill"],
+                               capture_output=True)
+        if alive.returncode != 0:
+            start_pill()
+    else:
+        PILL_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        PILL_FLAG.touch()
+        log.info("pill hidden")
+
+
+def log_retro(topic: str, minutes: int, start_at: datetime,
+              focus: str = "") -> None:
     """Record a session that already ended. No timer, no state file."""
     end_at = start_at + timedelta(minutes=minutes)
     conflict = punchtime.find_overlap(start_at, end_at,
@@ -277,7 +334,8 @@ def log_retro(topic: str, minutes: int, start_at: datetime) -> None:
         log.warning("calendar event failed for the retro session: %s", e)
 
     score = ask_distraction(f"{topic} — {start_at:%H:%M}–{end_at:%H:%M} · retro")
-    s = {"topic": topic, "start": start_at.isoformat(), "source": "retro"}
+    s = {"topic": topic, "focus": focus, "start": start_at.isoformat(),
+         "source": "retro"}
     finish(s, "completed", end_at, score)
 
     if conflict:
@@ -393,23 +451,27 @@ def ask_text_native(prompt: str):
 
 
 def ask_text(prompt: str, digits: bool = False, step: str = "",
-             back: bool = False):
+             back: bool = False, allow_empty: bool = False):
     """Ask for one line of text. Return the text, BACK, or None.
 
     The digits variant refuses every key that is not a digit, so a custom
     timebox can no longer abort the flow on a value like '9o'. With back
     on, escape returns BACK, so the prompt of the step comes back instead
-    of the flow ending.
+    of the flow ending. With allow_empty on, the return key on a blank
+    line returns an empty string instead of None.
     """
     if HUD.exists():
         args = [str(HUD), "digits" if digits else "text"]
         if step:
             args += ["--step", step]
+        if allow_empty:
+            args.append("--allow-empty")
         try:
             r = subprocess.run(args + [prompt],
                                capture_output=True, text=True, timeout=300)
             if r.returncode == 0:
-                return r.stdout.strip() or None
+                text = r.stdout.strip()
+                return text if allow_empty else (text or None)
             return BACK if back else None
         except Exception as e:
             log.warning("the text HUD failed: %s", e)
@@ -507,8 +569,19 @@ def ask_minutes(current, step: str):
             notify(f"Not a number: {minutes}")
 
 
+def ask_focus(step: str = ""):
+    """Ask what the session is for. Return the text, BACK, or "".
+
+    This step is optional. The return key on a blank line skips it, and an
+    empty answer means the pill shows the topic. Escape goes back a step.
+    """
+    text = ask_text("What will you work on? (return skips)", step=step,
+                    back=True, allow_empty=True)
+    return "" if text is None else text
+
+
 def start_interactive() -> None:
-    """Walk the three steps of a start, then start the session.
+    """Walk the four steps of a start, then start the session.
 
     Every prompt names its step, and the n and the p keys walk the flow
     forward and back. A wrong topic no longer means starting again: the
@@ -519,16 +592,18 @@ def start_interactive() -> None:
     if open_state() is not None and reset() == "keep":
         return
 
-    topic, minutes, start_at = None, None, None
+    topic, focus, minutes, start_at = None, "", None, None
     step = 1
     while step <= STEPS:
         if step == 1:
             answer = ask_topic(topic)
         elif step == 2:
-            answer = ask_minutes(minutes, step_label(2, [topic]))
+            answer = ask_focus(step_label(2, [topic]))
+        elif step == 3:
+            answer = ask_minutes(minutes, step_label(3, [topic, focus]))
         else:
             answer = ask_start(int(minutes),
-                               step_label(3, [topic, f"{minutes} min"]))
+                               step_label(4, [topic, focus, f"{minutes} min"]))
         if answer is None:
             return
         # A step that the user leaves backwards keeps the answer that
@@ -537,6 +612,8 @@ def start_interactive() -> None:
             if step == 1:
                 topic = answer
             elif step == 2:
+                focus = answer
+            elif step == 3:
                 minutes = answer
             else:
                 start_at = answer
@@ -548,9 +625,9 @@ def start_interactive() -> None:
         # Ask before the timer starts. The start waits for the Clock.app
         # plist, so a prompt after it comes too late.
         offer_moodist()
-        start_live(topic, m, start_at)
+        start_live(topic, m, start_at, focus)
     else:
-        log_retro(topic, m, start_at)
+        log_retro(topic, m, start_at, focus)
 
 
 def offer_moodist() -> None:
@@ -666,12 +743,22 @@ def ask_open_session(s: dict) -> str:
 
     The return key takes 'End & log', which is the safe and common answer.
     Escape and a timeout return keep, so a closed prompt never destroys an
-    open session.
+    open session. The pill option shows or hides the pill, and it returns
+    pill, so the caller keeps the session open.
     """
     start_at = datetime.fromisoformat(s["start"])
     prompt = f"{s['topic']} is still open — {start_at:%H:%M}, {s['minutes']} min"
-    choice = choose(prompt, ["End & log", "Keep it", "Discard"])
-    return {"End & log": "end", "Discard": "discard"}.get(choice, "keep")
+    pill = PILL_SHOW if PILL_FLAG.exists() else PILL_HIDE
+    if s.get("pending"):
+        # The start still runs and writes the final state in a moment. An
+        # end or a discard here would leave a ghost, so the pill toggle is
+        # the only action. Return is Keep, so a stray press does no harm.
+        prompt = f"{s['topic']} is starting — {s['minutes']} min"
+        choice = choose(prompt, ["Keep it", pill])
+    else:
+        choice = choose(prompt, ["End & log", "Keep it", "Discard", pill])
+    return {"End & log": "end", "Discard": "discard",
+            PILL_HIDE: "pill", PILL_SHOW: "pill"}.get(choice, "keep")
 
 
 def finish(s: dict, status: str, end_at: datetime, distraction) -> None:
@@ -682,24 +769,31 @@ def finish(s: dict, status: str, end_at: datetime, distraction) -> None:
     """
     start_at = datetime.fromisoformat(s["start"])
     path, body = note.build_note(s["topic"], start_at, end_at, status,
-                                 distraction, s.get("source", "live"))
+                                 distraction, s.get("source", "live"),
+                                 s.get("focus", ""))
 
-    if status == "cancelled":
+    # Show the toast first. The Calendar and the Obsidian calls below wait
+    # on other apps, and the user should not wait with them.
+    hours = round((end_at - start_at).total_seconds() / 3600, 2)
+    notify(f"{s['topic']} {status} — {hours} h logged")
+
+    if status == "cancelled" and s.get("event_uid"):
+        marked = time.monotonic()
         try:
             result = cal.mark_cancelled(s["event_uid"], s["topic"])
             if result == "missing":
                 log.warning("calendar event %s not found", s["event_uid"])
         except Exception as e:
             log.warning("mark_cancelled failed: %s", e)
+        log.info("calendar marked in %.1fs", time.monotonic() - marked)
 
+    opened = time.monotonic()
     try:
         subprocess.run(["open", note.adv_uri(path, body)], check=True)
     except Exception as e:
         log.warning("failed to open note: %s", e)
-
-    hours = round((end_at - start_at).total_seconds() / 3600, 2)
-    log.info("session %s: topic=%r hours=%s", status, s["topic"], hours)
-    notify(f"{s['topic']} {status} — {hours} h logged")
+    log.info("session %s: topic=%r hours=%s note_open=%.1fs",
+             status, s["topic"], hours, time.monotonic() - opened)
 
 
 def reset() -> str:
@@ -716,6 +810,9 @@ def reset() -> str:
     path, s = found
     choice = ask_open_session(s)
     if choice == "keep":
+        return "keep"
+    if choice == "pill":
+        toggle_pill()
         return "keep"
 
     path.unlink()
@@ -744,6 +841,15 @@ def check() -> None:
 
     try:
         s = json.loads(claimed.read_text())
+        if s.get("pending"):
+            # The start still waits for the timer. Nothing to judge yet.
+            # The start may have written the final state while this claim
+            # stood, and that state must win over the pending one.
+            if STATE.exists():
+                claimed.unlink()
+            else:
+                claimed.rename(STATE)
+            return
         planned_end = datetime.fromisoformat(s["planned_end"])
         now = datetime.now()
 
@@ -759,7 +865,15 @@ def check() -> None:
             claimed.rename(STATE)
             return
 
+        # The times here show where a slow end spends its seconds.
+        fired = timer["fired_date"] if timer else None
+        log.info("check: status=%s fired=%s wait_before_score=%.1fs",
+                 status, fired, (datetime.now() - fired).total_seconds()
+                 if fired else -1)
+        asked = time.monotonic()
         distraction = ask_distraction(s["topic"]) if status == "completed" else None
+        log.info("check: score=%s answered_in=%.1fs",
+                 distraction, time.monotonic() - asked)
     except Exception:
         # Something failed mid-way, before any side effect ran. Put the
         # state file back so the next minute's check() retries.

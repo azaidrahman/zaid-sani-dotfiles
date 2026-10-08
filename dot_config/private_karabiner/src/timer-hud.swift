@@ -20,6 +20,7 @@ final class KeyPanel: NSPanel {
 // not a digit, which makes bad input impossible at the keystroke.
 final class TextModeDelegate: NSObject, NSTextFieldDelegate {
     var digitsOnly = false
+    var allowEmpty = false
     var onSubmit: ((String) -> Void)?
     var onCancel: (() -> Void)?
 
@@ -27,7 +28,7 @@ final class TextModeDelegate: NSObject, NSTextFieldDelegate {
                  doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(NSResponder.insertNewline(_:)) {
             let text = control.stringValue.trimmingCharacters(in: .whitespaces)
-            if !text.isEmpty { onSubmit?(text) }
+            if !text.isEmpty || allowEmpty { onSubmit?(text) }
             return true
         }
         if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
@@ -175,6 +176,166 @@ func addStepLabel(_ label: String, to root: NSView,
     view.lineBreakMode = .byTruncatingTail
     view.frame = NSRect(x: 14, y: panelHeight - 26, width: panelWidth - 28, height: 15)
     root.addSubview(view)
+}
+
+// Pill mode: a small floating pill that shows the title of the open punch
+// session and the time left in its timebox. The punch tracker starts it when
+// a session starts. The pill hides while the hidden flag file exists, and it
+// quits when no session is open.
+//
+//   timer-hud pill
+//
+if CommandLine.arguments.count >= 2 && CommandLine.arguments[1] == "pill" {
+    let stateFiles = [
+        "~/.local/state/punch.json",
+        "~/.local/state/punch.ending.json",
+    ]
+    let hiddenFlag = ("~/.local/state/punch-pill.hidden" as NSString)
+        .expandingTildeInPath
+
+    // The title is the focus text when the user wrote one, else the topic.
+    struct PillSession {
+        let title: String
+        let plannedEnd: Date
+    }
+
+    func readPillSession() -> PillSession? {
+        for path in stateFiles {
+            let expanded = (path as NSString).expandingTildeInPath
+            guard let data = FileManager.default.contents(atPath: expanded),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let topic = obj["topic"] as? String,
+                  let endString = obj["planned_end"] as? String
+            else { continue }
+            guard let end = sessionDateFormatterFrac.date(from: endString)
+                    ?? sessionDateFormatter.date(from: endString)
+            else { continue }
+            let focus = obj["focus"] as? String ?? ""
+            return PillSession(title: focus.isEmpty ? topic : focus,
+                               plannedEnd: end)
+        }
+        return nil
+    }
+
+    // The pill sits on the notch. A notched screen reports the menu bar on
+    // each side of the notch as an auxiliary area, so the notch is the gap
+    // between the two areas. A screen with no notch gets a simulated notch of
+    // the same kind at the top centre. The wings are the black areas that
+    // extend the notch on each side, and they hold the title and the timer.
+    let simulatedNotchWidth: CGFloat = 200
+    let simulatedNotchHeight: CGFloat = 32
+    let wingWidth: CGFloat = 120
+
+    let pillView = NSView(frame: .zero)
+    pillView.wantsLayer = true
+    // The wings are see-through, so they hide less of the menu bar. On a
+    // notch screen the notch itself stays black, because it is hardware.
+    pillView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.45).cgColor
+    // Only the bottom corners are round, so the top edge meets the screen edge.
+    pillView.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+
+    // The title sits in the left wing and the timer in the right wing.
+    let titleLabel = NSTextField(labelWithString: "")
+    titleLabel.font = hudFont(ofSize: 12, weight: .medium)
+    titleLabel.textColor = hudGray(1, 0.95)
+    titleLabel.lineBreakMode = .byTruncatingTail
+
+    let timerLabel = NSTextField(labelWithString: "")
+    timerLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+    timerLabel.textColor = hudAccent
+    timerLabel.alignment = .right
+
+    pillView.addSubview(titleLabel)
+    pillView.addSubview(timerLabel)
+
+    // Above the menu bar, so the pill covers the notch. The level is the one
+    // that the notch apps use. It ignores the mouse, so a click on the menu
+    // bar beside it still reaches the menu bar.
+    let pillPanel = NSPanel(
+        contentRect: .zero,
+        styleMask: [.borderless, .nonactivatingPanel],
+        backing: .buffered,
+        defer: false
+    )
+    pillPanel.isOpaque = false
+    pillPanel.backgroundColor = .clear
+    pillPanel.level = .mainMenu + 3
+    pillPanel.hasShadow = false
+    pillPanel.ignoresMouseEvents = true
+    pillPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary,
+                                    .stationary, .ignoresCycle]
+    pillPanel.contentView = pillView
+    pillPanel.appearance = NSAppearance(named: .darkAqua)
+
+    // Place the pill on the notch of the current screens. The screens change
+    // when the user docks or undocks, so this runs again on each change. A
+    // pill that kept its first frame would sit off screen after an undock.
+    func place() {
+        // The notch screen comes first, so the pill follows the built-in
+        // display. The first screen is the one with the menu bar, which is
+        // the fallback.
+        let notchScreen = NSScreen.screens.first {
+            $0.auxiliaryTopLeftArea != nil && $0.auxiliaryTopRightArea != nil
+        }
+        let screen = notchScreen ?? NSScreen.screens.first
+        let sf = screen?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+
+        var notchLeft = sf.midX - simulatedNotchWidth / 2
+        var notchRight = sf.midX + simulatedNotchWidth / 2
+        var pillHeight = simulatedNotchHeight
+        if let s = notchScreen,
+           let leftArea = s.auxiliaryTopLeftArea,
+           let rightArea = s.auxiliaryTopRightArea {
+            notchLeft = leftArea.maxX
+            notchRight = rightArea.minX
+            // The safe area top is the height of the notch itself.
+            pillHeight = max(s.safeAreaInsets.top, 24)
+        }
+        let pillWidth = (notchRight - notchLeft) + wingWidth * 2
+        let labelY = (pillHeight - 17) / 2
+
+        pillView.frame = NSRect(x: 0, y: 0, width: pillWidth, height: pillHeight)
+        pillView.layer?.cornerRadius = pillHeight / 2
+        titleLabel.frame = NSRect(x: 12, y: labelY, width: wingWidth - 24, height: 17)
+        timerLabel.frame = NSRect(x: pillWidth - wingWidth + 12, y: labelY,
+                                  width: wingWidth - 24, height: 17)
+        pillPanel.setFrame(NSRect(x: notchLeft - wingWidth, y: sf.maxY - pillHeight,
+                                  width: pillWidth, height: pillHeight),
+                           display: true)
+    }
+
+    func refresh() {
+        guard let session = readPillSession() else {
+            app.terminate(nil)
+            return
+        }
+        titleLabel.stringValue = session.title
+        // Past the timebox the pill counts up with a plus sign, so an
+        // overrun stays visible instead of freezing at zero.
+        let left = session.plannedEnd.timeIntervalSinceNow
+        timerLabel.stringValue = left >= 0 ? clock(left) : "+" + clock(-left)
+
+        if FileManager.default.fileExists(atPath: hiddenFlag) {
+            pillPanel.orderOut(nil)
+        } else {
+            pillPanel.orderFrontRegardless()
+        }
+    }
+
+    place()
+    refresh()
+
+    NotificationCenter.default.addObserver(
+        forName: NSApplication.didChangeScreenParametersNotification,
+        object: nil, queue: .main) { _ in place() }
+
+    let pillTicker = Foundation.Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+        refresh()
+    }
+    RunLoop.main.add(pillTicker, forMode: .common)
+
+    app.run()
+    exit(0)
 }
 
 // Toast mode: a short bottom-center message, no timer plist, no ticker.
@@ -369,8 +530,10 @@ if CommandLine.arguments.count >= 3 && CommandLine.arguments[1] == "score" {
 // named "skip" must stay expressible. The digits variant accepts digit
 // keys only and refuses an empty confirm.
 //
-//   timer-hud text [--step "<label>"] "<prompt>" ["<placeholder>"]
+//   timer-hud text [--step "<label>"] [--allow-empty] "<prompt>" ["<placeholder>"]
 //   timer-hud digits [--step "<label>"] "<prompt>" ["<placeholder>"]
+//
+// With --allow-empty, the return key on a blank line prints an empty line.
 //
 if CommandLine.arguments.count >= 3 &&
    (CommandLine.arguments[1] == "text" || CommandLine.arguments[1] == "digits") {
@@ -378,10 +541,20 @@ if CommandLine.arguments.count >= 3 &&
     // flow, so the user always sees where the prompt sits in the flow.
     var argIndex = 2
     var stepLabel = ""
-    while argIndex + 1 < CommandLine.arguments.count,
-          CommandLine.arguments[argIndex] == "--step" {
-        stepLabel = CommandLine.arguments[argIndex + 1]
-        argIndex += 2
+    // --allow-empty lets the return key confirm a blank line. The caller
+    // uses it for an answer that is optional.
+    var allowEmpty = false
+    flags: while argIndex < CommandLine.arguments.count {
+        switch CommandLine.arguments[argIndex] {
+        case "--step" where argIndex + 1 < CommandLine.arguments.count:
+            stepLabel = CommandLine.arguments[argIndex + 1]
+            argIndex += 2
+        case "--allow-empty":
+            allowEmpty = true
+            argIndex += 1
+        default:
+            break flags
+        }
     }
     guard argIndex < CommandLine.arguments.count else { exit(2) }
     let prompt = CommandLine.arguments[argIndex]
@@ -434,6 +607,7 @@ if CommandLine.arguments.count >= 3 &&
 
     let delegate = TextModeDelegate()
     delegate.digitsOnly = CommandLine.arguments[1] == "digits"
+    delegate.allowEmpty = allowEmpty
     delegate.onSubmit = { text in finish(text, code: 0) }
     delegate.onCancel = { finish(nil, code: 2) }
     field.delegate = delegate

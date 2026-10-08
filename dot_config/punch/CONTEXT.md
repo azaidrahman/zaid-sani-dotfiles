@@ -14,6 +14,11 @@ _Avoid_: study session, block, entry, task
 The subject of a session. The user picks it from `Topics.md`.
 _Avoid_: project, category, tag, label
 
+**Focus**:
+The short text that says what the user will work on in a session. It is
+optional. A session with no focus shows its topic instead.
+_Avoid_: title, goal, intent, description
+
 **Timebox**:
 The planned length of a session. The user picks it before the session starts.
 Every session has one.
@@ -54,6 +59,12 @@ _Avoid_: reset, sync, update, repair
 The Swift program that shows every prompt. It reads one key press. The user
 never needs the mouse.
 _Avoid_: dialog, popup, overlay, panel
+
+**Pill**:
+A small floating window. It shows the focus of the live session, or the
+topic, and the time left in the timebox. The user hides it or shows it from
+the punch shortcut while a session is open.
+_Avoid_: badge, widget, overlay, timer window
 
 ## Notes on the model
 

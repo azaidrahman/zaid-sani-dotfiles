@@ -43,6 +43,15 @@ def test_the_source_defaults_to_live():
                          datetime(2026, 8, 20, 11, 0), "completed", 3)
     assert "source: live\n" in body
 
+def test_a_note_carries_its_focus_as_a_quoted_value():
+    _, body = build_note("Kubernetes", START, END, "completed", 3,
+                         focus="Fix: the parser #2")
+    assert 'focus: "Fix: the parser #2"\n' in body
+
+def test_a_note_without_a_focus_has_no_focus_field():
+    _, body = build_note("Kubernetes", START, END, "completed", 3)
+    assert "focus:" not in body
+
 
 if __name__ == "__main__":
     import traceback
