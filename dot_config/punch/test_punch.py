@@ -289,6 +289,44 @@ def test_the_pill_toggle_is_the_option_for_the_open_session(monkeypatch, tmp_pat
     assert shown[0][-1] == punch.PILL_HIDE
 
 
+def test_a_pending_session_cannot_be_ended_from_the_prompt(monkeypatch, tmp_path):
+    # A second punch press during the start must not offer End & log,
+    # because the start writes the final state a moment later.
+    import punch
+    shown = []
+
+    def fake_choose(prompt, options, *a, **k):
+        shown.append(options)
+        return options[0]
+
+    monkeypatch.setattr(punch, "PILL_FLAG", tmp_path / "punch-pill.hidden")
+    monkeypatch.setattr(punch, "choose", fake_choose)
+    s = {"topic": "Go", "start": "2026-08-07T14:30:00", "minutes": 25,
+         "pending": True}
+    assert punch.ask_open_session(s) == "keep"
+    assert "End & log" not in shown[0] and "Discard" not in shown[0]
+    assert punch.PILL_HIDE in shown[0]
+
+
+def test_a_pending_session_is_left_alone_by_check(monkeypatch, tmp_path):
+    # The start writes a pending state before the timer shows up in the
+    # plist. A check() run in that window has no timer, and it must not
+    # cancel the session.
+    import json
+    import punch
+    state = tmp_path / "punch.json"
+    claim = tmp_path / "punch.ending.json"
+    state.write_text(json.dumps({"topic": "Go", "pending": True,
+                                 "planned_end": "2026-08-07T15:00:00"}))
+    monkeypatch.setattr(punch, "STATE", state)
+    monkeypatch.setattr(punch, "CLAIM", claim)
+    monkeypatch.setattr(punch, "finish",
+                        lambda *a: (_ for _ in ()).throw(AssertionError("finished")))
+    punch.check()
+    assert state.exists() and not claim.exists()
+    assert json.loads(state.read_text())["pending"] is True
+
+
 def test_the_pill_toggle_keeps_the_session_open(monkeypatch):
     import punch
     toggled = []

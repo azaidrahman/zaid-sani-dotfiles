@@ -228,7 +228,9 @@ if CommandLine.arguments.count >= 2 && CommandLine.arguments[1] == "pill" {
 
     let pillView = NSView(frame: .zero)
     pillView.wantsLayer = true
-    pillView.layer?.backgroundColor = NSColor.black.cgColor
+    // The wings are see-through, so they hide less of the menu bar. On a
+    // notch screen the notch itself stays black, because it is hardware.
+    pillView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.45).cgColor
     // Only the bottom corners are round, so the top edge meets the screen edge.
     pillView.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
 

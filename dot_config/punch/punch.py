@@ -234,6 +234,25 @@ def start_live(topic: str, minutes: int, start_at: datetime,
     log.info("timer requested: topic=%r minutes=%d start=%s",
              topic, remaining, start_at.isoformat())
 
+    # The wait for the Clock.app plist and the Calendar event take seconds.
+    # A pending state file lets the pill show at once. check() skips a
+    # pending session, because it has no timer to judge yet.
+    session = {
+        "topic": topic,
+        "focus": focus,
+        "start": start_at.isoformat(),
+        "planned_end": planned_end.isoformat(),
+        "minutes": minutes,
+        "timer_id": "",
+        "event_uid": "",
+        "source": "live",
+    }
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    STATE.write_text(json.dumps({**session, "pending": True}, indent=2))
+    # A new session always shows its pill, even when the last one was hidden.
+    PILL_FLAG.unlink(missing_ok=True)
+    start_pill()
+
     # The timer above is already running. Everything past this point can
     # still fail, so a failure here must be loud — a silent one leaves the
     # timer running with no session to log it.
@@ -253,28 +272,20 @@ def start_live(topic: str, minutes: int, start_at: datetime,
 
         uid = cal.create_event(topic, start_at, planned_end)
     except Exception as e:
+        # The pending state goes away, so the pill quits and no ghost
+        # session waits for a check() that can never end it.
+        STATE.unlink(missing_ok=True)
         log.error("session tracking failed after the timer started: %s",
                   e, exc_info=True)
         notify(f"{topic} timer is running, but session logging failed — "
                "see the log")
         raise
 
-    STATE.parent.mkdir(parents=True, exist_ok=True)
     STATE.write_text(json.dumps({
-        "topic": topic,
-        "focus": focus,
-        "start": start_at.isoformat(),
-        "planned_end": planned_end.isoformat(),
-        "minutes": minutes,
-        "timer_id": timer_id,
-        "event_uid": uid,
-        "source": "live",
+        **session, "timer_id": timer_id, "event_uid": uid,
     }, indent=2))
     log.info("session started: topic=%r minutes=%d timer_id=%s event_uid=%s",
              topic, minutes, timer_id, uid)
-    # A new session always shows its pill, even when the last one was hidden.
-    PILL_FLAG.unlink(missing_ok=True)
-    start_pill()
     notify(f"{topic} — timer running, ends {planned_end:%H:%M}")
 
 
@@ -738,7 +749,14 @@ def ask_open_session(s: dict) -> str:
     start_at = datetime.fromisoformat(s["start"])
     prompt = f"{s['topic']} is still open — {start_at:%H:%M}, {s['minutes']} min"
     pill = PILL_SHOW if PILL_FLAG.exists() else PILL_HIDE
-    choice = choose(prompt, ["End & log", "Keep it", "Discard", pill])
+    if s.get("pending"):
+        # The start still runs and writes the final state in a moment. An
+        # end or a discard here would leave a ghost, so the pill toggle is
+        # the only action. Return is Keep, so a stray press does no harm.
+        prompt = f"{s['topic']} is starting — {s['minutes']} min"
+        choice = choose(prompt, ["Keep it", pill])
+    else:
+        choice = choose(prompt, ["End & log", "Keep it", "Discard", pill])
     return {"End & log": "end", "Discard": "discard",
             PILL_HIDE: "pill", PILL_SHOW: "pill"}.get(choice, "keep")
 
@@ -754,22 +772,28 @@ def finish(s: dict, status: str, end_at: datetime, distraction) -> None:
                                  distraction, s.get("source", "live"),
                                  s.get("focus", ""))
 
-    if status == "cancelled":
+    # Show the toast first. The Calendar and the Obsidian calls below wait
+    # on other apps, and the user should not wait with them.
+    hours = round((end_at - start_at).total_seconds() / 3600, 2)
+    notify(f"{s['topic']} {status} — {hours} h logged")
+
+    if status == "cancelled" and s.get("event_uid"):
+        marked = time.monotonic()
         try:
             result = cal.mark_cancelled(s["event_uid"], s["topic"])
             if result == "missing":
                 log.warning("calendar event %s not found", s["event_uid"])
         except Exception as e:
             log.warning("mark_cancelled failed: %s", e)
+        log.info("calendar marked in %.1fs", time.monotonic() - marked)
 
+    opened = time.monotonic()
     try:
         subprocess.run(["open", note.adv_uri(path, body)], check=True)
     except Exception as e:
         log.warning("failed to open note: %s", e)
-
-    hours = round((end_at - start_at).total_seconds() / 3600, 2)
-    log.info("session %s: topic=%r hours=%s", status, s["topic"], hours)
-    notify(f"{s['topic']} {status} — {hours} h logged")
+    log.info("session %s: topic=%r hours=%s note_open=%.1fs",
+             status, s["topic"], hours, time.monotonic() - opened)
 
 
 def reset() -> str:
@@ -817,6 +841,15 @@ def check() -> None:
 
     try:
         s = json.loads(claimed.read_text())
+        if s.get("pending"):
+            # The start still waits for the timer. Nothing to judge yet.
+            # The start may have written the final state while this claim
+            # stood, and that state must win over the pending one.
+            if STATE.exists():
+                claimed.unlink()
+            else:
+                claimed.rename(STATE)
+            return
         planned_end = datetime.fromisoformat(s["planned_end"])
         now = datetime.now()
 
@@ -832,7 +865,15 @@ def check() -> None:
             claimed.rename(STATE)
             return
 
+        # The times here show where a slow end spends its seconds.
+        fired = timer["fired_date"] if timer else None
+        log.info("check: status=%s fired=%s wait_before_score=%.1fs",
+                 status, fired, (datetime.now() - fired).total_seconds()
+                 if fired else -1)
+        asked = time.monotonic()
         distraction = ask_distraction(s["topic"]) if status == "completed" else None
+        log.info("check: score=%s answered_in=%.1fs",
+                 distraction, time.monotonic() - asked)
     except Exception:
         # Something failed mid-way, before any side effect ran. Put the
         # state file back so the next minute's check() retries.
