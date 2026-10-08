@@ -347,8 +347,13 @@ def _timer(id, minutes, state=3):
 
 
 def _names(calls):
-    """Return the shortcut names of the open calls, in order."""
-    return [c.split("?name=")[1].split("&")[0] for c in calls]
+    """Return start or stop for each timer call, in order."""
+    return ["stop" if c.endswith("stop_timer.applescript")
+            else c.split("?name=")[1].split("&")[0] if "?name=" in c
+            else "other" for c in calls]
+
+
+START = "Start%20Study%20Timer"
 
 
 def test_a_running_timer_of_the_same_length_is_stale():
@@ -376,8 +381,13 @@ def _timer_world(monkeypatch, loads):
     monkeypatch.setattr(punch.time, "sleep", lambda s: None)
     monkeypatch.setattr(punch.timers, "load",
                         lambda: loads.pop(0) if len(loads) > 1 else loads[0])
-    monkeypatch.setattr(punch.subprocess, "run",
-                        lambda args, **k: calls.append(args[1]))
+    from types import SimpleNamespace
+
+    def fake_run(args, **k):
+        calls.append(args[1])
+        return SimpleNamespace(returncode=0, stdout="stopped\n", stderr="")
+
+    monkeypatch.setattr(punch.subprocess, "run", fake_run)
     monkeypatch.setattr(punch, "START_TRIES", 2)
     monkeypatch.setattr(punch, "STOP_TRIES", 2)
     return calls
@@ -394,7 +404,7 @@ def test_the_restart_stops_the_stale_timer_before_the_start(monkeypatch):
         [_timer("A", 25)],            # start: back with the same id
     ])
     assert punch.restart_timer(25) == "A"
-    assert _names(calls) == ["Stop%20Study%20Timer", "Start%20Study%20Timer"]
+    assert _names(calls) == ["stop", START]
 
 
 def test_a_restart_that_cannot_stop_the_timer_gives_no_id(monkeypatch):
@@ -429,13 +439,13 @@ def test_the_start_clears_a_stale_timer_first(monkeypatch, tmp_path):
         [_timer("A", 25, state=1)],   # snapshot
         [_timer("A", 25)],            # started
     ])
-    assert _names(calls) == ["Stop%20Study%20Timer", "Start%20Study%20Timer"]
+    assert _names(calls) == ["stop", START]
     assert json.loads(punch.STATE.read_text())["timer_id"] == "A"
 
 
 def test_a_start_with_no_stale_timer_only_starts(monkeypatch, tmp_path):
     calls = _live_start(monkeypatch, tmp_path, [[], [], [_timer("A", 25)]])
-    assert _names(calls) == ["Start%20Study%20Timer"]
+    assert _names(calls) == [START]
 
 
 def test_a_missing_timer_offers_a_reset_that_retries(monkeypatch, tmp_path):
@@ -450,8 +460,8 @@ def test_a_missing_timer_offers_a_reset_that_retries(monkeypatch, tmp_path):
         [_timer("A", 25, state=1)],   # snapshot
         [_timer("A", 25)],            # started
     ], reset_choice=punch.TIMER_RESET)
-    assert _names(calls) == ["Start%20Study%20Timer", "Stop%20Study%20Timer",
-                             "Start%20Study%20Timer"]
+    assert _names(calls) == [START, "stop",
+                             START]
     assert json.loads(punch.STATE.read_text())["timer_id"] == "A"
 
 
@@ -476,7 +486,7 @@ def test_a_discard_stops_a_running_timer(monkeypatch, tmp_path):
     monkeypatch.setattr(punch, "open_state", lambda: (state, s))
     monkeypatch.setattr(punch, "ask_open_session", lambda s: "discard")
     assert punch.reset() == "discard"
-    assert _names(calls) == ["Stop%20Study%20Timer"]
+    assert _names(calls) == ["stop"]
 
 
 def test_a_fired_timer_is_left_alone(monkeypatch):
@@ -498,4 +508,4 @@ def test_a_cancel_stops_the_timer_before_the_note(monkeypatch):
     s = {"topic": "Go", "timer_id": "A", "event_uid": "U",
          "start": "2026-08-07T14:30:00"}
     punch.finish(s, "cancelled", datetime(2026, 8, 7, 14, 40), None)
-    assert calls[0].startswith("shortcuts://run-shortcut?name=Stop")
+    assert _names(calls)[0] == "stop"

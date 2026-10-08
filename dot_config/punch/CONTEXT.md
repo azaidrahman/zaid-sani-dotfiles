@@ -64,7 +64,9 @@ _Avoid_: dialog, popup, overlay, panel
 A Clock.app timer that still runs after its session closed. Clock.app keeps
 one timer per length, so a stale timer blocks the next start of the same
 length. The close stops its timer, and the start stops a stale timer before
-it starts a new one.
+it starts a new one. The stop clicks Cancel in the window of Clock.app,
+because Shortcuts on the Mac has no action for it and the timer daemon only
+talks to Apple's own apps. Clock.app comes to the front for a moment.
 _Avoid_: ghost timer, orphan timer, leftover timer
 
 **Pill**:

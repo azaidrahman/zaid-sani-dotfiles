@@ -24,8 +24,10 @@ STATE = Path.home() / ".local/state/punch.json"
 # at both files.
 CLAIM = STATE.with_suffix(".ending.json")
 SHORTCUT = "Start Study Timer"
-# One Clock action: Cancel Timer. It stops the most recent timer.
-STOP_SHORTCUT = "Stop Study Timer"
+# Shortcuts on the Mac has no Cancel Timer action, and the timer daemon
+# only talks to Apple's own apps. The stop script clicks Cancel in the
+# Timers tab of Clock.app, so Clock comes to the front for a moment.
+STOP_SCRIPT = Path(__file__).with_name("stop_timer.applescript")
 # Seconds that the start waits for the Clock.app plist, and that a stop
 # waits for the timer to leave it.
 START_TRIES = 20
@@ -141,9 +143,17 @@ def _start_timer(minutes: int) -> None:
 
 
 def _stop_timer() -> None:
-    """Cancel the most recent Clock.app timer. The Clock action takes no
-    timer id, so the caller checks that the recent one is the right one."""
-    _run_shortcut(STOP_SHORTCUT)
+    """Cancel the running Clock.app timer through its window.
+
+    The script stops the one timer that runs. It takes no timer id, so
+    the caller checks that the running one is the right one.
+    """
+    r = subprocess.run(["osascript", str(STOP_SCRIPT)],
+                       capture_output=True, text=True, timeout=30)
+    if r.returncode != 0:
+        raise RuntimeError(f"the stop script failed: {r.stderr.strip()}")
+    if r.stdout.strip() != "stopped":
+        log.warning("the stop script found no running timer")
 
 
 def stale_timer(minutes: int, found: list[dict]):
