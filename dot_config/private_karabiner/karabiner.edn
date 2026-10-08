@@ -45,7 +45,7 @@
 
 ;; BEGIN HELP-TEXT (auto-generated from config/help-text.yaml)
  :tos {:show-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
-                              :text "w:WA, W:messages, e:obsidian, r:arc(work), R:arc(not work), t:ghostty, y:sioyek, i:IINA, I:ytmusic, o:orb, p:gchat, s:slack, d:t3code, f:cal, F:alfred, g:iPhone, G:safari, h:arc(research), j:jira, k:KM, l:gmail, x:mixlet, c:switch, v:chrome, b:telegram, n:ino, m:spotify"}}
+                              :text "w:WA, W:messages, e:obsidian, r:arc(work), R:arc(not work), t:ghostty, y:sioyek, i:IINA, I:ytmusic, o:orb, p:gchat, s:slack, d:t3code, f:cal, F:alfred, g:iPhone, G:safari, h:arc(research), j:jira, k:KM, l:gmail(gmd), x:mixlet, c:switch, v:chrome, b:telegram, n:ino, m:spotify"}}
        :clear-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
                                :text ""}}
        :show-ws-help {:noti {:id "org.pqrs.notificaion_message_workspace"
@@ -126,7 +126,7 @@
     [:y [:open "Sioyek"]                  :app-launch]
     [:i [:open "IINA"]                    :app-launch]
     [:o [:open "Orbstack"]                :app-launch]
-    [:p [:open "Google Chat"]             :app-launch]
+    [:p "$HOME/.config/karabiner/scripts/arc-tab.sh Work GCHAT":app-launch]
     [:s [:open "Slack"]                   :app-launch]
     [:d "$HOME/.config/karabiner/scripts/launch-t3code.sh":app-launch]
     [:f [:open "Calendar"]                :app-launch]
@@ -134,7 +134,7 @@
     [:h "$HOME/.config/karabiner/scripts/arc-space.sh Research":app-launch]
     [:j [:open "Jira"]                    :app-launch]
     [:k [:open "Keyboard Maestro"]        :app-launch]
-    [:l [:open "Gmail Work"]              :app-launch]
+    [:l "$HOME/.config/karabiner/scripts/arc-tab.sh Work 'GMAIL GMD'":app-launch]
     [:x [:open "Mixlet"]                  :app-launch]
     [:c :!Cgrave_accent_and_tilde         :app-launch]
     [:v [:open "Google Chrome"]           :app-launch]

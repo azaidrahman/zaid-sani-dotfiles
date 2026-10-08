@@ -9,7 +9,7 @@ app	⌥R	i	IINA	IINA
 app	⌥R	⇧i	ytmusic	Youtube Music
 app	⌥R	j	jira	Jira
 app	⌥R	o	orb	Orbstack
-app	⌥R	p	gchat	Google Chat
+app	⌥R	p	gchat	sh:$HOME/.config/karabiner/scripts/arc-tab.sh Work GCHAT
 app	⌥R	s	slack	Slack
 app	⌥R	f	cal	Calendar
 app	⌥R	⇧f	alfred	Alfred Preferences
@@ -17,7 +17,7 @@ app	⌥R	g	iPhone	iPhone Mirroring
 app	⌥R	⇧g	safari	Safari
 app	⌥R	h	arc(research)	sh:$HOME/.config/karabiner/scripts/arc-space.sh Research
 app	⌥R	k	KM	Keyboard Maestro
-app	⌥R	l	gmail	Gmail Work
+app	⌥R	l	gmail(gmd)	sh:$HOME/.config/karabiner/scripts/arc-tab.sh Work 'GMAIL GMD'
 app	⌥R	c	switch	!Cgrave_accent_and_tilde
 app	⌥R	v	chrome	Google Chrome
 app	⌥R	b	telegram	Telegram
