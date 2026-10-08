@@ -164,4 +164,19 @@ refused "a newline in the key" $'GTI-5\nGTI-6' "$TMP/brief.md"
 refused "an escape in the key" $'GTI-5\033[A' "$TMP/brief.md"
 refused "a control character in the brief path" GTI-5 "$CTL_BRIEF"
 
+# The script makes the brief path absolute from the current directory. A
+# relative path with no control character can thus get one from the name of
+# the current directory. The check must look at the path that is typed.
+CTL_DIR="$TMP/dir"$'\003'"x"
+mkdir -p "$CTL_DIR"
+echo brief >"$CTL_DIR/brief.md"
+# Run from that directory in a subshell, so the cd does not last.
+wins=$(T list-windows -t t | wc -l | tr -d ' ')
+calls_before=$(calls)
+(cd "$CTL_DIR" && run GTI-5 "$TMP/wt" brief.md "label" >/dev/null 2>&1)
+rc=$?
+check "a relative brief path in a directory with a control character: exit 2" "2" "$rc"
+check "a relative brief path in a directory with a control character: no window" "$wins" "$(T list-windows -t t | wc -l | tr -d ' ')"
+check "a relative brief path in a directory with a control character: claude does not start" "$calls_before" "$(calls)"
+
 exit "$fail"

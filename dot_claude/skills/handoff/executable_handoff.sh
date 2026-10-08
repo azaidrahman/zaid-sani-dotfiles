@@ -21,6 +21,11 @@ command -v tmux >/dev/null || { echo "no-tmux"; exit 3; }
 
 DIR=$(cd "$DIR" && pwd)
 BRIEF=$(cd "$(dirname "$BRIEF")" && pwd)/$(basename "$BRIEF")
+# Check again: the absolute path takes the name of the current directory, and
+# that name can hold a control character that the relative path did not.
+case "$BRIEF" in
+  *[[:cntrl:]]*) echo "control character in the absolute brief path" >&2; exit 2 ;;
+esac
 LABEL=$(printf '%s' "$LABEL" | tr -c 'A-Za-z0-9 ._-' '-' | cut -c1-25)
 
 # Reuse a window that already carries this key. This script tags each window
