@@ -244,9 +244,58 @@ def test_the_moodist_prompt_comes_before_the_timer(monkeypatch):
     answers = iter(["Go", "25", datetime.now()])
     monkeypatch.setattr(punch, "open_state", lambda: None)
     monkeypatch.setattr(punch, "ask_topic", lambda *a: next(answers))
+    monkeypatch.setattr(punch, "ask_focus", lambda *a: "")
     monkeypatch.setattr(punch, "ask_minutes", lambda *a: next(answers))
     monkeypatch.setattr(punch, "ask_start", lambda *a: next(answers))
     monkeypatch.setattr(punch, "offer_moodist", lambda: calls.append("moodist"))
     monkeypatch.setattr(punch, "start_live", lambda *a: calls.append("timer"))
     punch.start_interactive()
     assert calls == ["moodist", "timer"]
+
+
+def test_the_focus_reaches_the_live_start(monkeypatch):
+    import punch
+    from datetime import datetime
+    seen = []
+    answers = iter(["Go", "Fix the parser", "25", datetime.now()])
+    monkeypatch.setattr(punch, "open_state", lambda: None)
+    monkeypatch.setattr(punch, "ask_topic", lambda *a: next(answers))
+    monkeypatch.setattr(punch, "ask_focus", lambda *a: next(answers))
+    monkeypatch.setattr(punch, "ask_minutes", lambda *a: next(answers))
+    monkeypatch.setattr(punch, "ask_start", lambda *a: next(answers))
+    monkeypatch.setattr(punch, "offer_moodist", lambda: None)
+    monkeypatch.setattr(punch, "start_live",
+                        lambda topic, m, start_at, focus: seen.append(focus))
+    punch.start_interactive()
+    assert seen == ["Fix the parser"]
+
+
+def test_the_focus_step_has_its_own_number():
+    assert step_label(2, ["Go"]) == f"Step 2 of {STEPS} · Go"
+
+
+def test_the_pill_toggle_is_the_option_for_the_open_session(monkeypatch, tmp_path):
+    import punch
+    shown = []
+
+    def fake_choose(prompt, options, *a, **k):
+        shown.append(options)
+        return punch.PILL_HIDE
+
+    monkeypatch.setattr(punch, "PILL_FLAG", tmp_path / "punch-pill.hidden")
+    monkeypatch.setattr(punch, "choose", fake_choose)
+    s = {"topic": "Go", "start": "2026-08-07T14:30:00", "minutes": 25}
+    assert punch.ask_open_session(s) == "pill"
+    assert shown[0][-1] == punch.PILL_HIDE
+
+
+def test_the_pill_toggle_keeps_the_session_open(monkeypatch):
+    import punch
+    toggled = []
+    monkeypatch.setattr(punch, "open_state",
+                        lambda: (punch.STATE, {"topic": "Go", "start": "2026-08-07T14:30:00",
+                                               "minutes": 25}))
+    monkeypatch.setattr(punch, "ask_open_session", lambda s: "pill")
+    monkeypatch.setattr(punch, "toggle_pill", lambda: toggled.append(True))
+    assert punch.reset() == "keep"
+    assert toggled == [True]
