@@ -57,7 +57,8 @@ wait_for() { # file pattern
 	done
 	return 1
 }
-window_by_name() { T list-windows -t t -F '#{window_id} #{window_name}' | awk -v n="$1" '$2 == n {print $1; exit}'; }
+window_by_name() { T list-windows -t t -F '#{window_id}|#{window_name}' | awk -F'|' -v n="$1" '$2 == n {print $1; exit}'; }
+calls() { wc -l <"$TMP/calls" 2>/dev/null | tr -d ' '; }
 
 # --- the window survives the exit of claude -----------------------------------
 # The brief path holds a quote and a command substitution. The typed command
@@ -65,11 +66,11 @@ window_by_name() { T list-windows -t t -F '#{window_id} #{window_name}' | awk -v
 BDIR="$TMP/it's \$(touch $TMP/pwned)"
 mkdir -p "$BDIR"
 echo brief >"$BDIR/GTI-1.md"
-out=$(run GTI-1 "$TMP/wt" "$BDIR/GTI-1.md" "GTI-1-keep")
-check "first run creates the window" "window: created GTI-1-keep" "$out"
+out=$(run GTI-1 "$TMP/wt" "$BDIR/GTI-1.md" "GTI-1 keep")
+check "first run creates the window" "window: created GTI-1 keep" "$out"
 wait_for "$TMP/calls" "$BDIR/GTI-1.md" || echo "FAIL - fake claude did not start"
 sleep 0.3
-WIN=$(window_by_name GTI-1-keep)
+WIN=$(window_by_name "GTI-1 keep")
 check "window is still open after claude exits" "1" "$([ -n "$WIN" ] && echo 1 || echo 0)"
 check "a shell waits in the pane" "bash" "$(T display-message -p -t "$WIN" '#{pane_current_command}' 2>/dev/null)"
 # tmux reports the physical path, so compare with pwd -P.
@@ -80,9 +81,31 @@ check "claude gets the brief path as typed" \
 	"$(tail -n 1 "$TMP/calls" 2>/dev/null)"
 
 # --- a second run for the same key reuses the window --------------------------
-out=$(run GTI-1 "$TMP/wt" "$BDIR/GTI-1.md" "GTI-1-keep")
-check "second run reuses the window" "window: reused GTI-1-keep" "$out"
-check "no second window for the key" "1" "$(T list-windows -t t -F '#{window_name}' | grep -c 'GTI-1')"
-check "claude is not started again" "1" "$(wc -l <"$TMP/calls" | tr -d ' ')"
+out=$(run GTI-1 "$TMP/wt" "$BDIR/GTI-1.md" "GTI-1 keep")
+check "second run reuses the window" "window: reused GTI-1 keep" "$out"
+check "no second window for the key" "1" "$(T list-windows -t t -F '#{window_name}' | grep -c '^GTI-1 keep$')"
+check "claude is not started again" "1" "$(calls)"
+
+# --- the key is matched as plain text, and as a whole key ---------------------
+# A window of another key can hold the text of this key. It must not be reused.
+echo brief >"$TMP/brief.md"
+T new-window -d -t t: -n "GTI-45 other"
+before=$(calls)
+out=$(run GTI-4 "$TMP/wt" "$TMP/brief.md" "GTI-4 prefix")
+check "GTI-4 does not reuse the window of GTI-45" "window: created GTI-4 prefix" "$out"
+wait_for "$TMP/calls" "filed GTI-4." || echo "FAIL - fake claude did not start"
+check "claude starts for GTI-4" "$((before + 1))" "$(calls)"
+
+# A character of a regular expression in the key is only a character.
+T new-window -d -t t: -n "GTI-9 other"
+out=$(run 'GT.-9' "$TMP/wt" "$TMP/brief.md" "GT.-9 regex")
+check "a dot in the key does not match any character" "window: created GT.-9 regex" "$out"
+
+# A window that carries only the key is the window of that key.
+T new-window -d -t t: -n "GTI-7"
+before=$(calls)
+out=$(run GTI-7 "$TMP/wt" "$TMP/brief.md" "GTI-7 bare")
+check "a window named only with the key is reused" "window: reused GTI-7 bare" "$out"
+check "claude does not start for a reused bare window" "$before" "$(calls)"
 
 exit "$fail"

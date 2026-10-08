@@ -18,9 +18,13 @@ DIR=$(cd "$DIR" && pwd)
 BRIEF=$(cd "$(dirname "$BRIEF")" && pwd)/$(basename "$BRIEF")
 LABEL=$(printf '%s' "$LABEL" | tr -c 'A-Za-z0-9 ._-' '-' | cut -c1-25)
 
-# Reuse a window that already carries this key.
+# Reuse a window that already carries this key. The name of the window is the
+# key, or the key and a space and a label. Compare as plain text: a regular
+# expression would let GTI-1 match GTI-123, and would let a "." match any
+# character. ENVIRON keeps awk from changing a backslash in the key.
 EXISTING=$(tmux list-windows -F '#{window_id} #{window_name}' \
-           | awk -v k="$KEY" '$0 ~ k {print $1; exit}')
+           | KEY="$KEY" awk '{ name = substr($0, length($1) + 2)
+                               if (name == ENVIRON["KEY"] || index(name, ENVIRON["KEY"] " ") == 1) { print $1; exit } }')
 if [ -n "$EXISTING" ]; then
   tmux select-window -t "$EXISTING"
   echo "window: reused $LABEL"
