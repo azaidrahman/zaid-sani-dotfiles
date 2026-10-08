@@ -60,6 +60,13 @@ The Swift program that shows every prompt. It reads one key press. The user
 never needs the mouse.
 _Avoid_: dialog, popup, overlay, panel
 
+**Stale timer**:
+A Clock.app timer that still runs after its session closed. Clock.app keeps
+one timer per length, so a stale timer blocks the next start of the same
+length. The close stops its timer, and the start stops a stale timer before
+it starts a new one.
+_Avoid_: ghost timer, orphan timer, leftover timer
+
 **Pill**:
 A small floating window. It shows the focus of the live session, or the
 topic, and the time left in the timebox. The user hides it or shows it from
