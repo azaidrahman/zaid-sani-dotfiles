@@ -16,7 +16,7 @@ app:
   - I | ytmusic | Youtube Music
   - j | jira | Jira
   - o | orb | Orbstack
-  - p | gchat | Google Chat
+  - p | gchat | sh:$HOME/.config/karabiner/scripts/arc-tab.sh Work GCHAT
   - s | slack | Slack
   - f | cal | Calendar
   - F | alfred | Alfred Preferences
@@ -24,7 +24,7 @@ app:
   - G | safari | Safari
   - h | arc(research) | sh:$HOME/.config/karabiner/scripts/arc-space.sh Research
   - k | KM | Keyboard Maestro
-  - l | gmail | Gmail Work
+  - l | gmail(gmd) | sh:$HOME/.config/karabiner/scripts/arc-tab.sh Work 'GMAIL GMD'
   - c | switch | !Cgrave_accent_and_tilde
   - v | chrome | Google Chrome
   - b | telegram | Telegram
