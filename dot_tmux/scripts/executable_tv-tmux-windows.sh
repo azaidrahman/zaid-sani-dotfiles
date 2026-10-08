@@ -4,19 +4,20 @@
 # (no `display` template) so ANSI survives.
 #
 # Per-line format (columns padded with spaces and separated by " │ "):
-#   ●  <session> │ <idx> │ <window_name> │ <last Claude output>
+#   ●  <session> │ <idx> │ <window_name> │ <last agent output>
 #
 # The channel gets the tmux target from the first two columns with
 # `strip_ansi|split:│:N|trim`, so `│` must not appear in a column. The last
-# column is present only for a window that runs Claude.
+# column is present only for a window that runs an agent.
 #
 # State comes directly from ~/.claude/sessions/<pid>.json (written by Claude
 # Code), matched to tmux windows by walking each session's process ancestry.
-# No hooks or tmux window-options needed for state.
+# Codex uses a shared daemon. Read each live client's pane for its state and
+# output, because the daemon's process ancestry does not identify the pane.
 #
-# The last output is the most recent text or tool call of the assistant in the
-# transcript of the session. It is cached by the mtime and size of the
-# transcript, because tv runs this script every second.
+# For Claude, read the last assistant text or tool call from the transcript.
+# Cache it by the transcript's modification time and size. Read Codex output
+# from the pane, because tv runs this script every second.
 #
 # The first argument selects which group of windows to emit:
 #   active  (default)  windows of a normal session that is not held
@@ -37,27 +38,26 @@ PROJECTS_DIR="${CLAUDE_PROJECTS_DIR:-$HOME/.claude/projects}"
 # under the home directory, not in a shared temporary directory.
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tv-tmux-windows"
 
-# --- Build window_id → claude_status map from live JSON session files --------
+# --- Build the state map for each window ------------------------------------
 # Walks each session pid up the process tree until it hits a known tmux pane,
 # then records the window. Most-urgent status wins per window. If two panes
-# have the same status, the one whose status changed last wins, so the last
-# output shows the newest activity.
+# have the same status, prefer the latest Claude timestamp. Codex has no
+# timestamp in its display, so use zero for its timestamp.
 #
-# tv runs this script every second, and a process start costs about 5 ms. So
-# one jq call reads all session files, and one awk call does the rest. The
-# script starts the same number of processes for 1 session or for 200.
+# Read Claude files in one batch. Capture only panes with a live Codex client.
 
 state_file=$(mktemp)
 preview_file=$(mktemp)
-# One line per Claude pane, with its window ID. Used to count the panes.
+# One line per agent pane, with its window ID. Used to count the panes.
 pane_file=$(mktemp)
 panes_file=$(mktemp)
 ps_file=$(mktemp)
 sessions_file=$(mktemp)
-trap 'rm -f "$state_file" "$preview_file" "$pane_file" "$panes_file" "$ps_file" "$sessions_file"' EXIT
+codex_file=$(mktemp)
+trap 'rm -f "$state_file" "$preview_file" "$pane_file" "$panes_file" "$ps_file" "$sessions_file" "$codex_file"' EXIT
 
-tmux list-panes -a -F '#{pane_pid}	#{window_id}' > "$panes_file" 2>/dev/null
-ps -eo pid=,ppid= > "$ps_file" 2>/dev/null
+tmux list-panes -a -F '#{pane_pid}	#{window_id}	#{pane_id}' > "$panes_file" 2>/dev/null
+ps -eo pid=,ppid=,comm= > "$ps_file" 2>/dev/null
 
 # waitingFor says why a `waiting` session needs you, for example
 # "input needed" or the name of a permission dialog.
@@ -76,7 +76,55 @@ if [ -e "${session_files[0]}" ]; then
         | jq -rR "fromjson? | $SESSION_JQ" > "$sessions_file" 2>/dev/null
 fi
 
-awk -v PANES="$panes_file" -v PS="$ps_file" -v SF="$state_file" -v CF="$pane_file" '
+# Find Codex clients through their pane shells. Exclude the shared daemon,
+# which has no pane ancestor. Record each pane once.
+awk -v PANES="$panes_file" '
+    BEGIN {
+        while ((getline l < PANES) > 0) { split(l, p, "\t"); pane[p[1]] = p[3] }
+    }
+    { parent[$1] = $2; if ($0 ~ /(^|[ \/])codex$/) clients[$1] = 1 }
+    END {
+        for (pid in clients) {
+            cur = pid
+            for (depth = 0; cur > 1 && depth < 30; depth++) {
+                if (cur in pane) {
+                    if (!(cur in seen)) print pid "\t" pane[cur]
+                    seen[cur] = 1
+                    break
+                }
+                cur = parent[cur]
+            }
+        }
+    }
+' "$ps_file" > "$codex_file"
+
+while IFS=$'\t' read -r pid pane; do
+    tmux capture-pane -p -t "$pane" -S -100 2>/dev/null | awk -v PID="$pid" '
+        # A progress line is not assistant output. Keep the last output block.
+        /^[[:space:]]*• .*\(.*esc to interrupt\)/ { working = NR; block = 0; next }
+        /^• / { out = $0; sub(/^• /, "", out); latest = NR; block = 1; next }
+        block && /^  [[:alnum:]]/ { out = out " " $0; next }
+        { block = 0 }
+        /^[[:space:]]*› [0-9]+\./ { choice = NR }
+        /Would you like to run the following command/ { approval = NR }
+        /[Pp]ress enter to confirm|[Ee]nter to submit/ { confirm = NR }
+        END {
+            state = working > latest ? "busy" : "idle"
+            reason = ""
+            if (choice > latest && confirm > choice) {
+                state = "waiting"
+                reason = approval > latest ? "approval needed" : "input needed"
+            }
+            gsub(/\*\*|__|`/, "", out)
+            gsub(/[[:space:]│[:cntrl:]]+/, " ", out)
+            sub(/^ +/, "", out); sub(/ +$/, "", out)
+            # This marker cannot be a Claude session ID.
+            if (NR) printf "%s\t%s\t@codex\t-\t0\t%s\t%s\n", PID, state, reason, substr(out, 1, 120)
+        }
+    ' >> "$sessions_file"
+done < "$codex_file"
+
+awk -v PANES="$panes_file" -v PS="$ps_file" -v SF="$state_file" -v CF="$pane_file" -v PF="$preview_file" '
     # Higher number = more urgent. The most urgent session wins the window.
     function rank(s) { return s == "waiting" ? 3 : s == "busy" ? 2 : s == "idle" ? 1 : 0 }
     BEGIN {
@@ -98,13 +146,19 @@ awk -v PANES="$panes_file" -v PS="$ps_file" -v SF="$state_file" -v CF="$pane_fil
                 if (!(wid in best) || r > best[wid] || (r == best[wid] && $5 + 0 > bchg[wid] + 0)) {
                     best[wid] = r; bchg[wid] = $5 + 0
                     row[wid] = wid "\t" $2 "\t" r "\t" $3 "\t" $4 "\t" $5 "\t" $6
+                    preview[wid] = $7
                 }
                 break
             }
             cur = parent[cur]
         }
     }
-    END { for (w in row) print row[w] > SF }
+    END {
+        for (w in row) {
+            print row[w] > SF
+            if (preview[w] != "") print w "\t" preview[w] > PF
+        }
+    }
 ' "$sessions_file"
 
 # --- Last output of the Claude session that won each window -----------------
@@ -264,7 +318,7 @@ tmux list-windows -a -F '#{window_stack_index}	#{session_last_attached}	#{sessio
         # The dot is always printed: the channel splits the first column on it.
         nrows++
         # The list shows the windows that need you first: waiting (red), then
-        # idle (green), then busy (blue), then windows without Claude.
+        # idle (green), then busy (blue), then windows without an agent.
         if      (col == RED) r_rank[nrows] = 0
         else if (col == GRN) r_rank[nrows] = 1
         else if (col == BLU) r_rank[nrows] = 2
@@ -294,11 +348,11 @@ tmux list-windows -a -F '#{window_stack_index}	#{session_last_attached}	#{sessio
           line = r_dot[i] "  " sess_color(r_sess[i]) pad(r_sess[i], wsess) RST \
                  SEP IDX pad(r_idx[i], widx) RST \
                  SEP BLD pad(r_name[i], wname_w) RST
-          # If the window has more than one Claude pane, show the count. The
+          # If the window has more than one agent pane, show the count. The
           # last output then comes from the pane that won the window.
           if (r_count[i] > 1) cnt = GRY r_count[i] "×" RST " "
           else                cnt = ""
-          # If Claude waits for you, say why before the last output.
+          # If the agent waits for you, show the reason before the last output.
           if (r_wait[i] != "") wait = RED "◆ " r_wait[i] RST GRY " · " RST
           else                 wait = ""
           if (cnt != "" || wait != "" || r_prev[i] != "") line = line SEP cnt wait PRV r_prev[i] RST
