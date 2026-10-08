@@ -28,7 +28,14 @@ if [ -n "$EXISTING" ]; then
 fi
 
 PROMPT="Read $BRIEF — it is your handoff brief from the session that filed $KEY. Follow its Next step."
-WIN=$(tmux new-window -P -F '#{window_id}' -c "$DIR" -n "$LABEL" \
-        claude "$PROMPT")
+
+# Open the window on the user's shell, then type the claude command into it.
+# If claude were the window command, the window would close when the user
+# leaves claude. With a shell under it, the window stays, in the worktree.
+# The prompt is typed into a shell, so quote it: close, escape, open.
+QUOTED=$(printf '%s' "$PROMPT" | sed "s/'/'\\\\''/g")
+WIN=$(tmux new-window -P -F '#{window_id}' -c "$DIR" -n "$LABEL")
 tmux select-pane -t "$WIN" -T "$LABEL"
+tmux send-keys -t "$WIN" -l "claude '$QUOTED'"
+tmux send-keys -t "$WIN" Enter
 echo "window: created $LABEL"

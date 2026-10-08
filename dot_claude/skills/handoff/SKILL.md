@@ -102,7 +102,7 @@ SH=~/.claude/skills/handoff/handoff.sh
 "$SH" "$KEY" "<worktree>" ~/.claude/handoffs/"$KEY".md "<KEY> <short label>"
 ```
 
-The script opens a tmux window rooted in the worktree and starts `claude` with a prompt that points at the brief. It selects an existing window instead if one already carries the key.
+The script opens a tmux window rooted in the worktree and starts `claude` with a prompt that points at the brief. It selects an existing window instead if one already carries the key. The window runs a shell under `claude`, so the window stays open in the worktree when the user leaves `claude`.
 
 | stdout / exit | Means | Do |
 |---|---|---|
