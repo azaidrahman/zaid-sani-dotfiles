@@ -35,10 +35,13 @@ fi
 # high-entropy blobs, etc. that the keyword list above can't know in advance.
 # `git --pre-commit --staged` scans the staged diff only (the modern replacement
 # for the deprecated `protect` subcommand, which no longer reads the index).
+# .gitleaks.toml adds rules for secrets that the default rules miss (Todoist
+# tokens, literal Bearer tokens, plist values).
 if command -v gitleaks >/dev/null 2>&1; then
-  if ! gitleaks git --pre-commit --staged --redact --no-banner . >/dev/null 2>&1; then
+  gitleaks_config="$(git rev-parse --show-toplevel)/.gitleaks.toml"
+  if ! gitleaks git --pre-commit --staged --redact --no-banner --config "$gitleaks_config" . >/dev/null 2>&1; then
     echo "pre-commit: gitleaks detected a potential secret in the staged diff:" >&2
-    gitleaks git --pre-commit --staged --redact --no-banner . 2>&1 | grep -iE 'finding|secret|rule|file|line|leaks found' >&2 || true
+    gitleaks git --pre-commit --staged --redact --no-banner --config "$gitleaks_config" . 2>&1 | grep -iE 'finding|secret|rule|file|line|leaks found' >&2 || true
     fail=1
   fi
 else

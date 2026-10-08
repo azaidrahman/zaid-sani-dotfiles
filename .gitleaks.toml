@@ -1,0 +1,35 @@
+# Extra gitleaks rules for this public repository.
+# The pre-commit hook in .githooks/pre-commit loads this file.
+# Chezmoi does not deploy this file, because its name starts with a dot.
+
+[extend]
+useDefault = true
+
+# The default rules do not find a Todoist API token. A Todoist token is a
+# plain 40-character hex string with no prefix.
+[[rules]]
+id = "todoist-api-token"
+description = "Todoist API token"
+regex = '''(?i)todoist.{0,40}?\b([0-9a-f]{40})\b'''
+secretGroup = 1
+keywords = ["todoist"]
+
+# The default rules do not find a token that is written directly after
+# "Bearer" in an Authorization header. A variable such as "Bearer $TOKEN"
+# does not match, because "$" is not in the character class.
+[[rules]]
+id = "bearer-token-literal"
+description = "Literal token in a Bearer Authorization header"
+regex = '''(?i)\bbearer\s+([A-Za-z0-9._~+/-]{20,}=*)'''
+secretGroup = 1
+keywords = ["bearer"]
+
+# A plist keeps the key and the value on different lines. The default rules
+# examine one line, so they do not find a secret in a plist. Alfred keeps the
+# settings of a workflow in prefs.plist.
+[[rules]]
+id = "plist-secret"
+description = "Secret value in a plist"
+regex = '''(?i)<key>[^<]*(?:token|api_?key|secret|password)[^<]*</key>\s*<string>([^<\s]{16,})</string>'''
+secretGroup = 1
+keywords = ["token", "apikey", "api_key", "secret", "password"]
