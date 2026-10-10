@@ -202,3 +202,28 @@ These shell functions control the context:
 - `ctx` shows the active context.
 - `ctx ls` lists all contexts.
 - `ctx cd` goes into `$CTX_DIR`.
+
+## Keep the test suite small
+
+Each test must earn its place. A test earns its place when it is the only
+test that fails for one defect. If two tests fail for the same defect, one of
+them is redundant.
+
+When you add a test, do these steps:
+
+1. Write the test for the new behavior.
+2. Read the tests that cover the same code, in the same package and in the
+   packages that call it.
+3. Remove each test that the new test makes redundant.
+4. Remove each old test that another old test makes redundant.
+5. Tell me which tests you removed and why.
+
+Apply these rules to the tests that remain:
+
+- Keep one test for one behavior. Do not keep a copy of the same check at a
+  second layer. If a store test shows that an upsert is idempotent, the API
+  test does not show it again.
+- Put cases that share one shape into one table test.
+- Do not test the language, the standard library, or a framework.
+- Do not keep a test only because it exists. An old test is not safer than
+  no test when another test already catches the same defect.
