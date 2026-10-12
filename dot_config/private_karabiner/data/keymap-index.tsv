@@ -6,7 +6,8 @@ app	⌥R	⇧r	arc(not work)	sh:$HOME/.config/karabiner/scripts/arc-space.sh Zaid
 app	⌥R	t	ghostty	Ghostty
 app	⌥R	y	sioyek	Sioyek
 app	⌥R	i	IINA	IINA
-app	⌥R	⇧i	ytmusic	Youtube Music
+app	⌥R	⇧i	ino	Inoreader
+app	⌥R	u	ytmusic	Youtube Music
 app	⌥R	j	jira	Jira
 app	⌥R	o	orb	Orbstack
 app	⌥R	p	gchat	sh:$HOME/.config/karabiner/scripts/arc-tab.sh Work GCHAT
@@ -21,7 +22,7 @@ app	⌥R	l	gmail(gmd)	sh:$HOME/.config/karabiner/scripts/arc-tab.sh Work 'GMAIL 
 app	⌥R	c	switch	!Cgrave_accent_and_tilde
 app	⌥R	v	chrome	Google Chrome
 app	⌥R	b	telegram	Telegram
-app	⌥R	n	ino	Inoreader
+app	⌥R	n	todoist	sh:$HOME/.config/karabiner/scripts/arc-float-tab.sh https://todoistenhanced.julesbertolino.fr
 app	⌥R	m	spotify	Spotify
 app	⌥R	x	mixlet	Mixlet
 app	⌥R	d	t3code	sh:$HOME/.config/karabiner/scripts/launch-t3code.sh

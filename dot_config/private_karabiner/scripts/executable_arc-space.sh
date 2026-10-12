@@ -18,7 +18,8 @@ on run argv
     set matches to {}
     repeat with i from 1 to (count of windows)
       try
-        if title of active space of window i is target then
+        -- Skip hidden windows. They cannot be raised, so they stop the cycle.
+        if (visible of window i) and (title of active space of window i is target) then
           set end of matches to i
         end if
       end try
@@ -33,10 +34,11 @@ on run argv
     end if
 
     -- Choose the next window to put in front.
-    if item 1 of matches is 1 then
+    if item 1 of matches is 1 and (count of matches) > 1 then
       -- The front window already shows the space. Go to the window that is
       -- furthest back, which makes repeated calls cycle through all of them.
-      if (count of matches) is 1 then return
+      -- With one match, raise that window anyway: a floating window from
+      -- another app can cover it.
       set pick to item (count of matches) of matches
     else
       set pick to item 1 of matches

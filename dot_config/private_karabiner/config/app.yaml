@@ -13,7 +13,8 @@ app:
   - t | ghostty | Ghostty
   - y | sioyek | Sioyek
   - i | IINA | IINA
-  - I | ytmusic | Youtube Music
+  - I | ino | Inoreader
+  - u | ytmusic | Youtube Music
   - j | jira | Jira
   - o | orb | Orbstack
   - p | gchat | sh:$HOME/.config/karabiner/scripts/arc-tab.sh Work GCHAT
@@ -28,7 +29,7 @@ app:
   - c | switch | !Cgrave_accent_and_tilde
   - v | chrome | Google Chrome
   - b | telegram | Telegram
-  - n | ino | Inoreader
+  - n | todoist | sh:$HOME/.config/karabiner/scripts/arc-float-tab.sh https://todoistenhanced.julesbertolino.fr
   - m | spotify | Spotify
   - x | mixlet | Mixlet
   - d | t3code | sh:$HOME/.config/karabiner/scripts/launch-t3code.sh
