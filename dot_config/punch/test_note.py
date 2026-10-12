@@ -1,12 +1,33 @@
 from datetime import datetime
-from note import build_note, adv_uri
+from note import build_note, adv_uri, stamp
 
 START = datetime(2026, 8, 7, 14, 30)
 END = datetime(2026, 8, 7, 15, 30)
 
-def test_the_path_holds_the_date_the_time_and_the_topic():
+def test_the_path_holds_the_date_the_day_the_time_and_the_topic():
     path, _ = build_note("Kubernetes", START, END, "completed", 3)
-    assert path == "5-Workbook/worklog/2026-08-07 1430 Kubernetes.md"
+    assert path == "5-Workbook/worklog/2026-08-07 FRI 2.30PM Kubernetes.md"
+
+def test_the_stamp_is_a_12_hour_time_with_no_leading_zero():
+    cases = [
+        (datetime(2026, 9, 22, 7, 57), "TUE 7.57AM"),
+        (datetime(2026, 9, 22, 12, 30), "TUE 12.30PM"),
+        (datetime(2026, 9, 22, 0, 5), "TUE 12.05AM"),
+    ]
+    for moment, text in cases:
+        assert stamp(moment) == text
+
+def test_the_date_leads_so_the_names_sort_by_day():
+    first, _ = build_note("Go", datetime(2026, 8, 7, 14, 0),
+                          datetime(2026, 8, 7, 15, 0), "completed", 1)
+    second, _ = build_note("Go", datetime(2026, 8, 8, 9, 0),
+                           datetime(2026, 8, 8, 10, 0), "completed", 1)
+    assert first < second
+
+def test_the_topic_is_the_fourth_field_of_the_name():
+    path, _ = build_note("Kubernetes Pod", START, END, "completed", 3)
+    stem = path.rsplit("/", 1)[1][: -len(".md")]
+    assert stem.split(" ", 3)[3] == "Kubernetes Pod"
 
 def test_the_note_holds_the_real_hours():
     _, body = build_note("Go", START, datetime(2026, 8, 7, 14, 42),
@@ -56,7 +77,10 @@ def test_a_note_without_a_focus_has_no_focus_field():
 if __name__ == "__main__":
     import traceback
     tests = [
-        test_the_path_holds_the_date_the_time_and_the_topic,
+        test_the_path_holds_the_date_the_day_the_time_and_the_topic,
+        test_the_stamp_is_a_12_hour_time_with_no_leading_zero,
+        test_the_date_leads_so_the_names_sort_by_day,
+        test_the_topic_is_the_fourth_field_of_the_name,
         test_the_note_holds_the_real_hours,
         test_a_cancelled_note_has_an_empty_distraction,
         test_the_note_holds_the_tag_and_the_times,

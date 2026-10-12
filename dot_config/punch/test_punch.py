@@ -1,6 +1,9 @@
+from datetime import datetime
+from pathlib import Path
+
 from punch import (parse_distraction, parse_score,
-                    parse_pick, advance, step_label,
-                    AWAY_DISTRACTION, BACK, STEPS)
+                   parse_pick, advance, step_label, note_start, topic_of,
+                   AWAY_DISTRACTION, BACK, STEPS)
 
 OPTIONS = ["Kubernetes", "Terraform", "Go"]
 
@@ -93,9 +96,45 @@ def test_a_word_gives_no_score():
     assert parse_distraction("button returned:OK, text returned:lots") is None
 
 
+def test_note_start_reads_the_day_and_the_12_hour_time():
+    assert note_start(Path("2026-08-07 FRI 2.30PM Go.md")) == \
+        datetime(2026, 8, 7, 14, 30)
+    assert note_start(Path("2026-08-07 FRI 9.00AM Go.md")) == \
+        datetime(2026, 8, 7, 9, 0)
+
+
+def test_note_start_orders_a_morning_before_an_afternoon():
+    # The raw names sort the other way, because 9 is above 2 as text.
+    names = [Path("2026-08-07 FRI 2.30PM Go.md"),
+             Path("2026-08-07 FRI 9.00AM Go.md")]
+    assert [p.stem for p in sorted(names, key=note_start)] == \
+        ["2026-08-07 FRI 9.00AM Go", "2026-08-07 FRI 2.30PM Go"]
+
+
+def test_note_start_puts_an_unreadable_name_first():
+    assert note_start(Path("Topics.md")) == datetime.min
+
+
+def test_topic_of_keeps_a_topic_that_has_spaces():
+    assert topic_of(Path("2026-08-07 FRI 2.30PM Kubernetes Pod.md")) == \
+        "Kubernetes Pod"
+    assert topic_of(Path("Topics.md")) is None
+
+
+def test_an_older_name_without_a_day_still_reads_its_start_and_topic():
+    old = Path("2026-10-12 1441 Kubernetes Pod.md")
+    assert note_start(old) == datetime(2026, 10, 12, 14, 41)
+    assert topic_of(old) == "Kubernetes Pod"
+
+
 if __name__ == "__main__":
     import traceback
     tests = [
+        test_note_start_reads_the_day_and_the_12_hour_time,
+        test_note_start_orders_a_morning_before_an_afternoon,
+        test_note_start_puts_an_unreadable_name_first,
+        test_topic_of_keeps_a_topic_that_has_spaces,
+        test_an_older_name_without_a_day_still_reads_its_start_and_topic,
         test_the_picked_item_is_read_by_its_index,
         test_a_cancelled_pick_gives_nothing,
         test_a_pick_that_timed_out_gives_nothing,

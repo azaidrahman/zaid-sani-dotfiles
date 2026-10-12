@@ -8,6 +8,11 @@ FOLDER = "5-Workbook/worklog"
 VAULT = "Polaris"
 
 
+def stamp(moment: datetime) -> str:
+    """Return the readable part of a session name, for example "MON 7.57AM"."""
+    return moment.strftime("%a %-I.%M%p").upper()
+
+
 def build_note(topic: str, start: datetime, end: datetime,
                status: str, distraction, source: str = "live",
                focus: str = "") -> tuple[str, str]:
@@ -18,7 +23,9 @@ def build_note(topic: str, start: datetime, end: datetime,
     the quotes keep a colon or a hash in the focus from breaking the field.
     """
     hours = round((end - start).total_seconds() / 3600, 2)
-    name = f"{start:%Y-%m-%d %H%M} {topic}.md"
+    # The date leads so the names sort by day. The day name and the clock
+    # time follow, so a person can read the time of the session at a glance.
+    name = f"{start:%Y-%m-%d} {stamp(start)} {topic}.md"
     focus_line = f"focus: {json.dumps(focus, ensure_ascii=False)}\n" if focus else ""
     body = (
         "---\n"

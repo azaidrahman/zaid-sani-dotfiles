@@ -244,26 +244,59 @@ def stop_session_timer(s: dict) -> None:
         log.warning("failed to stop the timer %s: %s", timer_id, e)
 
 
+def _read_name(path):
+    """Return the start and the topic of a session note name.
+
+    The name is "<date> <day> <time> <topic>". An older name has no day, and
+    its time is "HHMM": "<date> <HHMM> <topic>". The topic is None when the
+    name has none. The start is datetime.min when the name does not parse.
+    """
+    parts = path.stem.split(" ", 3)
+    if len(parts) > 1 and parts[1].isdigit():
+        parts = path.stem.split(" ", 2)
+        start_text, fmt = f"{parts[0]} {parts[1]}", "%Y-%m-%d %H%M"
+        topic = parts[2] if len(parts) > 2 else None
+    else:
+        start_text, fmt = " ".join(parts[:1] + parts[2:3]), "%Y-%m-%d %I.%M%p"
+        topic = parts[3] if len(parts) > 3 else None
+    try:
+        return datetime.strptime(start_text, fmt), topic
+    except ValueError:
+        return datetime.min, topic
+
+
+def topic_of(path):
+    """Return the topic in a session note name, or None if the name has none."""
+    return _read_name(path)[1]
+
+
+def note_start(path) -> datetime:
+    """Return the start of a session, read from its note name.
+
+    The clock time in the name is a 12-hour time, so the name does not sort
+    by time on its own. Sort on this value instead. A name that does not
+    parse goes first.
+    """
+    return _read_name(path)[0]
+
+
 def day_notes(day) -> list:
     """Return (topic, start, end) for each session note of the day."""
     out = []
-    for path in sorted(WORKLOG.glob(f"{day:%Y-%m-%d} *.md")):
+    for path in sorted(WORKLOG.glob(f"{day:%Y-%m-%d} *.md"), key=note_start):
         parsed = punchtime.parse_note(path.read_text(), day)
         if parsed is None:
             continue
-        parts = path.stem.split(" ", 2)
-        topic = parts[2] if len(parts) > 2 else path.stem
-        out.append((topic, *parsed))
+        out.append((topic_of(path) or path.stem, *parsed))
     return out
 
 
 def last_topic():
     """Return the topic of the newest session note, or None."""
-    files = sorted(WORKLOG.glob("2*.md"))
+    files = sorted(WORKLOG.glob("2*.md"), key=note_start)
     if not files:
         return None
-    parts = files[-1].stem.split(" ", 2)
-    return parts[2] if len(parts) > 2 else None
+    return topic_of(files[-1])
 
 
 def ask_time(minutes: int, step: str = ""):
