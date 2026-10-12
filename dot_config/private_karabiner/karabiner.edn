@@ -120,7 +120,7 @@
     ;; Unshifted shortcuts
     [:w [:open "Whatsapp"]                :app-launch]
     [:e [:open "Obsidian"]                :app-launch]
-    [:t [:open "Ghostty"]                 :app-launch]
+    [:t "$HOME/.config/karabiner/scripts/ghostty-window.sh":app-launch]
     [:y [:open "Sioyek"]                  :app-launch]
     [:u [:open "Youtube Music"]           :app-launch]
     [:i [:open "IINA"]                    :app-launch]

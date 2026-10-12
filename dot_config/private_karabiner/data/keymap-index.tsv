@@ -3,7 +3,7 @@ app	⌥R	⇧w	messages	Messages
 app	⌥R	e	obsidian	Obsidian
 app	⌥R	1	arc(work)	sh:$HOME/.config/karabiner/scripts/arc-space.sh Work
 app	⌥R	2	arc(zaid)	sh:$HOME/.config/karabiner/scripts/arc-space.sh Zaid
-app	⌥R	t	ghostty	Ghostty
+app	⌥R	t	ghostty	sh:$HOME/.config/karabiner/scripts/ghostty-window.sh
 app	⌥R	y	sioyek	Sioyek
 app	⌥R	i	IINA	IINA
 app	⌥R	⇧i	ino	Inoreader

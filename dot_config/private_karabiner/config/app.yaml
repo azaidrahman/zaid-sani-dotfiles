@@ -10,7 +10,7 @@ app:
   - e | obsidian | Obsidian
   - 1 | arc(work) | sh:$HOME/.config/karabiner/scripts/arc-space.sh Work
   - 2 | arc(zaid) | sh:$HOME/.config/karabiner/scripts/arc-space.sh Zaid
-  - t | ghostty | Ghostty
+  - t | ghostty | sh:$HOME/.config/karabiner/scripts/ghostty-window.sh
   - y | sioyek | Sioyek
   - i | IINA | IINA
   - I | ino | Inoreader
