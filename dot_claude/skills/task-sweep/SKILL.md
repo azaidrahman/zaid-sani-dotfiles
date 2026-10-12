@@ -1,221 +1,108 @@
 ---
 name: task-sweep
-description: Use when the user does not like the state of the board today - "my tasks are a mess", "clean up my tasks", "too much overdue", "sort out today", "what should I do today". Reads Jira and Todoist, then proposes one plan that re-decides the promoted set, catches drift between a ticket status and its workstream, and clears stale dates. The user approves once before any write.
+description: Use when the user wants a review of their Jira board - "my tickets are a mess", "too much overdue", "what should I focus on today", "sort out my tickets", "do I have duplicate tickets". Reads the open tickets assigned to the user, then reports overdue dates, status mismatches, possible duplicate tickets, and a short focus list. This skill does not write to Jira.
 ---
 
-# Tidy the board on demand
+# Review the Jira board on demand
 
-The board drifts in one direction. Dated work rolls past its date and goes red.
-A ticket changes status in Jira and stays in the wrong workstream. Todoist then
-shows noise instead of work.
+The board drifts over time. Due dates pass. Tickets stay In Progress after
+the work is done. Two tickets can describe the same work. This skill runs
+when the user asks for it. It is not scheduled, and it does not run on a
+branch event.
 
-This skill runs when the user asks for it. It is not scheduled, and it does not
-run on a branch event. The user looks at Today, dislikes it, and asks.
-
-**Read everything first. Write nothing until the user approves the plan.**
-
-## Two clocks
-
-The two systems measure different things. Keep them apart.
-
-| Clock | Meaning | This skill |
-|---|---|---|
-| Jira `duedate` | The commitment. Other people read it. | Leave it alone. |
-| Todoist due date | "I do this today." | Re-decide it each sweep. |
-
-A stale Jira date is a missed commitment. It needs a conversation, not a silent
-bump. Report it; do not change it.
-
-## How the board works
-
-Observed on 2026-09-15. `todoist-ticket-sync` describes the same board.
-
-`Work` is an empty parent project. Three sub-projects hold the tickets:
-`Infra Work`, `Team Requests`, and `Ops & Firefighting`. `Admin & Compliance`
-and `Learning` hold the rest.
-
-A top-level task is a **workstream**. Its subtasks are the tickets in that
-stream. Every ticket subtask carries the label `gti` and starts with the key.
-
-The board already runs a promotion convention. Follow it. Do not invent another.
-
-| State | Shape |
-|---|---|
-| Parked | The subtask sits at `p4` with no due date. This is most tickets. |
-| Promoted | The subtask carries a due date and `p2`. Use `p1` for a live break. |
-| A review anchor | The workstream parent carries a date and repeats weekly. |
-
-`Infra Work` has three sections. A workstream parent lives in one of them.
-
-- `Now` holds the stream with the earliest start date.
-- `Next` holds queued streams, in date order.
-- `Blocked` holds tickets that wait on another person.
-
-Most subtasks are parked. On 2026-09-15, 51 of 58 tasks in `Infra Work` were
-parked subtasks. That is correct, not a mess. Do not promote in bulk.
+**Read everything first. Report once. Write nothing.**
 
 ## Which tool to use
 
-Use the Todoist MCP tools (`mcp__todoist__*`) and the Atlassian MCP tools. If
-either set is absent, tell the user and stop. Do not fall back to a CLI.
+Use the Atlassian MCP tools to read Jira. If they are absent, tell the user
+and stop.
 
-If Todoist returns a token error, tell the user to run `/mcp` and stop.
+## The review
 
-`get-overview` on a large project overflows the result limit. Pass a
-`projectId` and read one project at a time.
+### 1. Read the open tickets
 
-## The sweep
+Read the open tickets that the user is assigned. Record for each ticket:
 
-Run steps 1 to 5 as read-only work. Then present the plan.
+- the key and the summary
+- the status
+- the due date, if there is one
+- the priority
+- the links to other tickets, with the link type
 
-### 1. Read both systems
+### 2. Find overdue tickets
 
-- Jira: the open tickets that the user is assigned. Record the key, the status,
-  and the due date.
-- Todoist: each project under `Work`, one at a time. Record the workstreams,
-  their sections, the subtasks, and which subtasks are promoted.
+A ticket is overdue when its due date is before today. Report each one with
+the number of days past the date.
 
-### 2. Reconcile status
+Do not change the due date. A missed due date is a missed commitment for
+other people. It needs a conversation, not a silent change.
 
-Compare each ticket key against its Todoist subtask.
+### 3. Find status mismatches
 
-- If the ticket is Done in Jira, propose to complete the subtask.
-- If the subtask is complete and the ticket is open, propose the Jira
-  transition. **First check for a branch that carries the key.** If a branch
-  exists, `finish-branch` owns that transition. Leave it, and say so.
-- If a ticket has no subtask, it is new since the last sync. Name it, and let
-  `todoist-ticket-sync` add it. Do not add it here.
+- If a ticket is Done and a local branch still carries its key, report it.
+  Say that `finish-branch` closes that branch.
+- If a ticket is In Progress and has no local branch that carries its key,
+  report it as a question. Do not assume it is wrong.
 
-### 3. Find drift
+### 4. Find redundant tickets
 
-A ticket drifts when its Jira status no longer matches its workstream.
+Compare the open tickets with each other. Report a pair in one of two ways.
 
-| Jira status | Belongs under |
-|---|---|
-| In Progress | The in-flight workstream in `Ops & Firefighting`. |
-| Blocked | The workstream for blocked work, in the `Blocked` section. |
-| A live break | The incident workstream in `Ops & Firefighting`. |
-| Anything else | Its build stream. Leave it. |
+- **Linked.** A link of type Duplicate joins the two tickets. Report it as
+  confirmed.
+- **Similar summary.** Lowercase both summaries. Remove the key and any area
+  prefix, such as `gke:`. Remove words of three letters or fewer. If the
+  shared words are at least 60% of the shorter summary, report the pair as
+  possible. Say that the check compares words only.
 
-Discover the workstreams at run time. Do not hardcode their names.
+For each pair, show both keys, both summaries, and the reason. Do not decide
+which ticket to keep. Do not link, close, or edit either ticket.
 
-If no workstream clearly fits, **leave the subtask alone**. List it under
-"needs a decision". Never guess a destination.
+### 5. Propose a focus list
 
-> To move a subtask, set `parentId` and nothing else. Do not set `sectionId` or
-> `projectId` on a subtask. Todoist reads either one as a move out of the
-> parent, and the subtask lands loose in the section with no `parentId`.
->
-> A new parent in another project takes the subtask with it. Todoist sets the
-> project for you, and it keeps the labels and the date. Verified on 2026-09-15:
-> GTI-756 moved from `Team Requests` to `Ops & Firefighting` on `parentId`
-> alone. Tell the user that the project changes, because the plan does not
-> otherwise show it.
->
-> To move a whole stream, move the **workstream parent** between `Now`, `Next`,
-> and `Blocked`. Its subtasks travel with it. Propose that as its own change.
+Pick the In Progress tickets that the user should work on today. Keep the
+list short. If the user passes a number, for example `/task-sweep 3`, use
+that number as the limit.
 
-### 4. Decide today
+The focus list is a suggestion. The skill does not change any ticket.
 
-This is the main work. Ask what the user must do today, then propose a small
-set.
+## The report
 
-- Promote each task in the set: a due date of today, and `p2`. Use `p1` for a
-  live break.
-- Demote a promoted task that the user is not working: clear the date, and
-  return it to `p4`. It stays in its workstream.
-- Leave a parked subtask parked unless the user names it.
-- The user may pass a cap, for example `/task-sweep 3`. Honour it.
-
-Handle an overdue review anchor separately. A workstream parent that repeats
-weekly is a review, not a task. Ask whether the review happened. If it did,
-complete the occurrence. Do not clear its date.
-
-Pick the date tool by what the task already has. Verified on 2026-09-15.
-
-| The task | The tool |
-|---|---|
-| Has a date. Move it. | `reschedule-tasks`. It keeps the repeat rule. |
-| Has no date. Give it one. | `update-tasks` with `dueString`. |
-
-`reschedule-tasks` fails on a task that has no date: "Rescheduling requires an
-existing due date". A parked subtask has no date, so promote it with
-`update-tasks`.
-
-**Never send `dueString` to a recurring task.** It replaces the whole due
-string and destroys the repeat rule. A review anchor repeats, so always move it
-with `reschedule-tasks`.
-
-One failed task fails the whole `reschedule-tasks` batch. Group the promotions
-that need `update-tasks` into their own call.
-
-### 5. Safety-net checks
-
-Run these quietly. Report a finding only when there is one.
-
-- A top-level task whose title starts with a key is a loose ticket. Propose a
-  workstream for it.
-- A loose Inbox task carrying `gti` belongs in a workstream. Propose one.
-- A personal task is not your business. Leave it, and do not list it.
-
-On 2026-09-15 all three checks were clean. Expect that. A finding here is the
-exception, so say so plainly when one appears.
-
-## The plan
-
-Present one plan, grouped by action. Show the count in each group. Omit an
-empty group.
+Present one report, grouped by finding. Show the count in each group. Omit
+an empty group.
 
 ```text
-Today (2)
-  GTI-756  promote: due today, p2
-  GTI-748  promote: due today, p2
+Overdue (2)
+  GTI-592  due 2026-07-30, 74 days past
 
-Demote (1)
-  GTI-754  clear date, back to p4
+Done with a branch (1)
+  GTI-701  Done in Jira. Branch feat/GTI-701-... still exists. Run finish-branch.
 
-Drift (1)
-  GTI-756  In Progress in Jira  ->  move under "Finish in-flight work"
+Check (1)
+  GTI-310  In Progress, no local branch carries the key. Still active?
 
-Review anchors (2)
-  Provisioning queue   due yesterday, repeats Monday. Did the review happen?
-  Waiting on others    due yesterday, repeats Monday. Did the review happen?
+Possible duplicates (1)
+  GTI-624  gke: template nodeSelector in platform-lib
+  GTI-626  gke: add nodeSelector support to platform-lib
+  Reason: similar summary. Confirm whether one replaces the other.
 
-Complete (1)
-  GTI-701  ticket is Done in Jira
-
-Needs a decision (1)
-  GTI-310  status "Scheduled Infra Development" fits no workstream
-
-Left alone
-  GTI-592  Jira due date 2026-07-30 is 47 days past. Renegotiate it.
+Focus today (3)
+  GTI-767  gke: stand up prd host and shared cluster
+  GTI-673  db: add Cloud SQL for GT Console prod
 ```
 
-Ask for approval with one `AskUserQuestion` call. Let the user veto single
-lines. Write only what the user accepts.
-
-## After the write
-
-Re-read both systems. Report what changed, not what you intended to change. If
-a write failed, say which one and why.
+Do not ask a question after the report. The user reads it and decides.
 
 ## Rules
 
-- Propose once. Do not ask a series of questions.
-- Never create a workstream. If none fits, say so and ask.
-- Never create a ticket subtask. `todoist-ticket-sync` owns that.
-- Never delete a task. Complete it or demote it.
-- Never edit a Jira description, and never add a Jira comment.
-- Never change a Jira due date. Report a stale one instead.
-- Do not move a ticket out of `Blocked` unless the blocker is gone.
-- Do not touch a personal task.
-- Keep the promoted set small. A long Today is the problem, not the fix.
-- A second run with no work between changes nothing. Keep the sweep idempotent.
-- If the user declines, do nothing, and do not ask again in this session.
+- Never write to Jira. Do not change a status, a due date, a description, a
+  comment, or a link.
+- Never change a local branch. `finish-branch` owns branch cleanup.
+- Never decide which duplicate to keep. Report the pair only.
+- Report once per run. Do not ask a series of questions.
+- Keep the focus list small. A long list is the problem, not the fix.
+- A second run with no change between runs gives the same report.
 
 ## Related
 
-- `todoist-ticket-sync` syncs one ticket when a branch starts or ends. This
-  skill sweeps the whole board on demand. Keep the two separate.
-- `finish-branch` owns the Jira transition for a branch.
-- `worklog` writes the day into the journal.
+- `finish-branch` closes a branch and moves its ticket to Done.

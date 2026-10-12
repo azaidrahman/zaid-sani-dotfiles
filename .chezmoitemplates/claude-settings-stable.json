@@ -1,198 +1,189 @@
 {
-  "env": {
-    "CLAUDE_CODE_ENABLE_AUTO_MODE": "1"
-  },
-  "permissions": {
-    "allow": [
-      "Read",
-      "Grep",
-      "Glob",
-      "Bash(rg *)",
-      "Bash(find *)",
-      "Bash(fd *)",
-      "Bash(grep *)",
-      "Bash(cat *)",
-      "Bash(head *)",
-      "Bash(tail *)",
-      "Bash(ls *)",
-      "WebSearch",
-      "WebFetch",
-      "Edit(~/**/.git/worktrees/*/CLAUDE_COMMIT_MSG)",
-      "Edit(~/**/.git/worktrees/*/CLAUDE_PR_MSG)"
-    ],
-    "defaultMode": "auto"
-  },
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/tag-pane-session.sh",
-            "timeout": 5
-          }
+    "env": {
+        "CLAUDE_CODE_ENABLE_AUTO_MODE": "1"
+    },
+    "permissions": {
+        "allow": [
+            "Read",
+            "Grep",
+            "Glob",
+            "Bash(rg *)",
+            "Bash(find *)",
+            "Bash(fd *)",
+            "Bash(grep *)",
+            "Bash(cat *)",
+            "Bash(head *)",
+            "Bash(tail *)",
+            "Bash(ls *)",
+            "WebSearch",
+            "WebFetch",
+            "Edit(~/**/.git/worktrees/*/CLAUDE_COMMIT_MSG)",
+            "Edit(~/**/.git/worktrees/*/CLAUDE_PR_MSG)",
+            "Bash(twg jira *)"
+        ],
+        "defaultMode": "auto"
+    },
+    "hooks": {
+        "SessionStart": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash ~/.claude/hooks/tag-pane-session.sh",
+                        "timeout": 5
+                    }
+                ]
+            }
+        ],
+        "PreToolUse": [
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash ~/.claude/hooks/allow-readonly.sh",
+                        "timeout": 5
+                    }
+                ]
+            },
+            {
+                "matcher": "*",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash ~/.claude/hooks/notify-tmux.sh working"
+                    }
+                ]
+            },
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "atuin hook claude-code"
+                    }
+                ]
+            }
+        ],
+        "Notification": [
+            {
+                "matcher": "permission_prompt",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash ~/.claude/hooks/notify-tmux.sh permission_prompt"
+                    }
+                ]
+            },
+            {
+                "matcher": "idle_prompt",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash ~/.claude/hooks/notify-tmux.sh idle_prompt"
+                    }
+                ]
+            }
+        ],
+        "Stop": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash ~/.claude/hooks/notify-tmux.sh stop"
+                    },
+                    {
+                        "type": "command",
+                        "command": "bash ~/.claude/hooks/tag-pane-session.sh",
+                        "timeout": 5
+                    },
+                    {
+                        "type": "command",
+                        "command": "bash ~/.claude/hooks/lesson-log.sh",
+                        "timeout": 30
+                    }
+                ]
+            }
+        ],
+        "PostToolUse": [
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "atuin hook claude-code"
+                    }
+                ]
+            },
+            {
+                "matcher": "AskUserQuestion",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash ~/.claude/hooks/lesson-log.sh",
+                        "timeout": 30
+                    }
+                ]
+            }
+        ],
+        "UserPromptSubmit": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash ~/.claude/hooks/notify-tmux.sh working"
+                    }
+                ]
+            }
+        ],
+        "SessionEnd": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash ~/.claude/hooks/tag-pane-session.sh",
+                        "timeout": 5
+                    },
+                    {
+                        "type": "command",
+                        "command": "bash ~/.claude/hooks/notify-tmux.sh exit"
+                    }
+                ]
+            }
         ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/allow-readonly.sh",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/notify-tmux.sh working"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "atuin hook claude-code"
-          }
-        ]
-      }
-    ],
-    "Notification": [
-      {
-        "matcher": "permission_prompt",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/notify-tmux.sh permission_prompt"
-          }
-        ]
-      },
-      {
-        "matcher": "idle_prompt",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/notify-tmux.sh idle_prompt"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/notify-tmux.sh stop"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/tag-pane-session.sh",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/lesson-log.sh",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "atuin hook claude-code"
-          }
-        ]
-      },
-      {
-        "matcher": "AskUserQuestion",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/lesson-log.sh",
-            "timeout": 30
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/todoist-ticket-sync.sh",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/notify-tmux.sh working"
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/tag-pane-session.sh",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/notify-tmux.sh exit"
-          }
-        ]
-      }
-    ]
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "bash ~/.claude/statusline.sh",
-    "hideVimModeIndicator": true
-  },
-  "enabledPlugins": {
-    "pyright-lsp@claude-plugins-official": true,
-    "context7@claude-plugins-official": true,
-    "hookify@claude-plugins-official": true,
-    "superpowers@claude-plugins-official": true,
-    "code-review@claude-plugins-official": true,
-    "commit-commands@claude-plugins-official": true,
-    "security-guidance@claude-plugins-official": true,
-    "swift-lsp@claude-plugins-official": true,
-    "atlassian@claude-plugins-official": true,
-    "meta@gtech-skills": true,
-    "platform@gtech-skills": true,
-    "general@gtech-skills": true
-  },
-  "extraKnownMarketplaces": {
-    "gtech-skills": {
-      "source": {
-        "source": "git",
-        "url": "https://bitbucket.org/get-rnd/gtech-skills.git"
-      }
-    }
-  },
-  "skipDangerousModePermissionPrompt": true,
-  "skipWorkflowUsageWarning": true,
-  "theme": "dark-daltonized",
-  "editorMode": "vim",
-  "preferredNotifChannel": "ghostty",
-  "skipAutoPermissionPrompt": true,
-  "tui": "fullscreen"
+    },
+    "statusLine": {
+        "type": "command",
+        "command": "bash ~/.claude/statusline.sh",
+        "hideVimModeIndicator": true
+    },
+    "enabledPlugins": {
+        "pyright-lsp@claude-plugins-official": true,
+        "context7@claude-plugins-official": true,
+        "hookify@claude-plugins-official": true,
+        "superpowers@claude-plugins-official": true,
+        "code-review@claude-plugins-official": true,
+        "commit-commands@claude-plugins-official": true,
+        "security-guidance@claude-plugins-official": true,
+        "swift-lsp@claude-plugins-official": true,
+        "atlassian@claude-plugins-official": true,
+        "meta@gtech-skills": true,
+        "platform@gtech-skills": true,
+        "general@gtech-skills": true
+    },
+    "extraKnownMarketplaces": {
+        "gtech-skills": {
+            "source": {
+                "source": "git",
+                "url": "https://bitbucket.org/get-rnd/gtech-skills.git"
+            }
+        }
+    },
+    "skipDangerousModePermissionPrompt": true,
+    "skipWorkflowUsageWarning": true,
+    "theme": "dark-daltonized",
+    "editorMode": "vim",
+    "preferredNotifChannel": "ghostty",
+    "skipAutoPermissionPrompt": true,
+    "tui": "fullscreen"
 }
