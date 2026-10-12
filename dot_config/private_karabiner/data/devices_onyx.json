@@ -105,5 +105,25 @@
                 ]
             }
         ]
+    },
+    {
+        "identifiers": {
+            "is_pointing_device": true,
+            "product_id": 45108,
+            "vendor_id": 1133
+        },
+        "ignore": false,
+        "simple_modifications": [
+            {
+                "from": {
+                    "pointing_button": "button4"
+                },
+                "to": [
+                    {
+                        "apple_vendor_keyboard_key_code": "mission_control"
+                    }
+                ]
+            }
+        ]
     }
 ]
