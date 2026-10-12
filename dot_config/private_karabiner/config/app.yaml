@@ -23,7 +23,7 @@ app:
   - F | alfred | Alfred Preferences
   - g | iPhone | iPhone Mirroring
   - G | safari | Safari
-  - h | arc(research) | sh:$HOME/.config/karabiner/scripts/arc-space.sh Research
+  - 3 | arc(research) | sh:$HOME/.config/karabiner/scripts/arc-space.sh Research
   - k | KM | Keyboard Maestro
   - l | gmail(gmd) | sh:$HOME/.config/karabiner/scripts/arc-tab.sh Work 'GMAIL GMD'
   - c | switch | !Cgrave_accent_and_tilde

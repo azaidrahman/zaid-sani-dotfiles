@@ -45,7 +45,7 @@
 
 ;; BEGIN HELP-TEXT (auto-generated from config/help-text.yaml)
  :tos {:show-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
-                              :text "w:WA, W:messages, e:obsidian, r:arc(work), R:arc(not work), t:ghostty, y:sioyek, u:ytmusic, i:IINA, I:ino, o:orb, p:gchat, s:slack, d:t3code, f:cal, F:alfred, g:iPhone, G:safari, h:arc(research), j:jira, k:KM, l:gmail(gmd), x:mixlet, c:switch, v:chrome, b:telegram, n:todoist, m:spotify"}}
+                              :text "w:WA, W:messages, e:obsidian, r:arc(work), R:arc(not work), t:ghostty, y:sioyek, u:ytmusic, i:IINA, I:ino, o:orb, p:gchat, s:slack, d:t3code, f:cal, F:alfred, g:iPhone, G:safari, j:jira, k:KM, l:gmail(gmd), x:mixlet, c:switch, v:chrome, b:telegram, n:todoist, m:spotify, 3:arc(research)"}}
        :clear-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
                                :text ""}}
        :show-ws-help {:noti {:id "org.pqrs.notificaion_message_workspace"
@@ -132,7 +132,6 @@
     [:d "$HOME/.config/karabiner/scripts/launch-t3code.sh":app-launch]
     [:f [:open "Calendar"]                :app-launch]
     [:g [:open "iPhone Mirroring"]        :app-launch]
-    [:h "$HOME/.config/karabiner/scripts/arc-space.sh Research":app-launch]
     [:j [:open "Jira"]                    :app-launch]
     [:k [:open "Keyboard Maestro"]        :app-launch]
     [:l "$HOME/.config/karabiner/scripts/arc-tab.sh Work 'GMAIL GMD'":app-launch]
@@ -142,6 +141,7 @@
     [:b [:open "Telegram"]                :app-launch]
     [:n "$HOME/.config/karabiner/scripts/arc-float-tab.sh https://todoistenhanced.julesbertolino.fr":app-launch]
     [:m [:open "Spotify"]                 :app-launch]
+    [:3 "$HOME/.config/karabiner/scripts/arc-space.sh Research":app-launch]
 ;; END APP-RULES
    ]
   }

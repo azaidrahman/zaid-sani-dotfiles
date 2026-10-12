@@ -16,7 +16,7 @@ app	⌥R	f	cal	Calendar
 app	⌥R	⇧f	alfred	Alfred Preferences
 app	⌥R	g	iPhone	iPhone Mirroring
 app	⌥R	⇧g	safari	Safari
-app	⌥R	h	arc(research)	sh:$HOME/.config/karabiner/scripts/arc-space.sh Research
+app	⌥R	3	arc(research)	sh:$HOME/.config/karabiner/scripts/arc-space.sh Research
 app	⌥R	k	KM	Keyboard Maestro
 app	⌥R	l	gmail(gmd)	sh:$HOME/.config/karabiner/scripts/arc-tab.sh Work 'GMAIL GMD'
 app	⌥R	c	switch	!Cgrave_accent_and_tilde
