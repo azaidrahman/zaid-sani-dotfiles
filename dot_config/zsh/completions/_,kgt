@@ -1,0 +1,44 @@
+#compdef ,kgt
+
+# Completion for ,kgt. Context names come from the kubeconfig. For `ar` and
+# `argocd`, the completion of argocd does the work.
+
+_kgt_contexts() {
+  local -a ctxs
+  ctxs=( ${(f)"$(command kubectl config get-contexts -o name 2>/dev/null)"} )
+  _describe -t contexts 'kube context' ctxs
+}
+
+_kgt() {
+  local -a cmds
+  cmds=(
+    'use:select a context'
+    'unset:unset the current context'
+    'status:show the kubectl and ArgoCD contexts'
+    'st:show the kubectl and ArgoCD contexts'
+    'ar:run argocd --core'
+    'argocd:run argocd --core'
+    'apps:list ArgoCD apps'
+    'refresh:refresh an ArgoCD app'
+    'reset:delete the cache'
+  )
+
+  if (( CURRENT == 2 )); then
+    _describe -t commands 'kgt command' cmds
+    return
+  fi
+
+  case $words[2] in
+    use)
+      (( CURRENT == 3 )) && _kgt_contexts ;;
+    ar|argocd)
+      (( $+functions[_argocd] )) || (( $+commands[argocd] )) && source <(command argocd completion zsh 2>/dev/null)
+      if (( $+functions[_argocd] )); then
+        words=( argocd "${(@)words[3,-1]}" )
+        (( CURRENT -= 1 ))
+        _argocd
+      fi ;;
+  esac
+}
+
+_kgt "$@"

@@ -59,3 +59,4 @@ CLAUDE.md
 .config/television/cable/unicode.toml
 .config/television/cable/zoxide.toml
 .config/television/cable/zsh-history.toml
+.config/zsh/functions/,gt

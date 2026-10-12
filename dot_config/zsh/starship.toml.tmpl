@@ -1,6 +1,6 @@
 # ~/.config/starship.toml
 
-format = "$time$username$hostname$directory$git_branch\n$character"
+format = "$time$username$hostname$directory$git_branch${custom.kgt}\n$character"
 
 [time]
 disabled = false
@@ -26,6 +26,15 @@ style = "bold green"
 # '/Users/you/projects/work' = '📂 Work'
 # 'Users/you' = '📂 Home'
 # 'Users/you/Downloads' = '📂 Downloads'
+
+# Current kubectl context. A grep of the kubeconfig is faster than kubectl.
+# Shows the last part of the name.
+[custom.kgt]
+when = 'grep -q "^current-context: ." "${KUBECONFIG:-$HOME/.kube/config}"'
+command = 'sed -n "/^current-context:/{s/^current-context: //;s/.*_//;p;}" "${KUBECONFIG:-$HOME/.kube/config}"'
+format = " [⎈ $output]($style)"
+style = "bold cyan"
+shell = ["sh"]
 
 [git_branch]
 symbol = ""
