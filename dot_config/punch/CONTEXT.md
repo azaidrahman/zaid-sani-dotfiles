@@ -1,8 +1,8 @@
 # Punch
 
 Punch records blocks of focused work. Each block has a topic, a start, and an
-end. The tool writes a note in the Polaris vault and an event in Calendar.app.
-A dashboard reads the notes and totals the hours.
+end. The tool adds a row to the sessions CSV in the Polaris vault and an event
+in Calendar.app. The CSV holds every session and its hours.
 
 ## Language
 
@@ -36,7 +36,7 @@ _Avoid_: backfill, manual entry, past session
 
 **Source**:
 The field that separates a live session from a retro session. The value is
-`live` or `retro`. A note with no `source` field is live.
+`live` or `retro`. A row with an empty `source` is live.
 _Avoid_: kind, type, origin
 
 **Distraction**:
@@ -79,7 +79,7 @@ _Avoid_: badge, widget, overlay, timer window
 
 - The Clock.app timer is a way to track a live session. It is not the identity
   of a session. The first design said the opposite. See ADR 0001.
-- A retro session is still a session. The `source` field keeps the data honest,
-  so the dashboard can leave retro sessions out of a completion rate.
+- A retro session is still a session. The `source` column keeps the data honest,
+  so a report can leave retro sessions out of a completion rate.
 - Punch tracks focused work of any kind. Study and work are topics. The
   calendar is `Task Punch`. An older name, `Study`, is from the first design.

@@ -1,3 +1,6 @@
+# Punch stores sessions in a CSV now. Its note module and tests are gone.
+.config/punch/note.py
+.config/punch/test_note.py
 .local/bin/gcloud-prompt
 .local/bin/kube-context-prompt
 .config/zsh/functions/piv

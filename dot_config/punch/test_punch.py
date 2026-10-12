@@ -1,8 +1,7 @@
-from datetime import datetime
-from pathlib import Path
+from datetime import date, datetime
 
 from punch import (parse_distraction, parse_score,
-                   parse_pick, advance, step_label, note_start, topic_of,
+                   parse_pick, advance, step_label,
                    AWAY_DISTRACTION, BACK, STEPS)
 
 OPTIONS = ["Kubernetes", "Terraform", "Go"]
@@ -96,45 +95,37 @@ def test_a_word_gives_no_score():
     assert parse_distraction("button returned:OK, text returned:lots") is None
 
 
-def test_note_start_reads_the_day_and_the_12_hour_time():
-    assert note_start(Path("2026-08-07 FRI 2.30PM Go.md")) == \
-        datetime(2026, 8, 7, 14, 30)
-    assert note_start(Path("2026-08-07 FRI 9.00AM Go.md")) == \
-        datetime(2026, 8, 7, 9, 0)
+def test_day_notes_gives_the_sessions_of_the_day_in_start_order(tmp_path, monkeypatch):
+    import punch
+    from sessions import append, build_row
+    monkeypatch.setattr(punch.sessions, "FILE", tmp_path / "sessions.csv")
+    append(build_row("Go", datetime(2026, 8, 7, 14, 30), datetime(2026, 8, 7, 15, 0),
+                     "completed", 3))
+    append(build_row("Kubernetes", datetime(2026, 8, 7, 9, 0), datetime(2026, 8, 7, 10, 0),
+                     "completed", 3))
+    append(build_row("Terraform", datetime(2026, 8, 8, 9, 0), datetime(2026, 8, 8, 10, 0),
+                     "completed", 3))
+    assert punch.day_notes(date(2026, 8, 7)) == [
+        ("Kubernetes", datetime(2026, 8, 7, 9, 0), datetime(2026, 8, 7, 10, 0)),
+        ("Go", datetime(2026, 8, 7, 14, 30), datetime(2026, 8, 7, 15, 0)),
+    ]
 
 
-def test_note_start_orders_a_morning_before_an_afternoon():
-    # The raw names sort the other way, because 9 is above 2 as text.
-    names = [Path("2026-08-07 FRI 2.30PM Go.md"),
-             Path("2026-08-07 FRI 9.00AM Go.md")]
-    assert [p.stem for p in sorted(names, key=note_start)] == \
-        ["2026-08-07 FRI 9.00AM Go", "2026-08-07 FRI 2.30PM Go"]
-
-
-def test_note_start_puts_an_unreadable_name_first():
-    assert note_start(Path("Topics.md")) == datetime.min
-
-
-def test_topic_of_keeps_a_topic_that_has_spaces():
-    assert topic_of(Path("2026-08-07 FRI 2.30PM Kubernetes Pod.md")) == \
-        "Kubernetes Pod"
-    assert topic_of(Path("Topics.md")) is None
-
-
-def test_an_older_name_without_a_day_still_reads_its_start_and_topic():
-    old = Path("2026-10-12 1441 Kubernetes Pod.md")
-    assert note_start(old) == datetime(2026, 10, 12, 14, 41)
-    assert topic_of(old) == "Kubernetes Pod"
+def test_last_topic_is_the_session_that_starts_last(tmp_path, monkeypatch):
+    # A retro session is written after the live one, but it started earlier.
+    import punch
+    from sessions import append, build_row
+    monkeypatch.setattr(punch.sessions, "FILE", tmp_path / "sessions.csv")
+    append(build_row("Go", datetime(2026, 8, 7, 14, 30), datetime(2026, 8, 7, 15, 0),
+                     "completed", 3))
+    append(build_row("Kubernetes", datetime(2026, 8, 7, 9, 0), datetime(2026, 8, 7, 10, 0),
+                     "completed", 3, source="retro"))
+    assert punch.last_topic() == "Go"
 
 
 if __name__ == "__main__":
     import traceback
     tests = [
-        test_note_start_reads_the_day_and_the_12_hour_time,
-        test_note_start_orders_a_morning_before_an_afternoon,
-        test_note_start_puts_an_unreadable_name_first,
-        test_topic_of_keeps_a_topic_that_has_spaces,
-        test_an_older_name_without_a_day_still_reads_its_start_and_topic,
         test_the_picked_item_is_read_by_its_index,
         test_a_cancelled_pick_gives_nothing,
         test_a_pick_that_timed_out_gives_nothing,
@@ -535,15 +526,13 @@ def test_a_fired_timer_is_left_alone(monkeypatch):
     assert calls == []
 
 
-def test_a_cancel_stops_the_timer_before_the_note(monkeypatch):
+def test_a_cancel_stops_the_timer_before_the_session_is_saved(monkeypatch):
     import punch
     from datetime import datetime
     calls = _timer_world(monkeypatch, [[_timer("A", 25)]])
     monkeypatch.setattr(punch, "notify", lambda text: None)
     monkeypatch.setattr(punch.cal, "mark_cancelled", lambda *a: "ok")
-    monkeypatch.setattr(punch.note, "build_note",
-                        lambda *a: ("/tmp/x.md", "body"))
-    monkeypatch.setattr(punch.note, "adv_uri", lambda p, b: "obsidian://x")
+    monkeypatch.setattr(punch.sessions, "append", lambda row, path=None: None)
     s = {"topic": "Go", "timer_id": "A", "event_uid": "U",
          "start": "2026-08-07T14:30:00"}
     punch.finish(s, "cancelled", datetime(2026, 8, 7, 14, 40), None)

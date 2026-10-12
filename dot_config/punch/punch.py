@@ -10,8 +10,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import cal
-import note
 import outcome
+import sessions
 import punchtime
 import timers
 
@@ -35,8 +35,7 @@ STOP_TRIES = 10
 # The options of the prompt after a start that found no new timer.
 TIMER_RESET = "Reset timer & retry"
 TIMER_GIVE_UP = "Give up"
-TOPICS = Path.home() / "vaults/Polaris/5-Workbook/worklog/Topics.md"
-WORKLOG = TOPICS.parent
+TOPICS = Path.home() / "vaults/Polaris/5-Workbook/Topics.md"
 PRESETS = ["25", "50", "60", "90"]
 
 # The HUD binary shows the toast, the list picker, and the score picker.
@@ -281,22 +280,18 @@ def note_start(path) -> datetime:
 
 
 def day_notes(day) -> list:
-    """Return (topic, start, end) for each session note of the day."""
-    out = []
-    for path in sorted(WORKLOG.glob(f"{day:%Y-%m-%d} *.md"), key=note_start):
-        parsed = punchtime.parse_note(path.read_text(), day)
-        if parsed is None:
-            continue
-        out.append((topic_of(path) or path.stem, *parsed))
-    return out
+    """Return (topic, start, end) for each session of the day, in start order."""
+    rows = [r for r in sessions.read() if r["date"] == f"{day:%Y-%m-%d}"]
+    rows.sort(key=lambda r: sessions.span(r)[0])
+    return [(r["topic"], *sessions.span(r)) for r in rows]
 
 
 def last_topic():
-    """Return the topic of the newest session note, or None."""
-    files = sorted(WORKLOG.glob("2*.md"), key=note_start)
-    if not files:
+    """Return the topic of the session that starts last, or None."""
+    rows = sessions.read()
+    if not rows:
         return None
-    return topic_of(files[-1])
+    return max(rows, key=lambda r: sessions.span(r)[0])["topic"]
 
 
 def ask_time(minutes: int, step: str = ""):
@@ -915,18 +910,18 @@ def ask_open_session(s: dict) -> str:
 
 
 def finish(s: dict, status: str, end_at: datetime, distraction) -> None:
-    """Write the note, close the calendar event, and tell the user.
+    """Write the session row, close the calendar event, and tell the user.
 
     Every failure is reported and then passed over. The state file is gone
     by this point, so a failure here must not stop the rest of the work.
     """
     start_at = datetime.fromisoformat(s["start"])
-    path, body = note.build_note(s["topic"], start_at, end_at, status,
-                                 distraction, s.get("source", "live"),
-                                 s.get("focus", ""))
+    row = sessions.build_row(s["topic"], start_at, end_at, status,
+                             distraction, s.get("source", "live"),
+                             s.get("focus", ""))
 
-    # Show the toast first. The Calendar and the Obsidian calls below wait
-    # on other apps, and the user should not wait with them.
+    # Show the toast first. The Calendar and the CSV calls below wait on
+    # other apps, and the user should not wait with them.
     hours = round((end_at - start_at).total_seconds() / 3600, 2)
     notify(f"{s['topic']} {status} — {hours} h logged")
 
@@ -945,13 +940,14 @@ def finish(s: dict, status: str, end_at: datetime, distraction) -> None:
             log.warning("mark_cancelled failed: %s", e)
         log.info("calendar marked in %.1fs", time.monotonic() - marked)
 
-    opened = time.monotonic()
+    saved = time.monotonic()
     try:
-        subprocess.run(["open", note.adv_uri(path, body)], check=True)
+        sessions.append(row)
     except Exception as e:
-        log.warning("failed to open note: %s", e)
-    log.info("session %s: topic=%r hours=%s note_open=%.1fs",
-             status, s["topic"], hours, time.monotonic() - opened)
+        log.warning("failed to save session: %s", e)
+        notify(f"{s['topic']} not saved — see the punch log")
+    log.info("session %s: topic=%r hours=%s saved_in=%.1fs",
+             status, s["topic"], hours, time.monotonic() - saved)
 
 
 def reset() -> str:
@@ -992,7 +988,7 @@ def check() -> None:
 
     # Atomically claim the session so a second check() run (e.g. launchd
     # firing again while a distraction dialog is still open) skips it
-    # instead of opening a second dialog and writing a duplicate note.
+    # instead of opening a second dialog and writing a duplicate session.
     claimed = CLAIM
     try:
         STATE.rename(claimed)
@@ -1042,7 +1038,7 @@ def check() -> None:
         raise
 
     # From here on, side effects begin. The claim must not go back to
-    # STATE, or a failure here would cause a retry and a duplicate note.
+    # STATE, or a failure here would cause a retry and a duplicate session.
     claimed.unlink()
     finish(s, status, end_at, distraction)
 

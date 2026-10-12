@@ -31,24 +31,6 @@ def classify(start: datetime, minutes: int, now: datetime) -> tuple:
     return "retro", planned_end
 
 
-def parse_note(text: str, day) -> tuple | None:
-    """Read the start and the end from the frontmatter of a session note."""
-    start = end = None
-    for line in text.splitlines():
-        if line.startswith("start:"):
-            start = line.split(":", 1)[1].strip().strip('"')
-        elif line.startswith("end:"):
-            end = line.split(":", 1)[1].strip().strip('"')
-    if not start or not end:
-        return None
-    try:
-        s = datetime.combine(day, datetime.strptime(start, "%H:%M").time())
-        e = datetime.combine(day, datetime.strptime(end, "%H:%M").time())
-    except ValueError:
-        return None
-    return s, e
-
-
 def find_overlap(start: datetime, end: datetime, notes: list) -> str | None:
     """Return 'HH:MM Topic' of the first note that the block overlaps.
 

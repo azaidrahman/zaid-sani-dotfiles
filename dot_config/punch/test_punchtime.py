@@ -1,10 +1,9 @@
-from datetime import date, datetime
+from datetime import datetime
 
-from punchtime import (classify, find_overlap, parse_note,
+from punchtime import (classify, find_overlap,
                        round_down_quarter, to_12h)
 
 NOW = datetime(2026, 8, 20, 14, 0)
-DAY = date(2026, 8, 20)
 
 
 def test_a_quarter_hour_rounds_to_itself():
@@ -60,27 +59,7 @@ def test_exactly_one_minute_left_counts_as_retro():
     assert kind == "retro"
 
 
-NOTE = """---
-tags:
-  - work/session
-date: 2026-08-20
-start: "10:00"
-end: "10:50"
-hours: 0.83
-topic: Work
-status: completed
----
-"""
-
-def test_the_note_times_are_read_from_the_frontmatter():
-    assert parse_note(NOTE, DAY) == (datetime(2026, 8, 20, 10, 0),
-                                     datetime(2026, 8, 20, 10, 50))
-
-def test_a_note_with_no_times_gives_nothing():
-    assert parse_note("---\ntopic: X\n---\n", DAY) is None
-
-
-NOTES = [("Work", datetime(2026, 8, 20, 10, 0), datetime(2026, 8, 20, 10, 50))]
+NOTES =[("Work", datetime(2026, 8, 20, 10, 0), datetime(2026, 8, 20, 10, 50))]
 
 def test_a_covering_block_overlaps():
     hit = find_overlap(datetime(2026, 8, 20, 9, 30),
@@ -114,8 +93,6 @@ if __name__ == "__main__":
         test_less_than_a_minute_left_counts_as_retro,
         test_the_remaining_minutes_round_to_the_nearest_minute,
         test_exactly_one_minute_left_counts_as_retro,
-        test_the_note_times_are_read_from_the_frontmatter,
-        test_a_note_with_no_times_gives_nothing,
         test_a_covering_block_overlaps,
         test_a_block_that_touches_the_edge_does_not_overlap,
         test_a_separate_block_does_not_overlap,
