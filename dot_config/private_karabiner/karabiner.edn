@@ -45,7 +45,7 @@
 
 ;; BEGIN HELP-TEXT (auto-generated from config/help-text.yaml)
  :tos {:show-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
-                              :text "w:WA, W:messages, e:obsidian, r:arc(work), R:arc(not work), t:ghostty, y:sioyek, u:ytmusic, i:IINA, I:ino, o:orb, p:gchat, s:slack, d:t3code, f:cal, F:alfred, g:iPhone, G:safari, j:jira, k:KM, l:gmail(gmd), x:mixlet, c:switch, v:chrome, b:telegram, n:todoist, m:spotify, 3:arc(research)"}}
+                              :text "w:WA, W:messages, e:obsidian, t:ghostty, y:sioyek, u:ytmusic, i:IINA, I:ino, o:orb, p:gchat, s:slack, d:t3code, f:cal, F:alfred, g:iPhone, G:safari, j:jira, k:KM, l:gmail(gmd), x:mixlet, c:switch, v:chrome, b:telegram, n:todoist, m:spotify, 1:arc(work), 2:arc(zaid), 3:arc(research)"}}
        :clear-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
                                :text ""}}
        :show-ws-help {:noti {:id "org.pqrs.notificaion_message_workspace"
@@ -111,7 +111,6 @@
 ;; BEGIN APP-RULES (auto-generated from config/app.yaml)
     ;; Shifted shortcuts
     [:!Sw [:open "Messages"]              :app-launch]
-    [:!Sr "$HOME/.config/karabiner/scripts/arc-space.sh Zaid":app-launch]
     [:!Si [:open "Inoreader"]             :app-launch]
     [:!Sf [:open "Alfred Preferences"]    :app-launch]
     [:!Sg [:open "Safari"]                :app-launch]
@@ -121,7 +120,6 @@
     ;; Unshifted shortcuts
     [:w [:open "Whatsapp"]                :app-launch]
     [:e [:open "Obsidian"]                :app-launch]
-    [:r "$HOME/.config/karabiner/scripts/arc-space.sh Work":app-launch]
     [:t [:open "Ghostty"]                 :app-launch]
     [:y [:open "Sioyek"]                  :app-launch]
     [:u [:open "Youtube Music"]           :app-launch]
@@ -141,7 +139,10 @@
     [:b [:open "Telegram"]                :app-launch]
     [:n "$HOME/.config/karabiner/scripts/arc-float-tab.sh https://todoistenhanced.julesbertolino.fr":app-launch]
     [:m [:open "Spotify"]                 :app-launch]
+    [:1 "$HOME/.config/karabiner/scripts/arc-space.sh Work":app-launch]
+    [:2 "$HOME/.config/karabiner/scripts/arc-space.sh Zaid":app-launch]
     [:3 "$HOME/.config/karabiner/scripts/arc-space.sh Research":app-launch]
+    ; [:r [:open "Arc"]                     :app-launch]
 ;; END APP-RULES
    ]
   }

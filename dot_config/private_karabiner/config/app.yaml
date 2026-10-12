@@ -8,8 +8,8 @@ app:
   - w | WA | Whatsapp
   - W | messages | Messages
   - e | obsidian | Obsidian
-  - r | arc(work) | sh:$HOME/.config/karabiner/scripts/arc-space.sh Work
-  - R | arc(not work) | sh:$HOME/.config/karabiner/scripts/arc-space.sh Zaid
+  - 1 | arc(work) | sh:$HOME/.config/karabiner/scripts/arc-space.sh Work
+  - 2 | arc(zaid) | sh:$HOME/.config/karabiner/scripts/arc-space.sh Zaid
   - t | ghostty | Ghostty
   - y | sioyek | Sioyek
   - i | IINA | IINA
