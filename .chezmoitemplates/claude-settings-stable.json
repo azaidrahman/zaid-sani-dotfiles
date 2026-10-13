@@ -1,6 +1,7 @@
 {
     "env": {
-        "CLAUDE_CODE_ENABLE_AUTO_MODE": "1"
+        "CLAUDE_CODE_ENABLE_AUTO_MODE": "1",
+        "CLAUDE_CODE_PLUGIN_DIRS": "~/.claude/mods/workbench"
     },
     "permissions": {
         "allow": [
@@ -181,7 +182,7 @@
     },
     "skipDangerousModePermissionPrompt": true,
     "skipWorkflowUsageWarning": true,
-    "theme": "dark-daltonized",
+    "theme": "custom:vim-mode",
     "editorMode": "vim",
     "preferredNotifChannel": "ghostty",
     "skipAutoPermissionPrompt": true,
