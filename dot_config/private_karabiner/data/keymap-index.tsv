@@ -119,6 +119,8 @@ hyper	⇪	0	ice bar	!QWER0
 hyper	⇪	q	mouseless freekey (hold)	!QWERq
 hyper	⇪	⌘spacebar	emoji	!TCspacebar
 hyper	⇪	escape	caps	!Tcaps_lock
+hyper	⇪	/	guide (hold)	hyper help overlay
+hyper	⇪	⇧/	key search	open the key search HUD
 extra		⌥R hold	app layer	hold Right Option = app launcher
 extra		⌥L hold	workspace	hold Left Option = aerospace layer
 extra		⇧⌥R hold	l1 layer	Left Shift + Right Option = shortcut layer 1
