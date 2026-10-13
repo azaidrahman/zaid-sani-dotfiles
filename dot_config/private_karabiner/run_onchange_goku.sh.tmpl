@@ -1,6 +1,7 @@
 #!/bin/bash
 # {{ include "dot_config/private_karabiner/karabiner.edn" | sha256sum }}
 # {{ include "dot_config/private_karabiner/data/devices_apple.json" | sha256sum }}
+# {{ include "dot_config/private_karabiner/src/key-search-hud.swift" | sha256sum }}
 {{- $devFile := joinPath "dot_config/private_karabiner/data" (printf "devices_%s.json" .chezmoi.hostname) -}}
 {{- if stat (joinPath .chezmoi.sourceDir $devFile) }}
 # {{ include $devFile | sha256sum }}
@@ -62,3 +63,7 @@ with open(karabiner_path, "w") as f:
     json.dump(k, f, indent=2)
     f.write("\n")
 PYEOF
+
+# Compile the key search HUD, so the first hotkey press does not wait for it.
+# The launcher compiles it too, if this step is skipped.
+/usr/bin/swiftc -O "$HOME/.config/karabiner/src/key-search-hud.swift" -o "$HOME/.config/karabiner/scripts/key-search-hud"
