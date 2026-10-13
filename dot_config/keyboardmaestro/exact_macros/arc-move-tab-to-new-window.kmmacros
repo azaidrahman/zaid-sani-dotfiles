@@ -38,6 +38,32 @@
 			<array>
 				<dict>
 					<key>ActionUID</key>
+					<integer>119</integer>
+					<key>DisplayKind</key>
+					<string>Variable</string>
+					<key>HonourFailureSettings</key>
+					<true/>
+					<key>IncludeStdErr</key>
+					<true/>
+					<key>MacroActionType</key>
+					<string>ExecuteShellScript</string>
+					<key>Path</key>
+					<string></string>
+					<key>Text</key>
+					<string>/opt/homebrew/bin/aerospace list-workspaces --focused</string>
+					<key>TimeOutAbortsMacro</key>
+					<true/>
+					<key>TrimResults</key>
+					<true/>
+					<key>TrimResultsNew</key>
+					<true/>
+					<key>UseText</key>
+					<true/>
+					<key>Variable</key>
+					<string>ArcMoveWorkspace</string>
+				</dict>
+				<dict>
+					<key>ActionUID</key>
 					<integer>120</integer>
 					<key>DisplayKind</key>
 					<string>Variable</string>
@@ -68,22 +94,7 @@ return theURL</string>
 					<key>Variable</key>
 					<string>ArcMoveURL</string>
 				</dict>
-				<dict>
-					<key>ActionUID</key>
-					<integer>121</integer>
-					<key>KeyCode</key>
-					<integer>45</integer>
-					<key>MacroActionType</key>
-					<string>SimulateKeystroke</string>
-					<key>Modifiers</key>
-					<integer>256</integer>
-					<key>ReleaseAll</key>
-					<false/>
-					<key>TargetApplication</key>
-					<dict/>
-					<key>TargetingType</key>
-					<string>Front</string>
-				</dict>
+				
 				<dict>
 					<key>ActionUID</key>
 					<integer>122</integer>
@@ -99,23 +110,10 @@ return theURL</string>
 					<string></string>
 					<key>Text</key>
 					<string>set theURL to system attribute "KMVAR_ArcMoveURL"
-set oldWindow to system attribute "KMVAR_ArcMoveOldWindow"
 if theURL is "" then return "no url"
-set lastSeen to "none"
-tell application "Arc"
-	-- Wait for the new window to come to the front, then put the tab in it.
-	repeat 60 times
-		try
-			set lastSeen to id of front window
-			if lastSeen is not oldWindow then
-				tell front window to make new tab with properties {URL:theURL}
-				return "ok:" &amp; lastSeen
-			end if
-		end try
-		delay 0.05
-	end repeat
-end tell
-return "timeout old=" &amp; oldWindow &amp; " last=" &amp; lastSeen</string>
+-- Arc's scripting makes a Little Arc tab with the URL. No keystrokes or paste.
+tell application "Arc" to make new tab with properties {URL:theURL}
+return "opened"</string>
 					<key>TimeOutAbortsMacro</key>
 					<true/>
 					<key>TrimResults</key>
@@ -126,6 +124,32 @@ return "timeout old=" &amp; oldWindow &amp; " last=" &amp; lastSeen</string>
 					<true/>
 					<key>Variable</key>
 					<string>ArcMoveResult</string>
+				</dict>
+				<dict>
+					<key>ActionUID</key>
+					<integer>123</integer>
+					<key>DisplayKind</key>
+					<string>Variable</string>
+					<key>HonourFailureSettings</key>
+					<true/>
+					<key>IncludeStdErr</key>
+					<true/>
+					<key>MacroActionType</key>
+					<string>ExecuteShellScript</string>
+					<key>Path</key>
+					<string></string>
+					<key>Text</key>
+					<string>"$HOME/.config/karabiner/scripts/arc-float-window.sh" "$KMVAR_ArcMoveWorkspace"</string>
+					<key>TimeOutAbortsMacro</key>
+					<true/>
+					<key>TrimResults</key>
+					<true/>
+					<key>TrimResultsNew</key>
+					<true/>
+					<key>UseText</key>
+					<true/>
+					<key>Variable</key>
+					<string>ArcFloatResult</string>
 				</dict>
 			</array>
 			<key>TimeOutAbortsMacro</key>
