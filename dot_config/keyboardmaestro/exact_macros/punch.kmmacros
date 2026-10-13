@@ -24,7 +24,7 @@
 			<key>Source</key>
 			<string>Nothing</string>
 			<key>Text</key>
-			<string>/usr/bin/python3 "$HOME/.config/punch/punch.py" start-interactive</string>
+			<string>/opt/homebrew/bin/uv run --managed-python --quiet "$HOME/.config/punch/punch.py" start-interactive</string>
 			<key>TimeOutAbortsMacro</key>
 			<true/>
 			<key>TrimResults</key>

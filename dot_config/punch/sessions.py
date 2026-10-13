@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 """Keep each session as one row in the sessions CSV of the vault."""
 import csv
 from datetime import date, datetime, time

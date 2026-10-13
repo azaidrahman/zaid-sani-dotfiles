@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 """Write the session to Calendar.app.
 
 Calendar.app syncs to Google and Dot.app reads the same store, so this needs no

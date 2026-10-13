@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 """Read the state of the Clock.app timers.
 
 Clock.app is not scriptable. The timer daemon keeps its state in a plist, so

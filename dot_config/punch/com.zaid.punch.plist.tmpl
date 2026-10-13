@@ -6,7 +6,10 @@
   <key>Label</key><string>com.zaid.punch</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/bin/python3</string>
+    <string>/opt/homebrew/bin/uv</string>
+    <string>run</string>
+    <string>--managed-python</string>
+    <string>--quiet</string>
     <string>{{ .chezmoi.homeDir }}/.config/punch/punch.py</string>
     <string>check</string>
   </array>

@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 """Decide how a punch session ended."""
 from datetime import datetime, timedelta
 

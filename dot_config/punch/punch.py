@@ -1,4 +1,7 @@
-#!/usr/bin/python3
+# /// script
+# requires-python = "==3.13.*"
+# dependencies = []
+# ///
 """Start and end a punch session."""
 import argparse
 import json
