@@ -44,12 +44,13 @@ const RESET = '\x1b[0m'
 export const DEFAULT_BRANCHES = new Set(['main', 'master', 'develop', 'HEAD'])
 
 // The state of the PR as plain words, for the end of the hint row under the
-// prompt. That row already shows "PR #<n>" as a link, so the number is not
-// repeated. Claude Code draws the text dim and without color, puts " · "
+// prompt. For a GitHub PR that row already shows "PR #<n>" as a link, so the
+// number is not repeated; for Bitbucket (`withNumber`) the text starts with
+// "PR#<n>". Claude Code draws the text dim and without color, puts " · "
 // before it, and collapses spaces, so it carries no ANSI codes or padding.
-export function prTextOf(pr: PrInfo | null): string {
+export function prTextOf(pr: PrInfo | null, withNumber = false): string {
   if (pr?.kind !== 'pr') return ''
-  const parts: string[] = [pr.state]
+  const parts: string[] = [withNumber ? `PR#${pr.id} ${pr.state}` : pr.state]
   if (pr.state === 'open' || pr.state === 'draft') {
     if (pr.reviewers || pr.approvals) parts.push(`${pr.approvals}/${Math.max(pr.reviewers, pr.approvals)} approved`)
     if (pr.changesRequested) parts.push(`${pr.changesRequested} changes requested`)

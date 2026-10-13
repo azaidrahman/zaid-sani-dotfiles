@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { gitCallFor, storedValueFor } from '../hooks/diff'
-import { forgeOf, githubPr } from '../hooks/forge'
+import { bitbucketPr, forgeOf, githubPr } from '../hooks/forge'
 import { prTextOf } from '../hooks/pill'
 import type { GitInfo } from '../types'
 
@@ -153,4 +153,10 @@ test('the hint row ends with the state of the PR in words', () => {
   expect(prTextOf(open)).toBe('open · 1/2 approved · CI running · 3 comments')
   expect(prTextOf({ ...open, state: 'merged' })).toBe('merged')
   expect(prTextOf({ kind: 'none' })).toBe('')
+
+  // Bitbucket: Claude Code shows no PR link, so the text carries the number.
+  expect(prTextOf(open, true)).toBe('PR#19 open · 1/2 approved · CI running · 3 comments')
+
+  // /pr-copy copies pr.url, so a Bitbucket PR must carry its web URL too.
+  expect(bitbucketPr(PR)).toMatchObject({ id: 41, url: 'https://bitbucket.org/team/app/pull-requests/41' })
 })

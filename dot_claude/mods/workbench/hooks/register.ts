@@ -144,7 +144,8 @@ async function readPalette($: EngineInterface): Promise<Palette> {
 // Code, gets the PR text from session state (see the PromptHint hook).
 async function writePill($: EngineInterface): Promise<void> {
   await $.fs.write(await pillPath($), git ? pillOf(git, await readPalette($)) : '')
-  const text = prTextOf(pr)
+  // Claude Code links only a GitHub PR in the hint row.
+  const text = prTextOf(pr, git?.forge !== 'github')
   await update($, prText, () => text)
 }
 
@@ -241,12 +242,24 @@ export const register: Register = on => {
       name: 'pr-refresh',
       description: 'Read the git state and the PR of the branch again.',
     })
+    await $.command.register({
+      name: 'pr-copy',
+      description: 'Copy the URL of the PR of the branch to the clipboard (works over SSH).',
+    })
     return next(e)
   })
 
   on('command.run', { command: 'pr-refresh' }, async $ => {
     await refresh($, true)
     return { text: 'Refreshed the workbench pills.' }
+  })
+
+  // The terminal copies with OSC 52, so the URL reaches the clipboard of the
+  // machine you type on, also when Claude Code runs over SSH.
+  on('command.run', { command: 'pr-copy' }, async $ => {
+    if (pr?.kind !== 'pr' || !pr.url) return { text: 'This branch has no PR.' }
+    const copied = await $.ui.copy({ text: pr.url })
+    return { text: copied.isCopied ? `Copied ${pr.url}` : `Could not copy (${copied.reason}): ${pr.url}` }
   })
 
   on('prompt.submit', ($, e, next) => {
