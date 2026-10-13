@@ -456,6 +456,7 @@ def generate_hyper_help(hyper_data, labels):
 KEY_SEARCH_LOADING_LINES = (
     '       :show-key-search-loading {:noti {:id "org.pqrs.notification_message_key_search"\n'
     '                                        :text "Opening key search..."}}\n'
+    '       :key-search-run {:shell "~/.config/karabiner/scripts/show-key-search.sh"}\n'
     '       :clear-key-search-loading {:noti {:id "org.pqrs.notification_message_key_search"\n'
     '                                         :text ""}}\n'
 )
@@ -538,6 +539,9 @@ def generate_key_index(app_entries, ws_entries, ws_shift_entries,
                 if isinstance(action, list):
                     action = ' '.join(str(a) for a in action)
                 add('hyper', disp, label, str(action))
+    # Hand-written help and search keys, which are not in hyperkeys.yaml
+    add('hyper', '/', 'guide (hold)', 'hyper help overlay')
+    add('hyper', '⇧/', 'key search', 'open the key search HUD')
 
     # Hand-written base.edn bindings, declared in config/extras.yaml
     for entry in extras_entries:

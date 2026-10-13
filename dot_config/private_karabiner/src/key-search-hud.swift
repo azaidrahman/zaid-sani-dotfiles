@@ -5,8 +5,8 @@
 // The TSV comes from scripts/generate.py (columns: layer, trigger, key, label, action).
 //
 // Map mode (opens first): one view per layer. Left and right arrows switch layers.
-//   Right arrow on the last layer, or the Search tab, opens search.
-// Search mode: type to filter. Up and down scroll. Left arrow on an empty search opens the map.
+//   The / key or the search button opens search.
+// Search mode: type to filter. Up and down scroll. Deleting all the text returns to the map.
 // Esc (or click away) closes the HUD. The map reloads when the TSV changes.
 import AppKit
 
@@ -153,9 +153,9 @@ struct LayerSpec {
 let layerSpecs = [
     LayerSpec(id: "app", title: "App", kind: .board),
     LayerSpec(id: "workspace", title: "Workspace", kind: .board),
-    LayerSpec(id: "l1", title: "l1", kind: .list),
-    LayerSpec(id: "l2", title: "l2", kind: .list),
-    LayerSpec(id: "l3", title: "l3", kind: .list),
+    LayerSpec(id: "l1", title: "l1", kind: .board),
+    LayerSpec(id: "l2", title: "l2", kind: .board),
+    LayerSpec(id: "l3", title: "l3", kind: .board),
     LayerSpec(id: "hyper", title: "Hyper", kind: .modifier),
 ]
 
@@ -186,6 +186,44 @@ func splitKey(_ raw: String) -> (mods: String, base: String) {
         rest = rest.dropFirst()
     }
     return (mods, String(rest))
+}
+
+// Board keys that hold a layer, from its trigger glyphs, e.g. "⇧⌥R" or "⇪"
+func triggerKeys(_ trigger: String) -> Set<String> {
+    var ids = Set<String>()
+    let chars = Array(trigger)
+    var i = 0
+    while i < chars.count {
+        switch chars[i] {
+        case "⇧": ids.insert("Lshift")
+        case "⌘": ids.insert("Lcmd")
+        case "⌃": ids.insert("Lctrl")
+        case "⇪": ids.insert("caps")
+        case "⌥":
+            if i + 1 < chars.count {
+                ids.insert(chars[i + 1] == "R" ? "Ropt" : "Lopt")
+                i += 1
+            }
+        default: break
+        }
+        i += 1
+    }
+    return ids
+}
+
+// Board keys for the modifiers of a hyper chip. A chip has no side, so both sides light.
+func chipKeys(_ mods: String) -> Set<String> {
+    var ids = Set<String>()
+    for c in mods {
+        switch c {
+        case "⇧": ids.formUnion(["Lshift", "Rshift"])
+        case "⌘": ids.insert("Lcmd")
+        case "⌃": ids.insert("Lctrl")
+        case "⌥": ids.formUnion(["Lopt", "Ropt"])
+        default: break
+        }
+    }
+    return ids
 }
 
 func qwertyIndex(_ key: String) -> Int {
@@ -227,6 +265,8 @@ let listTop: CGFloat = 84   // top of the list and the modifier chips
 let boundColor = NSColor(red: 0.4, green: 0.8, blue: 1.0, alpha: 1.0)
 let modifiedColor = NSColor(red: 1.0, green: 0.75, blue: 0.35, alpha: 1.0)
 let freeColor = NSColor(red: 0.45, green: 0.9, blue: 0.55, alpha: 1.0)
+let selectedColor = NSColor(red: 1.0, green: 0.2, blue: 0.2, alpha: 1.0)  // a clicked key with bindings
+let unusedColor = NSColor(white: 0.5, alpha: 1.0)                          // a clicked key with none
 let dimColor = NSColor(white: 1, alpha: 0.45)
 let ink = NSColor(white: 0.08, alpha: 1.0)
 
@@ -248,11 +288,15 @@ class KeymapView: NSView {
     var lastModified: Date?
     var current = 0
     var hovered: String?
+    var selectedKey: String?  // key clicked on the board, red if bound, grey if not
+    let searchRect = NSRect(x: panelWidth - margin - 96, y: 48, width: 96, height: 24)
     var selectedMods = ""     // chip picked in the hyper view
     var keyRects: [(key: String, rect: NSRect)] = []
+    var fixedRects: [(id: String, label: String, rect: NSRect)] = []  // labels only: modifiers, Tab, Caps
     var tabRects: [NSRect] = []
     var chipRects: [(mods: String, rect: NSRect)] = []
-    var onSearch: (() -> Void)?  // called by right arrow on the last layer, and by the Search tab
+    var stepRects: [(delta: Int, rect: NSRect)] = []  // up and down buttons for the chips
+    var onSearch: (() -> Void)?  // called by the / key and by the search button
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -282,15 +326,38 @@ class KeymapView: NSView {
                 keyRects.append((key: key, rect: NSRect(x: x, y: y, width: keySize, height: keySize)))
             }
         }
-        let spaceRect = NSRect(x: originX + 3 * unit, y: boardTop + 4 * unit,
-                               width: 6 * unit - (unit - keySize), height: keySize)
-        keyRects.append((key: spaceKey, rect: spaceRect))
+        // Bottom row, as on the real keyboard. Only space takes bindings.
+        // The other keys are labels, so they are not in keyRects.
+        let bottomY = boardTop + 4 * unit
+        let bottom: [(name: String, x: CGFloat, w: CGFloat)] = [
+            ("Lcmd", 0, 1.25), ("Lctrl", 1.25, 1.25), ("Lopt", 2.5, 1.25),
+            (spaceKey, 3.75, 6), ("Ropt", 9.75, 1.25), ("", 11, 1), ("Fn", 12, 1),
+        ]
+        for key in bottom where !key.name.isEmpty {
+            let rect = NSRect(x: originX + key.x * unit, y: bottomY,
+                              width: key.w * unit - (unit - keySize), height: keySize)
+            if key.name == spaceKey {
+                keyRects.append((key: spaceKey, rect: rect))
+            } else {
+                fixedRects.append((id: key.name, label: key.name, rect: rect))
+            }
+        }
+        // Tab and Caps sit left of the grid. Each one is a label only.
+        fixedRects.append((id: "tab", label: "Ctrl/Tab", rect: NSRect(x: originX - unit, y: boardTop + unit,
+                                                                       width: 1.5 * unit - (unit - keySize), height: keySize)))
+        fixedRects.append((id: "caps", label: "Hyper/Esc", rect: NSRect(x: originX - unit, y: boardTop + 2 * unit,
+                                                                        width: 1.75 * unit - (unit - keySize), height: keySize)))
+        // Shift keys end the z row, as on the real keyboard
+        fixedRects.append((id: "Lshift", label: "Lshift", rect: NSRect(x: originX - unit, y: boardTop + 3 * unit,
+                                                                       width: 2.25 * unit - (unit - keySize), height: keySize)))
+        fixedRects.append((id: "Rshift", label: "Rshift", rect: NSRect(x: originX + 11.25 * unit, y: boardTop + 3 * unit,
+                                                                       width: 1.75 * unit - (unit - keySize), height: keySize)))
     }
 
     func layoutTabs() {
         let gap: CGFloat = 6
-        // One tab per layer, then the Search tab
-        let count = CGFloat(layerSpecs.count + 1)
+        // One tab per layer
+        let count = CGFloat(layerSpecs.count)
         let width = (panelWidth - margin * 2 - gap * (count - 1)) / count
         for i in 0..<Int(count) {
             let x = margin + CGFloat(i) * (width + gap)
@@ -310,6 +377,7 @@ class KeymapView: NSView {
     func setLayer(_ index: Int) {
         current = min(max(index, 0), layerSpecs.count - 1)
         hovered = nil
+        selectedKey = nil
         selectedMods = ""
         needsDisplay = true
     }
@@ -325,6 +393,17 @@ class KeymapView: NSView {
     func modifierSets() -> [String] {
         let sets = Set(currentLayer.entries.map { $0.mods })
         return sets.sorted { ($0.count, $0) < ($1.count, $1) }
+    }
+
+    // Move the chip selection back or forward. It stops at either end.
+    func cycleChip(_ delta: Int) {
+        let sets = modifierSets()
+        guard !sets.isEmpty else { return }
+        let next = (sets.firstIndex(of: selectedMods) ?? 0) + delta
+        guard next >= 0 && next < sets.count else { return }
+        selectedMods = sets[next]
+        hovered = nil
+        needsDisplay = true
     }
 
     // -- Events ----------------------------------------------------------------
@@ -349,22 +428,42 @@ class KeymapView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        if let i = tabRects.firstIndex(where: { $0.contains(p) }) {
-            if i == layerSpecs.count { onSearch?() } else { setLayer(i) }
+        if searchRect.contains(p) {
+            onSearch?()
+        } else if let i = tabRects.firstIndex(where: { $0.contains(p) }) {
+            setLayer(i)
         } else if spec.kind == .modifier, let chip = chipRects.first(where: { $0.rect.contains(p) }) {
             selectedMods = chip.mods
             hovered = nil
+            needsDisplay = true
+        } else if spec.kind == .modifier, let step = stepRects.first(where: { $0.rect.contains(p) }) {
+            cycleChip(step.delta)
+        } else if spec.kind != .list, let key = keyRects.first(where: { $0.rect.contains(p) })?.key {
+            // Click a key to mark it red. Click it again to clear it.
+            selectedKey = selectedKey == key ? nil : key
             needsDisplay = true
         }
     }
 
     override func keyDown(with event: NSEvent) {
+        if event.charactersIgnoringModifiers == "/" { onSearch?(); return }
         switch event.keyCode {
         case 53: NSApp.terminate(nil)                              // esc
+        case 125 where spec.kind == .modifier: cycleChip(1)        // down arrow
+        case 126 where spec.kind == .modifier: cycleChip(-1)       // up arrow
         case 123: setLayer(current - 1)                            // left arrow
-        case 124:                                                  // right arrow
-            if current == layerSpecs.count - 1 { onSearch?() } else { setLayer(current + 1) }
-        default: super.keyDown(with: event)
+        case 124: setLayer(current + 1)                            // right arrow
+        default:
+            // A key on the board selects that key, as a click does
+            if let typed = event.charactersIgnoringModifiers?.lowercased(), typed.count == 1 {
+                let key = typed == " " ? spaceKey : typed
+                if keyRects.contains(where: { $0.key == key }) {
+                    selectedKey = key
+                    needsDisplay = true
+                    return
+                }
+            }
+            super.keyDown(with: event)
         }
     }
 
@@ -375,9 +474,11 @@ class KeymapView: NSView {
         NSBezierPath(roundedRect: bounds, xRadius: 14, yRadius: 14).fill()
         drawTabs()
         drawInfo()
+        drawSearchButton()
         switch spec.kind {
         case .board:
             drawBoard()
+            drawFixedKeys()
             drawBoardStatus()
         case .list:
             drawList()
@@ -385,6 +486,7 @@ class KeymapView: NSView {
         case .modifier:
             drawChips()
             drawBoard()
+            drawFixedKeys()
             drawBoardStatus()
         }
     }
@@ -392,7 +494,7 @@ class KeymapView: NSView {
     func drawTabs() {
         for (i, r) in tabRects.enumerated() {
             let on = i == current
-            let title = i < layerSpecs.count ? layerSpecs[i].title : "Search"
+            let title = layerSpecs[i].title
             (on ? NSColor(white: 1, alpha: 0.18) : NSColor(white: 1, alpha: 0.06)).setFill()
             NSBezierPath(roundedRect: r, xRadius: 8, yRadius: 8).fill()
             drawText(title, in: NSRect(x: r.minX, y: r.minY + 6, width: r.width, height: 18),
@@ -415,6 +517,14 @@ class KeymapView: NSView {
         }
         drawText(text, in: NSRect(x: margin, y: 54, width: panelWidth - margin * 2, height: 18),
                  size: 12, color: .white)
+    }
+
+    // The button that opens search, the same as the / key
+    func drawSearchButton() {
+        NSColor(white: 1, alpha: 0.12).setFill()
+        NSBezierPath(roundedRect: searchRect, xRadius: 6, yRadius: 6).fill()
+        drawText("/ search", in: NSRect(x: searchRect.minX, y: searchRect.minY + 4, width: searchRect.width, height: 18),
+                 size: 12, color: .white, align: .center)
     }
 
     func boundCount() -> Int {
@@ -440,16 +550,26 @@ class KeymapView: NSView {
                      size: 12, weight: on ? .semibold : .regular, color: on ? .white : dimColor, align: .center)
             x += width + 6
         }
+        // Up and down buttons at the right end of the chip row
+        stepRects = [(delta: -1, rect: NSRect(x: panelWidth - margin - 58, y: listTop, width: 26, height: 22)),
+                     (delta: 1, rect: NSRect(x: panelWidth - margin - 28, y: listTop, width: 26, height: 22))]
+        for (step, label) in zip(stepRects, ["▲", "▼"]) {
+            NSColor(white: 1, alpha: 0.06).setFill()
+            NSBezierPath(roundedRect: step.rect, xRadius: 6, yRadius: 6).fill()
+            drawText(label, in: NSRect(x: step.rect.minX, y: step.rect.minY + 3, width: step.rect.width, height: 16),
+                     size: 11, color: .white, align: .center)
+        }
     }
 
     func drawBoard() {
         for (key, rect) in keyRects {
             let bs = boardBindings(key)
             let isHover = key == hovered
+            let isSelected = key == selectedKey
             let name = key == spaceKey ? "space" : key
             let path = NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6)
 
-            if bs.isEmpty {
+            if bs.isEmpty && !isSelected {
                 path.lineWidth = isHover ? 2 : 1
                 freeColor.withAlphaComponent(isHover ? 0.95 : 0.45).setStroke()
                 path.stroke()
@@ -457,14 +577,49 @@ class KeymapView: NSView {
                          size: 13, weight: .medium, color: dimColor, align: .center)
             } else {
                 let hasBare = bs.contains(where: { $0.mods.isEmpty })
-                (hasBare ? boundColor : modifiedColor).withAlphaComponent(isHover ? 1 : 0.85).setFill()
+                let fill = isSelected ? (bs.isEmpty ? unusedColor : selectedColor)
+                    : (hasBare ? boundColor : modifiedColor)
+                fill.withAlphaComponent(isHover ? 1 : 0.85).setFill()
                 path.fill()
-                let shown = bs.first(where: { $0.mods.isEmpty }) ?? bs[0]
-                drawText(name, in: NSRect(x: rect.minX, y: rect.minY + 2, width: rect.width, height: 16),
-                         size: 12, weight: .semibold, color: ink, align: .center)
-                drawText(String(shown.label.prefix(7)),
-                         in: NSRect(x: rect.minX, y: rect.minY + 19, width: rect.width, height: 14),
-                         size: 8, color: ink, align: .center)
+                let shown = bs.first(where: { $0.mods.isEmpty }) ?? bs.first
+                // A letter with a shift binding shows its capital too: w/W, or W alone
+                let upper = key.count == 1 && key.first?.isLetter == true ? key.uppercased() : ""
+                let hasShift = bs.contains(where: { $0.mods.contains("⇧") }) && !upper.isEmpty
+                let cap = !hasShift ? name : (hasBare ? "\(name)/\(upper)" : upper)
+                drawText(cap, in: NSRect(x: rect.minX, y: rect.minY + 2, width: rect.width, height: 16),
+                         size: 12, weight: .semibold, color: isSelected ? .white : ink, align: .center)
+                if let shown = shown {
+                    drawText(String(shown.label.prefix(7)),
+                             in: NSRect(x: rect.minX, y: rect.minY + 19, width: rect.width, height: 14),
+                             size: 8, color: isSelected ? .white : ink, align: .center)
+                }
+            }
+            // Hover outline, drawn last so the fill does not cover it
+            if isHover {
+                path.lineWidth = 2
+                NSColor.white.setStroke()
+                path.stroke()
+            }
+        }
+    }
+
+    // Keys that hold the current layer light up green
+    func drawFixedKeys() {
+        let held = triggerKeys(currentLayer.trigger)
+            .union(spec.kind == .modifier ? chipKeys(selectedMods) : [])
+        for (id, label, rect) in fixedRects {
+            let path = NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6)
+            if held.contains(id) {
+                freeColor.setFill()
+                path.fill()
+                drawText(label, in: NSRect(x: rect.minX, y: rect.minY + 9, width: rect.width, height: 18),
+                         size: 10, weight: .semibold, color: ink, align: .center)
+            } else {
+                path.lineWidth = 1
+                NSColor(white: 1, alpha: 0.25).setStroke()
+                path.stroke()
+                drawText(label, in: NSRect(x: rect.minX, y: rect.minY + 9, width: rect.width, height: 18),
+                         size: 10, color: dimColor, align: .center)
             }
         }
     }
@@ -477,19 +632,27 @@ class KeymapView: NSView {
             detail = "Also bound: " + otherKeys.joined(separator: "  ")
         }
 
-        if let key = hovered {
+        if let key = hovered ?? selectedKey {
             let name = key == spaceKey ? "space" : key
             let bs = boardBindings(key)
             if !bs.isEmpty {
-                title = bs.map { "\($0.mods)\(name)  \($0.label)" }.joined(separator: "   ·   ")
-                detail = bs.map { "\($0.mods)\(name) → \($0.action)" }.joined(separator: "   |   ")
+                func line(_ list: [Binding]) -> String {
+                    list.map { "\($0.mods)\(name)  \($0.label)  →  \($0.action)" }.joined(separator: "   ·   ")
+                }
+                // Plain bindings on the first line. Capitals (shift) go on a second line.
+                let plain = bs.filter { !$0.mods.contains("⇧") }
+                let upper = bs.filter { $0.mods.contains("⇧") }
+                title = plain.isEmpty ? line(upper) : line(plain)
+                detail = plain.isEmpty ? "" : line(upper)
             } else {
                 title = "\(name) is free in \(spec.title)."
                 detail = ""
             }
         }
         drawStatusLines(title: title, detail: detail,
-                        hint: "blue bound · amber modifier only · green free · ← → layers · → on Hyper opens search")
+                        hint: spec.kind == .modifier
+                            ? "▲ ▼ cycle chips · ← → layers · / to search"
+                            : "blue bound · amber modifier only · green free · ← → layers · / to search")
     }
 
     // The list view: every binding in QWERTY order, two columns
@@ -530,8 +693,8 @@ class KeymapView: NSView {
         let width = panelWidth - margin * 2
         drawText(title, in: NSRect(x: margin, y: 322, width: width, height: 18),
                  size: 13, weight: .medium, color: .white)
-        drawText(detail, in: NSRect(x: margin, y: 344, width: width, height: 16),
-                 size: 11, color: dimColor)
+        drawText(detail, in: NSRect(x: margin, y: 344, width: width, height: 18),
+                 size: 13, weight: .medium, color: .white)
         drawText(hint, in: NSRect(x: margin, y: 368, width: width, height: 14),
                  size: 10, color: dimColor)
     }
@@ -553,7 +716,7 @@ searchField.isBordered = false
 searchField.focusRingType = .none
 searchField.wantsLayer = true
 searchField.layer?.cornerRadius = 8
-searchField.placeholderString = "search keys…  (← keyboard map)"
+searchField.placeholderString = "search keys…  (empty returns to the map)"
 rootView.addSubview(searchField)
 
 let scrollView = NSScrollView(frame: NSRect(
@@ -612,18 +775,22 @@ func scrollBy(_ dy: CGFloat) {
 
 class SearchDelegate: NSObject, NSTextFieldDelegate {
     func controlTextDidChange(_ obj: Notification) {
-        render(searchField.stringValue)
+        // Deleting all the text returns to the map
+        if searchField.stringValue.isEmpty {
+            returnToMap()
+        } else {
+            render(searchField.stringValue)
+        }
     }
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         switch selector {
-        case #selector(NSResponder.cancelOperation(_:)),
-             #selector(NSResponder.insertNewline(_:)):
-            NSApp.terminate(nil)
+        case #selector(NSResponder.cancelOperation(_:)):
+            // Esc clears the search and returns to the map. Esc on the map closes the HUD.
+            searchField.stringValue = ""
+            returnToMap()
             return true
-        case #selector(NSResponder.moveLeft(_:)):
-            // Only on an empty search, so the arrow still moves the cursor while typing
-            guard searchField.stringValue.isEmpty else { return false }
-            showMap(layerSpecs.count - 1)
+        case #selector(NSResponder.insertNewline(_:)):
+            NSApp.terminate(nil)
             return true
         case #selector(NSResponder.moveDown(_:)):
             scrollBy(lineHeight)
@@ -677,11 +844,16 @@ func placePanel(width: CGFloat, height: CGFloat) {
                           width: width, height: height), display: true)
 }
 
-func showMap(_ index: Int) {
-    mapView.setLayer(index)
+// Show the map as it was, so the chip choice and the layer stay
+func returnToMap() {
     panel.contentView = mapView
     placePanel(width: panelWidth, height: mapHeight)
     panel.makeFirstResponder(mapView)
+}
+
+func showMap(_ index: Int) {
+    mapView.setLayer(index)
+    returnToMap()
 }
 
 func showSearch() {

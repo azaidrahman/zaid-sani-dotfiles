@@ -70,6 +70,7 @@
                                  :text ""}}
        :show-key-search-loading {:noti {:id "org.pqrs.notification_message_key_search"
                                         :text "Opening key search..."}}
+       :key-search-run {:shell "~/.config/karabiner/scripts/show-key-search.sh"}
        :clear-key-search-loading {:noti {:id "org.pqrs.notification_message_key_search"
                                          :text ""}}
 }
@@ -103,7 +104,7 @@
     [:!Oslash :show-ws-help nil {:afterup :clear-ws-help}]
     ;; ? = consolidated fuzzy key search HUD (toggle)
     ;; primary: hyper(caps)+shift+/, also: ctrl+shift+/
-    [:!QWERSslash [:show-key-search-loading :key-search] nil {:afterup :clear-key-search-loading}]
+    [:!QWERSslash [:show-key-search-loading :key-search-run] nil {:afterup :clear-key-search-loading}]
     [:!TSslash [:key-search]]
 
 ;; BEGIN SHORTCUT-DIRECT (auto-generated from config/shortcuts.yaml)
