@@ -1,19 +1,18 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { GitInfo, Palette, PrInfo } from '../types'
+import type { GitInfo, PrInfo } from '../types'
 import { gitCallFor, storedValueFor } from './diff'
 import { GITHUB_FIELDS, bitbucketPr, dirsOf, forgeOf, githubPr } from './forge'
-import { DEFAULT_BRANCHES, DEFAULT_PALETTE, dirPillOf, paletteOf, pillOf, prTextOf } from './pill'
+import { DEFAULT_BRANCHES, prTextOf } from './pill'
 
 // The PR text for the hint row. A render hook reads it, and a write redraws
 // the row.
 const prText = atom({ plugin: 'workbench', key: 'prText' } as const, '')
 
-// The mod reads the git state and the PR of the branch (on GitHub or
-// Bitbucket), and writes them as pills to a file for each session. The status
-// line prints that file at its right edge. The mod also makes the diff panel
-// follow the session into a worktree.
+// The mod reads the PR of the branch (on GitHub or Bitbucket) and shows its
+// state under the prompt. The status line builds the git pill itself. The mod
+// also makes the diff panel follow the session into a worktree.
 
 // The PR is fetched again after this long, or at once when the branch changes
 // or a command touches the remote.
@@ -124,42 +123,11 @@ let prFetchedAt = 0
 let isBusy = false
 let queued: { forcePr: boolean } | null = null
 
-// The status line reads ${XDG_CACHE_HOME:-~/.cache}/claude-workbench/<session id>.
-async function pillPath($: EngineInterface): Promise<string> {
-  const cache = (await $.env.get('XDG_CACHE_HOME')) || `${await $.env.get('HOME')}/.cache`
-  return `${cache}/claude-workbench/${await $.session.id()}`
-}
-
-// The palette is read again on each write, so an edit of palette.json shows at
-// the next refresh.
-async function readPalette($: EngineInterface): Promise<Palette> {
-  try {
-    return paletteOf(await $.fs.read(`${await $.env.get('HOME')}/.claude/palette.json`))
-  } catch {
-    return DEFAULT_PALETTE
-  }
-}
-
-// Row 1 of the status line gets the pill file. Row 2, the hint row of Claude
-// Code, gets the PR text from session state (see the PromptHint hook). The
-// file is never empty: outside a git repository, the pill shows the directory.
-async function writePill($: EngineInterface): Promise<void> {
-  const palette = await readPalette($)
-  const dir = (await $.session.cwd()).split('/').filter(Boolean).pop() ?? '/'
-  await $.fs.write(await pillPath($), git ? pillOf(git, palette) : dirPillOf(dir, palette))
+// The PR text goes to the hint row of Claude Code (see the PromptHint hook).
+async function showPrText($: EngineInterface): Promise<void> {
   // Claude Code links only a GitHub PR in the hint row.
   const text = prTextOf(pr, git?.forge !== 'github')
   await update($, prText, () => text)
-}
-
-// The status line gets the width of the terminal as COLUMNS. When a pane is
-// docked beside the conversation, its column is narrower, and a pill aligned
-// to COLUMNS falls off the screen. A render hook sees the true width, so the
-// mod writes it to <pill file>.columns for the status line.
-let columns = 0
-
-async function writeColumns($: EngineInterface): Promise<void> {
-  await $.fs.write(`${await pillPath($)}.columns`, `${columns}\n`)
 }
 
 async function refresh($: EngineInterface, forcePr: boolean): Promise<void> {
@@ -179,8 +147,8 @@ async function refresh($: EngineInterface, forcePr: boolean): Promise<void> {
     } else if (forcePr || key !== prKey || isStale) {
       if (key !== prKey) pr = null
       prFetchedAt = now
-      // Show the git state at once; the PR follows when the forge answers.
-      await writePill($)
+      // Show the PR state at once; the PR follows when the forge answers.
+      await showPrText($)
       pr = await readPr($, git).catch(
         (err: unknown): PrInfo => ({ kind: 'error', message: String((err as Error)?.message ?? err) }),
       )
@@ -189,7 +157,7 @@ async function refresh($: EngineInterface, forcePr: boolean): Promise<void> {
     // Local commits change more often than the PR, so compare on each refresh.
     if (pr?.kind === 'pr') pr = { ...pr, sync: await readSync($, pr.headSha) }
     prKey = key
-    await writePill($)
+    await showPrText($)
   } catch (err) {
     $.ui.log(`workbench: refresh failed: ${String(err)}`, { to: 'debug' })
   } finally {
@@ -224,30 +192,16 @@ export const register: Register = on => {
     return value === result.value ? result : { value }
   })
 
-  // The hint line under the prompt draws again when its width changes, and
-  // when the PR text changes (it reads prText). It ends with the state of the
-  // PR, after the "PR #<n>" link that Claude Code puts in it.
+  // The hint line under the prompt draws again when the PR text changes (it
+  // reads prText). It ends with the state of the PR, after the "PR #<n>" link
+  // that Claude Code puts in it.
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
-    const width = e.viewport?.columns ?? 0
-    if (width && width !== columns) {
-      columns = width
-      $.clock.after(0, () => writeColumns($))
-    }
     const text = await read($, prText)
     if (!text || e.props.tail) return next(e)
     return next({ ...e, props: { ...e.props, tail: text } })
   })
 
   on('session.start', async ($, e, next) => {
-    // Claude Code draws the status line once at the start. Write the git pill
-    // before this hook returns, so that the first draw finds the file. The git
-    // calls are fast; the PR read, which can be slow, follows in the background.
-    try {
-      git = await readGit($)
-      await writePill($)
-    } catch (err) {
-      $.ui.log(`workbench: first pill failed: ${String(err)}`, { to: 'debug' })
-    }
     schedule($)
     $.clock.every(PR_TTL_MS, () => refresh($, false))
     await $.command.register({
@@ -263,7 +217,7 @@ export const register: Register = on => {
 
   on('command.run', { command: 'pr-refresh' }, async $ => {
     await refresh($, true)
-    return { text: 'Refreshed the workbench pills.' }
+    return { text: 'Refreshed the PR of the branch.' }
   })
 
   // The terminal copies with OSC 52, so the URL reaches the clipboard of the

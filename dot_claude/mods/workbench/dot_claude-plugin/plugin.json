@@ -1,6 +1,6 @@
 {
   "name": "workbench",
   "version": "0.1.0",
-  "description": "A status line pill with the worktree, branch, pending commit message and the Bitbucket PR of the branch.",
+  "description": "Shows the state of the PR of the branch (GitHub or Bitbucket) under the prompt.",
   "types": "./types/index.d.ts"
 }

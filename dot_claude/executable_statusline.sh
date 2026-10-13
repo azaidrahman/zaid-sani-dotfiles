@@ -58,19 +58,6 @@ source "$(dirname -- "${BASH_SOURCE[0]}")/statusline-cost.sh" 2>/dev/null || tru
 dir=$(printf '%s' "$input" | jq -r '.workspace.current_dir // .cwd // empty')
 [ -z "$dir" ] && dir="$PWD"
 
-# The workbench mod writes a pill of the worktree and Bitbucket PR for each
-# session. Without the mod, fall back to the plain worktree and branch.
-pill=""
-pill_sid=$(printf '%s' "$input" | jq -r '.session_id // empty')
-[ -n "$pill_sid" ] && pill=$(cat "${XDG_CACHE_HOME:-$HOME/.cache}/claude-workbench/$pill_sid" 2>/dev/null)
-
-wt=""
-br=""
-if [ -z "$pill" ] && gitinfo=$(git -C "$dir" rev-parse --show-toplevel --abbrev-ref HEAD 2>/dev/null); then
-  wt=$(basename "$(printf '%s' "$gitinfo" | sed -n 1p)")
-  br=$(printf '%s' "$gitinfo" | sed -n 2p)
-fi
-
 # Cost segment: only LiteLLM-routed sessions (cv) show the proxy's real
 # per-session spend (ledger), overwritten below. Everything else shows no cost.
 litellm_routed="false"
@@ -79,26 +66,18 @@ show_cost="false"
 
 # jq pass: emit fields joined by \x01 (non-whitespace) so IFS read preserves empty fields.
 # Tab (\t) collapses consecutive delimiters in bash IFS read; \x01 does not.
-out=$(printf '%s' "$input" | jq -r --arg wt "$wt" --arg br "$br" --arg show_cost "$show_cost" --arg litellm "$litellm_routed" '
+out=$(printf '%s' "$input" | jq -r --arg show_cost "$show_cost" --arg litellm "$litellm_routed" '
   [
     (.model.display_name // ""),
     (.effort.level // ""),
     (if $show_cost == "true" and $litellm == "false" and (.cost.total_cost_usd != null) then (.cost.total_cost_usd | tostring) else "" end),
     ((.context_window.used_percentage // 0) | tostring),
-    $wt,
-    $br,
     (if .rate_limits.five_hour then (.rate_limits.five_hour.used_percentage | round | tostring) else "" end),
     (if .rate_limits.seven_day then (.rate_limits.seven_day.used_percentage | round | tostring) else "" end),
     (.session_id // "")
   ] | join("\u0001")')
 
-IFS=$'\x01' read -r model effort cost_raw ctx_pct wt br five_h_pct seven_d_pct session_id <<< "$out"
-
-# The status line is printed as it is. A directory name can hold an escape
-# character, so remove the control characters from the names (the pill of the
-# mod is cleaned by the mod itself).
-wt=${wt//[[:cntrl:]]/}
-br=${br//[[:cntrl:]]/}
+IFS=$'\x01' read -r model effort cost_raw ctx_pct five_h_pct seven_d_pct session_id <<< "$out"
 
 # LiteLLM-routed: replace the (empty) estimate slot with this session's real
 # ledger spend, read from the cache (refreshed in the background by the helper).
@@ -196,7 +175,6 @@ alarm_color() {
 
 sep=" "
 segments=()        # left side
-right_segments=()  # right-aligned fallback without the mod: worktree / branch
 
 [ -n "$mode" ] && segments+=("$(pill "$(mode_color "$mode" ansi)" "$PAL_ink_ansi" "${mode:0:1}")")
 
@@ -222,8 +200,90 @@ else segments+=("$(pill "$PAL_surface_ansi" "$PAL_text_ansi" "${ctx_pct}%")"); f
 # Session ID, last 5 chars — enough to disambiguate panes without the clutter.
 [ -n "$session_id" ] && segments+=("$(pill "$PAL_surface_dim_ansi" "$PAL_dim_ansi" "${session_id: -5}")")
 
-[ -n "$wt" ] && right_segments+=("wt:${wt}")
-[ -n "$br" ] && right_segments+=("br:${br}")
+# ── Workbench pill (right edge of row 1) ──────────────────────────────────────
+#
+# The status line builds the pill itself, so the first draw of a session shows
+# it. The words and colors are those of the pill of the workbench mod
+# (dot_claude/mods/workbench/hooks/pill.ts). The names come from git and from the
+# directory, so the control characters are removed from them. A name then cannot
+# send codes to the terminal.
+
+wb_fg() { printf '\033[38;5;%sm' "$1"; }
+wb_bg() { printf '\033[48;5;%sm' "$1"; }
+
+# wb_hue <color> <text> : the text in a state color, then back to the text color
+wb_hue() { printf '%s%s%s' "$(wb_fg "$1")" "$2" "$(wb_fg "$PAL_text_ansi")"; }
+
+# wb_clean <name> : the name without control characters
+wb_clean() { printf '%s' "${1//[[:cntrl:]]/}"; }
+
+# wb_render <segment>... : the pill, with a dim dot between the segments
+wb_render() {
+  local i=0 s body=""
+  for s in "$@"; do
+    [ "$i" -gt 0 ] && body+="$(wb_fg "$PAL_dim_ansi") · "
+    body+="$(wb_bg "$PAL_surface_ansi")$(wb_fg "$PAL_text_ansi")$s"
+    i=$((i + 1))
+  done
+  printf '%s%s%s%s%s%s%s' "$(wb_fg "$PAL_surface_ansi")" "$CAP_L" "$body" $'\033[0m' \
+    "$(wb_fg "$PAL_surface_ansi")" "$CAP_R" $'\033[0m'
+}
+
+# wb_pill <dir> : the pill of the directory. Outside git it shows the name only.
+wb_pill() {
+  local dir=$1 info status head line re top gitdir common branch worktree repo where drift=""
+  local ahead=0 behind=0 changed=0 staged=0 main=0 hue ok changes text
+  local items=()
+
+  if ! info=$(git -C "$dir" rev-parse --path-format=absolute --show-toplevel --git-dir --git-common-dir --abbrev-ref HEAD 2>/dev/null); then
+    wb_render "$(wb_clean "$(basename "$dir")") $(wb_hue "$PAL_dim_ansi" "no git")"
+    return
+  fi
+  top=$(sed -n 1p <<< "$info")
+  gitdir=$(sed -n 2p <<< "$info")
+  common=$(sed -n 3p <<< "$info")
+  branch=$(sed -n 4p <<< "$info")
+
+  status=$(git -C "$dir" status --porcelain=v1 --branch 2>/dev/null)
+  head=$(sed -n 1p <<< "$status")
+  re='ahead ([0-9]+)'; [[ $head =~ $re ]] && ahead=${BASH_REMATCH[1]}
+  re='behind ([0-9]+)'; [[ $head =~ $re ]] && behind=${BASH_REMATCH[1]}
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    changed=$((changed + 1))
+    case ${line:0:1} in ' '|'?') ;; *) staged=$((staged + 1)) ;; esac
+  done <<< "$(sed -n '2,$p' <<< "$status")"
+
+  worktree=$(wb_clean "$(basename "$top")")
+  repo=$(wb_clean "$(basename "${common%/.git}")")
+  case $branch in main|master|develop|HEAD) main=1 ;; esac
+  if [ "$gitdir" != "$common" ]; then
+    where="$repo/$worktree"
+  else
+    hue=$PAL_dim_ansi
+    [ "$main" -eq 1 ] && [ "$changed" -gt 0 ] && hue=$PAL_warn_ansi
+    where="$worktree $(wb_hue "$hue" "main checkout")"
+  fi
+  [ "$ahead" -gt 0 ] && drift+=" $ahead unpushed"
+  [ "$behind" -gt 0 ] && drift+=" $(wb_hue "$PAL_warn_ansi" "$behind behind")"
+  text="$where$drift"
+
+  if [ "$changed" -gt 0 ]; then
+    ok=$PAL_warn_ansi
+    [ "$staged" -eq "$changed" ] && ok=$PAL_ok_ansi
+    items+=("$(wb_hue "$ok" "$staged/$changed staged")")
+  fi
+  [ -f "$gitdir/CLAUDE_COMMIT_MSG" ] && items+=("$(wb_hue "$PAL_ok_ansi" "msg ready")")
+  [ -f "$gitdir/CLAUDE_PR_MSG" ] && items+=("$(wb_hue "$PAL_ok_ansi" "PR draft ready")")
+
+  if [ "${#items[@]}" -gt 0 ]; then
+    local IFS=' '
+    changes="${items[*]}"
+    wb_render "$text" "$changes"
+  else
+    wb_render "$text"
+  fi
+}
 
 # ── Assemble ───────────────────────────────────────────────────────────────────
 
@@ -243,7 +303,7 @@ join_segs() {
 #  - a trailing \n makes Claude Code treat this as a 2-line status and redraw
 #    both rows, which flickers/duplicates during generation.
 left=$(join_segs "$sep" "${segments[@]}")
-right=${pill:-$(join_segs " | " "${right_segments[@]}")}
+right=$(wb_pill "$dir")
 
 # Right-align the workbench pill (repository/worktree and changes) to the
 # terminal edge. The PR is on the next row: the mod adds it to the end of the

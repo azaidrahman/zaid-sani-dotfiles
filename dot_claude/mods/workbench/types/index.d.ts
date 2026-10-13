@@ -23,18 +23,6 @@ export type GitInfo = {
   forge: Forge | null
 }
 
-/** The 256-color numbers of the pill, from ~/.claude/palette.json. */
-export type Palette = {
-  surface: number
-  surface_dim: number
-  text: number
-  dim: number
-  ok: number
-  warn: number
-  crit: number
-  merged: number
-}
-
 export type Build ='ok' | 'fail' | 'running' | null
 
 export type PrState = 'open' | 'draft' | 'merged' | 'closed'
