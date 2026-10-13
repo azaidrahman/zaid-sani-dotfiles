@@ -78,10 +78,8 @@
 					<key>Text</key>
 					<string>tell application "Arc"
 	set theURL to URL of active tab of front window
-	set oldWindow to id of front window
 	close active tab of front window
 end tell
-tell application "Keyboard Maestro Engine" to setvariable "ArcMoveOldWindow" to oldWindow
 return theURL</string>
 					<key>TimeOutAbortsMacro</key>
 					<true/>
