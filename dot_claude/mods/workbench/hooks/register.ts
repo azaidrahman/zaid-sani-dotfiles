@@ -4,7 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { GitInfo, Palette, PrInfo } from '../types'
 import { gitCallFor, storedValueFor } from './diff'
 import { GITHUB_FIELDS, bitbucketPr, dirsOf, forgeOf, githubPr } from './forge'
-import { DEFAULT_BRANCHES, DEFAULT_PALETTE, hintTailOf, paletteOf, pillOf, prTextOf } from './pill'
+import { DEFAULT_BRANCHES, DEFAULT_PALETTE, paletteOf, pillOf, prTextOf } from './pill'
 
 // The PR text for the hint row. A render hook reads it, and a write redraws
 // the row.
@@ -221,8 +221,8 @@ export const register: Register = on => {
   })
 
   // The hint line under the prompt draws again when its width changes, and
-  // when the PR text changes (it reads prText). It ends with the PR, padded to
-  // the right edge.
+  // when the PR text changes (it reads prText). It ends with the state of the
+  // PR, after the "PR #<n>" link that Claude Code puts in it.
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
     const width = e.viewport?.columns ?? 0
     if (width && width !== columns) {
@@ -230,8 +230,8 @@ export const register: Register = on => {
       $.clock.after(0, () => writeColumns($))
     }
     const text = await read($, prText)
-    if (!text || !width || e.props.tail) return next(e)
-    return next({ ...e, props: { ...e.props, tail: hintTailOf(e.props.hint, text, width) } })
+    if (!text || e.props.tail) return next(e)
+    return next({ ...e, props: { ...e.props, tail: text } })
   })
 
   on('session.start', async ($, e, next) => {

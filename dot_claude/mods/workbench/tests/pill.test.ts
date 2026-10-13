@@ -3,7 +3,7 @@ import type { On } from 'claude-code'
 
 import { gitCallFor, storedValueFor } from '../hooks/diff'
 import { forgeOf, githubPr } from '../hooks/forge'
-import { hintTailOf, prTextOf } from '../hooks/pill'
+import { prTextOf } from '../hooks/pill'
 import type { GitInfo } from '../types'
 
 const GIT: Record<string, string> = {
@@ -145,20 +145,12 @@ test('a git call in the main checkout runs in the worktree of the session', () =
   for (const c of cases) expect(gitCallFor(c.git, c.call)).toEqual(c.want)
 })
 
-test('the hint row ends with the PR in words, at the right edge', () => {
+test('the hint row ends with the state of the PR in words', () => {
   const open = {
     kind: 'pr', id: 19, state: 'open', url: '', headSha: '', sync: null,
     approvals: 1, changesRequested: 0, reviewers: 2, openTasks: 0, comments: 3, build: 'running',
   } as const
-  const text = prTextOf(open)
-  expect(text).toBe('PR#19 open · 1/2 approved · CI running · 3 comments')
-  expect(prTextOf({ ...open, state: 'merged' })).toBe('PR#19 merged')
+  expect(prTextOf(open)).toBe('open · 1/2 approved · CI running · 3 comments')
+  expect(prTextOf({ ...open, state: 'merged' })).toBe('merged')
   expect(prTextOf({ kind: 'none' })).toBe('')
-
-  const hint = 'auto mode on (shift+tab to cycle)'
-  const tail = hintTailOf(hint, text, 120)
-  expect(hint.length + tail.length).toBe(118)
-  expect(tail.endsWith(text)).toBe(true)
-  // Too narrow: two spaces, then the text, which Claude Code cuts at the edge.
-  expect(hintTailOf(hint, text, 40)).toBe(`  ${text}`)
 })

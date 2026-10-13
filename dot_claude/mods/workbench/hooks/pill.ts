@@ -43,11 +43,13 @@ const RESET = '\x1b[0m'
 
 export const DEFAULT_BRANCHES = new Set(['main', 'master', 'develop', 'HEAD'])
 
-// The PR as plain words, for the end of the hint row under the prompt. Claude
-// Code draws that text dim and without color, so it carries no ANSI codes.
+// The state of the PR as plain words, for the end of the hint row under the
+// prompt. That row already shows "PR #<n>" as a link, so the number is not
+// repeated. Claude Code draws the text dim and without color, puts " · "
+// before it, and collapses spaces, so it carries no ANSI codes or padding.
 export function prTextOf(pr: PrInfo | null): string {
   if (pr?.kind !== 'pr') return ''
-  const parts = [`PR#${pr.id} ${pr.state}`]
+  const parts: string[] = [pr.state]
   if (pr.state === 'open' || pr.state === 'draft') {
     if (pr.reviewers || pr.approvals) parts.push(`${pr.approvals}/${Math.max(pr.reviewers, pr.approvals)} approved`)
     if (pr.changesRequested) parts.push(`${pr.changesRequested} changes requested`)
@@ -56,14 +58,6 @@ export function prTextOf(pr: PrInfo | null): string {
     if (pr.openTasks) parts.push(`${pr.openTasks} task${pr.openTasks === 1 ? '' : 's'}`)
   }
   return parts.join(' · ')
-}
-
-// The tail for a hint row of `hint` in `width` columns: the PR text, padded so
-// that it ends `margin` columns before the right edge. With too little room it
-// follows the hint after two spaces, and Claude Code cuts it at the edge.
-export function hintTailOf(hint: string, prText: string, width: number, margin = 2): string {
-  const pad = width - margin - hint.length - prText.length
-  return `${' '.repeat(Math.max(pad, 2))}${prText}`
 }
 
 // The pill of row 1 of the status line: the worktree and the local changes.
