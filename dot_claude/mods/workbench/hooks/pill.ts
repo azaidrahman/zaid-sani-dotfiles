@@ -91,6 +91,16 @@ export function pillOf(git: GitInfo, c: Palette = DEFAULT_PALETTE): string {
   ].filter(Boolean)
   if (changes.length) segments.push({ bg: c.surface, fg: c.text, text: changes.join(' ') })
 
+  return render(segments, c)
+}
+
+// The pill when the directory of the session is not in a git repository: the
+// name of the directory, so the status line still shows the pill.
+export function dirPillOf(dir: string, c: Palette = DEFAULT_PALETTE): string {
+  return render([{ bg: c.surface, fg: c.text, text: `${dir} ${fg(c.dim)}no git${fg(c.text)}` }], c)
+}
+
+function render(segments: Segment[], c: Palette): string {
   const first = segments[0]!
   const last = segments[segments.length - 1]!
   // A dim dot between the parts.

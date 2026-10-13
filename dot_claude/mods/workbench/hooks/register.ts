@@ -4,7 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { GitInfo, Palette, PrInfo } from '../types'
 import { gitCallFor, storedValueFor } from './diff'
 import { GITHUB_FIELDS, bitbucketPr, dirsOf, forgeOf, githubPr } from './forge'
-import { DEFAULT_BRANCHES, DEFAULT_PALETTE, paletteOf, pillOf, prTextOf } from './pill'
+import { DEFAULT_BRANCHES, DEFAULT_PALETTE, dirPillOf, paletteOf, pillOf, prTextOf } from './pill'
 
 // The PR text for the hint row. A render hook reads it, and a write redraws
 // the row.
@@ -141,9 +141,12 @@ async function readPalette($: EngineInterface): Promise<Palette> {
 }
 
 // Row 1 of the status line gets the pill file. Row 2, the hint row of Claude
-// Code, gets the PR text from session state (see the PromptHint hook).
+// Code, gets the PR text from session state (see the PromptHint hook). The
+// file is never empty: outside a git repository, the pill shows the directory.
 async function writePill($: EngineInterface): Promise<void> {
-  await $.fs.write(await pillPath($), git ? pillOf(git, await readPalette($)) : '')
+  const palette = await readPalette($)
+  const dir = (await $.session.cwd()).split('/').filter(Boolean).pop() ?? '/'
+  await $.fs.write(await pillPath($), git ? pillOf(git, palette) : dirPillOf(dir, palette))
   // Claude Code links only a GitHub PR in the hint row.
   const text = prTextOf(pr, git?.forge !== 'github')
   await update($, prText, () => text)
@@ -236,6 +239,15 @@ export const register: Register = on => {
   })
 
   on('session.start', async ($, e, next) => {
+    // Claude Code draws the status line once at the start. Write the git pill
+    // before this hook returns, so that the first draw finds the file. The git
+    // calls are fast; the PR read, which can be slow, follows in the background.
+    try {
+      git = await readGit($)
+      await writePill($)
+    } catch (err) {
+      $.ui.log(`workbench: first pill failed: ${String(err)}`, { to: 'debug' })
+    }
     schedule($)
     $.clock.every(PR_TTL_MS, () => refresh($, false))
     await $.command.register({

@@ -35,7 +35,8 @@ const plain = (ansi: string) => ansi.replace(/\x1b\[[0-9;]*m/g, '')
 
 // The engine beneath the mod: a dirty linked worktree of a Bitbucket repo,
 // whose main checkout is /repo.
-function fakeEngine(on: On) {
+// With `isRepo` false, the directory of the session is outside a git repository.
+function fakeEngine(on: On, isRepo = true) {
   const world = { written: new Map<string, string>() }
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
@@ -54,6 +55,9 @@ function fakeEngine(on: On) {
   }))
   on('process.run', (_$, e) => {
     const [cmd, sub = ''] = e.argv
+    if (cmd === 'git' && !isRepo) {
+      return { value: { exitCode: 128, stdout: '', stderr: 'not a git repository', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
     if (cmd === 'git') return ok(GIT[sub] ?? '')
     const file = e.argv.includes('get') ? '/tmp/get.json' : '/tmp/query.json'
     return ok(`output_files:\n  stdout: "${file}"\n`)
@@ -61,17 +65,28 @@ function fakeEngine(on: On) {
   return world
 }
 
-test('the mod writes pills of the worktree and its PR for the status line', async ($, on) => {
-  const clock = mock.clock(on)
+// Claude Code draws the status line once at the start, so the pill file must
+// exist when `session.start` returns, before the clock runs the background
+// refresh.
+test('the mod writes the pill of the worktree before session start returns', async ($, on) => {
+  mock.clock(on)
   const world = fakeEngine(on)
 
   await $.session.start({ cwd: '/w/GTI-273-foo', surface: 'terminal', isInteractive: true })
-  await clock.settle()
 
   const pills = world.written.get('/home/me/.cache/claude-workbench/abc123')
   expect(plain(pills ?? '')).toBe(
     '\ue0b6repo/GTI-273-foo 2 unpushed · 1/3 staged msg ready\ue0b4',
   )
+})
+
+test('the mod writes a pill outside a git repository, so the status line never falls back', async ($, on) => {
+  mock.clock(on)
+  const world = fakeEngine(on, false)
+
+  await $.session.start({ cwd: '/w/GTI-273-foo', surface: 'terminal', isInteractive: true })
+
+  expect(plain(world.written.get('/home/me/.cache/claude-workbench/abc123') ?? '')).toContain('GTI-273-foo no git')
 })
 
 test('the mod writes the width of the conversation column for the status line', async ($, on) => {
