@@ -60,7 +60,7 @@ app:
   # key | label | app name
   - w | WA | Whatsapp
   - W | messages | Messages    # uppercase = shift+key
-  - c | switch | !Cgrave_accent_and_tilde  # !Command = goku key combo
+  - \ | switch | !Cgrave_accent_and_tilde  # !Command = goku key combo
 ```
 
 ### Workspace (Left Option)

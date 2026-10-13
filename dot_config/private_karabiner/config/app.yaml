@@ -11,12 +11,9 @@ app:
   - 1 | arc(work) | sh:$HOME/.config/karabiner/scripts/arc-space.sh Work
   - 2 | arc(zaid) | sh:$HOME/.config/karabiner/scripts/arc-space.sh Zaid
   - t | ghostty | sh:$HOME/.config/karabiner/scripts/ghostty-window.sh
-  - y | sioyek | Sioyek
   - i | IINA | IINA
   - I | ino | Inoreader
-  - u | ytmusic | Youtube Music
   - j | jira | Jira
-  - o | orb | Orbstack
   - p | gchat | sh:$HOME/.config/karabiner/scripts/arc-tab.sh Work GCHAT
   - s | slack | Slack
   - f | cal | Calendar
@@ -26,10 +23,9 @@ app:
   - 3 | arc(research) | sh:$HOME/.config/karabiner/scripts/arc-space.sh Research
   - k | KM | Keyboard Maestro
   - l | gmail(gmd) | sh:$HOME/.config/karabiner/scripts/arc-tab.sh Work 'GMAIL GMD'
-  - c | switch | !Cgrave_accent_and_tilde
+  - \ | switch | !Cgrave_accent_and_tilde
   - v | chrome | Google Chrome
   - b | telegram | Telegram
   - n | todoist | sh:$HOME/.config/karabiner/scripts/arc-float-tab.sh https://todoistenhanced.julesbertolino.fr
-  - m | spotify | Spotify
   - x | mixlet | Mixlet
-  - d | t3code | sh:$HOME/.config/karabiner/scripts/launch-t3code.sh
+  - 0 | claude | Claude

@@ -82,7 +82,9 @@ def help_text(entries):
     items = []
     for entry in entries:
         key, label, _ = parse_entry(entry)
-        items.append((key, f"{key}:{label}"))
+        # Escape backslash for EDN string embedding
+        display_key = '\\\\' if key == '\\' else key
+        items.append((key, f"{display_key}:{label}"))
     items.sort(key=lambda x: qwerty_pos(x[0]))
     return ', '.join(t for _, t in items)
 

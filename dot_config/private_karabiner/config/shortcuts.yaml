@@ -31,7 +31,6 @@ l2:
   - p | dot | chezmoi dotfiles (alt)
   - s | cleanshotx | CleanShot X (alt)
   - l | todoist | Todoist (alt)
-  - c | claude | open:Claude
   - g | gemini | open:Gemini
   - x | codex | open-id:com.openai.codex
 

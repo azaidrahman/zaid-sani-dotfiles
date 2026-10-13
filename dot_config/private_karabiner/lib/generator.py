@@ -17,7 +17,7 @@ LAYERS = {
 
 def make_rule(key, label, app):
     is_shifted = key.isupper() and key.isalpha()
-    from_key = f":!S{key.lower()}" if is_shifted else f":{key}"
+    from_key = f":!S{key.lower()}" if is_shifted else f":{GOKU_NAMES.get(key, key)}"
     if app and app.startswith('!'):
         to_part = f":{app}"
     elif app and app.startswith('sh:'):

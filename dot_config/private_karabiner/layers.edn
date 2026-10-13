@@ -74,7 +74,6 @@
    [;; ─── F13 ───
     [:!T#Oa   :!Sf13         :shortcut-l2]   ;; a → shift+F13
     [:!T#Ob   :!TSf13        :shortcut-l2]   ;; b → ctrl+shift+F13
-    [:!T#Oc   :!CSf13        :shortcut-l2]   ;; c → cmd+shift+F13
     [:!T#Od   :!OSf13        :shortcut-l2]   ;; d → opt+shift+F13
     [:!T#Oe   :!CTSf13       :shortcut-l2]   ;; e → ctrl+cmd+shift+F13
     [:!T#Of   :!TOSf13       :shortcut-l2]   ;; f → ctrl+opt+shift+F13

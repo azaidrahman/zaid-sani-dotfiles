@@ -1,0 +1,13 @@
+# Retired app launcher entries (right_option + key)
+# Not read by scripts/generate.py. Kept for reference.
+# Restore a line by copying it back into config/app.yaml.
+#
+# Retired 2026-10-13:
+#   y, u, o, d, m. The key c (switch) moved to backslash.
+
+  - y | sioyek | Sioyek
+  - u | ytmusic | Youtube Music
+  - o | orb | Orbstack
+  - c | switch | !Cgrave_accent_and_tilde
+  - m | spotify | Spotify
+  - d | t3code | sh:$HOME/.config/karabiner/scripts/launch-t3code.sh
