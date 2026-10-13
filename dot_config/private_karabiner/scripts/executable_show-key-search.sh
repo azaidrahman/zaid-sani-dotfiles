@@ -5,6 +5,7 @@ DIR="$HOME/.config/karabiner"
 BIN="$DIR/scripts/key-search-hud"
 SRC="$DIR/src/key-search-hud.swift"
 INDEX="$DIR/data/keymap-index.tsv"
+FKEY_INDEX="$DIR/data/fkey-index.tsv"
 
 # Toggle: if the HUD is open, close it
 if pgrep -xq key-search-hud; then
@@ -16,4 +17,4 @@ if [[ ! -x "$BIN" || "$SRC" -nt "$BIN" ]]; then
   /usr/bin/swiftc -O "$SRC" -o "$BIN" || exit 1
 fi
 
-"$BIN" "$INDEX" &
+"$BIN" "$INDEX" "$FKEY_INDEX" &

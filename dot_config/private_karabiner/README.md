@@ -187,6 +187,11 @@ filter, press Esc to close. Press Ctrl+Shift+`/` again to toggle it off.
 
 The HUD reads `data/keymap-index.tsv`. The build step (`generate.py`) writes
 this file from all the layer YAML files and from `config/extras.yaml`.
+
+The F-keys tab reads `data/fkey-index.tsv`. The build step writes it from the
+shortcut rules in `karabiner.edn`, so it shows the F-keys that Karabiner sends.
+Each labelled layer key appears once, with its modifiers. Keys with a direct
+action (`open:` or a `!` combo) are left out, because they do not send an F-key.
 The extras file lists the hand-written bindings from `karabiner.base.edn`.
 It is for the search index only — it does not generate rules. When you add
 a hand-written rule to `karabiner.base.edn`, mirror it in `extras.yaml`. The launcher

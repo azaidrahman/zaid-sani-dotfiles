@@ -5,7 +5,8 @@
 """Generate help text, app-launch rules, and shortcut layer rules from YAML configs.
 
 Reads:  config/*.yaml, data/fkey-pool.json
-Writes: karabiner.edn (between BEGIN/END markers), data/fkey-pool.json
+Writes: karabiner.edn (between BEGIN/END markers), data/fkey-pool.json,
+        data/keymap-index.tsv, data/fkey-index.tsv
 """
 import re, sys, os
 
@@ -19,7 +20,8 @@ from lib.generator import (LAYERS, generate_app_rules, generate_layer,
                             generate_shortcut_direct_rules,
                             generate_workspace_rules, generate_help_block,
                             generate_hyper_rules, generate_hyper_help,
-                            load_hyperkeys, print_mapping, generate_key_index)
+                            load_hyperkeys, print_mapping, generate_key_index,
+                            generate_fkey_index, live_fkey_actions)
 
 # -- Paths --------------------------------------------------------------------
 
@@ -168,9 +170,14 @@ open(edn_path, 'w').write(edn)
 save_pool(pool_path, pool_map)
 
 # Consolidated key index for the search HUD (ctrl+shift+/)
+# F-key index for the F-keys tab of the search HUD, read from the rules just written
+fkey_rows = generate_fkey_index(edn, shortcut_sections)
+fkey_index_path = os.path.join(dir_path, 'data', 'fkey-index.tsv')
+open(fkey_index_path, 'w').write('\n'.join(fkey_rows) + '\n')
+
 index_rows = generate_key_index(
     app_sections.get('app', []), ws_entries, ws_shift_entries,
-    shortcut_sections, pool_map, hyper_data, hyper_labels,
+    shortcut_sections, live_fkey_actions(fkey_rows), hyper_data, hyper_labels,
     extras_sections.get('extras', []))
 index_path = os.path.join(dir_path, 'data', 'keymap-index.tsv')
 open(index_path, 'w').write('\n'.join(index_rows) + '\n')

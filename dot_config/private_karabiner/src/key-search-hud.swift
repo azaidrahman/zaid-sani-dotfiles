@@ -1,10 +1,12 @@
 // key-search-hud: fuzzy-searchable reference of all Karabiner layer bindings,
 // with a keyboard map mode. Opened by hyper+shift+/.
 //
-// Usage: key-search-hud <keymap-index.tsv>
-// The TSV comes from scripts/generate.py (columns: layer, trigger, key, label, action).
+// Usage: key-search-hud <keymap-index.tsv> [fkey-index.tsv]
+// The TSVs come from scripts/generate.py. The key index has columns: layer, trigger, key, label, action.
+// The F-key index has columns: fkey, mods, layer, key, label.
 //
-// Map mode (opens first): one view per layer. Left and right arrows switch layers.
+// Map mode (opens first): one view per layer, and an F-keys view. Left and right arrows switch views.
+//   In the F-keys view, up and down arrows pick an F-key.
 //   The / key or the search button opens search.
 // Search mode: type to filter. Up and down scroll. Deleting all the text returns to the map.
 // Esc (or click away) closes the HUD. The map reloads when the TSV changes.
@@ -20,11 +22,13 @@ struct Entry {
 }
 
 guard CommandLine.arguments.count > 1 else {
-    fputs("Usage: key-search-hud <keymap-index.tsv>\n", stderr)
+    fputs("Usage: key-search-hud <keymap-index.tsv> [fkey-index.tsv]\n", stderr)
     exit(1)
 }
 
 let filePath = (CommandLine.arguments[1] as NSString).expandingTildeInPath
+let fkeyPath = CommandLine.arguments.count > 2
+    ? (CommandLine.arguments[2] as NSString).expandingTildeInPath : ""
 guard let content = try? String(contentsOfFile: filePath, encoding: .utf8) else {
     fputs("Cannot read \(filePath)\n", stderr)
     exit(1)
@@ -141,7 +145,7 @@ struct Layer {
     var bindings: [String: [Binding]] = [:]  // board key -> bindings
 }
 
-enum ViewKind { case board, list, modifier }
+enum ViewKind { case board, list, modifier, fkey }
 
 struct LayerSpec {
     let id: String
@@ -153,6 +157,7 @@ struct LayerSpec {
 let layerSpecs = [
     LayerSpec(id: "app", title: "App", kind: .board),
     LayerSpec(id: "workspace", title: "Workspace", kind: .board),
+    LayerSpec(id: "fkey", title: "F-keys", kind: .fkey),
     LayerSpec(id: "l1", title: "l1", kind: .board),
     LayerSpec(id: "l2", title: "l2", kind: .board),
     LayerSpec(id: "l3", title: "l3", kind: .board),
@@ -255,6 +260,38 @@ func loadLayers(_ path: String) -> [String: Layer] {
     return layers
 }
 
+// One F-key binding: a layer key that sends this F-key with these modifiers
+struct FKeyBinding {
+    let fkey: String   // e.g. "F16"
+    let mods: String   // modifier glyphs, e.g. "⌘⌥⇧"
+    let layer: String  // "l1", "l2" or "l3"
+    let key: String    // the key on the board, e.g. "o"
+    let label: String  // e.g. "1p"
+}
+
+// F-keys that the layers send. F14 and F15 are left out, as they are the brightness keys.
+let fkeyNames = ["F13", "F16", "F17", "F18", "F19", "F20"]
+
+// Rows per column in the F-keys view. Two columns, so 16 bindings fit.
+let fkeyRowsPerColumn = 8
+
+// The four modifiers, in the order of the keycaps. Left and right sides share one keycap.
+let modKeycaps: [(glyph: String, name: String)] = [("⌘", "cmd"), ("⌃", "ctrl"), ("⌥", "opt"), ("⇧", "shift")]
+
+func loadFKeys(_ path: String) -> [FKeyBinding] {
+    guard !path.isEmpty, let text = try? String(contentsOfFile: path, encoding: .utf8) else { return [] }
+    return text.components(separatedBy: .newlines).compactMap { line in
+        let parts = line.components(separatedBy: "\t")
+        guard parts.count >= 5 else { return nil }
+        return FKeyBinding(fkey: parts[0], mods: parts[1], layer: parts[2], key: parts[3], label: parts[4])
+    }
+}
+
+func modificationDate(_ path: String) -> Date? {
+    guard !path.isEmpty else { return nil }
+    return (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+}
+
 let mapHeight: CGFloat = 390
 let margin: CGFloat = 24
 let unit: CGFloat = 40      // distance between key origins
@@ -284,8 +321,13 @@ func drawText(_ s: String, in rect: NSRect, size: CGFloat, weight: NSFont.Weight
 
 class KeymapView: NSView {
     let filePath: String
+    let fkeyPath: String
     var layers: [String: Layer] = [:]
     var lastModified: Date?
+    var fkeys: [FKeyBinding] = []
+    var fkeyLastModified: Date?
+    var selectedFKeyIndex = 0  // chip picked in the F-keys view
+    var fkeyChipRects: [(name: String, rect: NSRect)] = []
     var current = 0
     var hovered: String?
     var selectedKey: String?  // key clicked on the board, red if bound, grey if not
@@ -304,8 +346,9 @@ class KeymapView: NSView {
     var spec: LayerSpec { layerSpecs[current] }
     var currentLayer: Layer { layers[spec.id] ?? Layer() }
 
-    init(filePath: String) {
+    init(filePath: String, fkeyPath: String) {
         self.filePath = filePath
+        self.fkeyPath = fkeyPath
         super.init(frame: NSRect(x: 0, y: 0, width: panelWidth, height: mapHeight))
         layoutKeys()
         layoutTabs()
@@ -367,10 +410,13 @@ class KeymapView: NSView {
 
     // Reload only when the file changed, so edits show up without reopening
     func reloadIfChanged() {
-        let modified = (try? FileManager.default.attributesOfItem(atPath: filePath))?[.modificationDate] as? Date
-        guard modified != lastModified else { return }
+        let modified = modificationDate(filePath)
+        let fkeyModified = modificationDate(fkeyPath)
+        guard modified != lastModified || fkeyModified != fkeyLastModified else { return }
         lastModified = modified
+        fkeyLastModified = fkeyModified
         layers = loadLayers(filePath)
+        fkeys = loadFKeys(fkeyPath)
         needsDisplay = true
     }
 
@@ -406,6 +452,35 @@ class KeymapView: NSView {
         needsDisplay = true
     }
 
+    // The F-keys view shows bindings, not keys: one row per binding of the picked F-key
+    func fkeyName() -> String { fkeyNames[selectedFKeyIndex] }
+
+    func fkeyRows() -> [FKeyBinding] {
+        fkeys.filter { $0.fkey == fkeyName() }.sorted {
+            ($0.mods.count, $0.layer, qwertyIndex($0.key)) < ($1.mods.count, $1.layer, qwertyIndex($1.key))
+        }
+    }
+
+    // Move the F-key chip selection. It stops at either end, as the modifier chips do.
+    func cycleFKey(_ delta: Int) {
+        let next = selectedFKeyIndex + delta
+        guard next >= 0 && next < fkeyNames.count else { return }
+        selectedFKeyIndex = next
+        needsDisplay = true
+    }
+
+    // The up and down buttons and arrows drive whichever view has chips
+    func stepChip(_ delta: Int) {
+        if spec.kind == .fkey {
+            cycleFKey(delta)
+        } else {
+            cycleChip(delta)
+        }
+    }
+
+    // Only the board views draw keys, so only they react to the keys on the board
+    var hasBoard: Bool { spec.kind == .board || spec.kind == .modifier }
+
     // -- Events ----------------------------------------------------------------
 
     override func updateTrackingAreas() {
@@ -417,7 +492,7 @@ class KeymapView: NSView {
     }
 
     override func mouseMoved(with event: NSEvent) {
-        guard spec.kind != .list else { return }
+        guard hasBoard else { return }
         let p = convert(event.locationInWindow, from: nil)
         let hit = keyRects.first(where: { $0.rect.contains(p) })?.key
         if hit != hovered {
@@ -436,9 +511,13 @@ class KeymapView: NSView {
             selectedMods = chip.mods
             hovered = nil
             needsDisplay = true
-        } else if spec.kind == .modifier, let step = stepRects.first(where: { $0.rect.contains(p) }) {
-            cycleChip(step.delta)
-        } else if spec.kind != .list, let key = keyRects.first(where: { $0.rect.contains(p) })?.key {
+        } else if spec.kind == .fkey, let i = fkeyChipRects.firstIndex(where: { $0.rect.contains(p) }) {
+            selectedFKeyIndex = i
+            needsDisplay = true
+        } else if spec.kind == .modifier || spec.kind == .fkey,
+                  let step = stepRects.first(where: { $0.rect.contains(p) }) {
+            stepChip(step.delta)
+        } else if hasBoard, let key = keyRects.first(where: { $0.rect.contains(p) })?.key {
             // Click a key to mark it red. Click it again to clear it.
             selectedKey = selectedKey == key ? nil : key
             needsDisplay = true
@@ -449,14 +528,14 @@ class KeymapView: NSView {
         if event.charactersIgnoringModifiers == "/" { onSearch?(); return }
         switch event.keyCode {
         case 53: NSApp.terminate(nil)                              // esc
-        case 125 where spec.kind == .modifier: cycleChip(1)        // down arrow
-        case 126 where spec.kind == .modifier: cycleChip(-1)       // up arrow
+        case 125 where spec.kind == .modifier || spec.kind == .fkey: stepChip(1)   // down arrow
+        case 126 where spec.kind == .modifier || spec.kind == .fkey: stepChip(-1)  // up arrow
         // Left and right wrap around the tabs: left of App is Hyper, right of Hyper is App
         case 123: setLayer((current - 1 + layerSpecs.count) % layerSpecs.count)   // left arrow
         case 124: setLayer((current + 1) % layerSpecs.count)                      // right arrow
         default:
             // A key on the board selects that key, as a click does
-            if let typed = event.charactersIgnoringModifiers?.lowercased(), typed.count == 1 {
+            if hasBoard, let typed = event.charactersIgnoringModifiers?.lowercased(), typed.count == 1 {
                 let key = typed == " " ? spaceKey : typed
                 if keyRects.contains(where: { $0.key == key }) {
                     selectedKey = key
@@ -489,6 +568,10 @@ class KeymapView: NSView {
             drawBoard()
             drawFixedKeys()
             drawBoardStatus()
+        case .fkey:
+            drawFKeyChips()
+            drawFKeyTable()
+            drawFKeyStatus()
         }
     }
 
@@ -512,6 +595,8 @@ class KeymapView: NSView {
             text = "held \(layer.trigger)   ·   \(boundCount()) bound   ·   \(freeCount()) free"
         case .list:
             text = "held \(layer.trigger)   ·   \(layer.entries.count) bindings"
+        case .fkey:
+            text = "Virtual keys: the layers send these F-keys, and Keyboard Maestro or Alfred listens for them."
         case .modifier:
             let name = selectedMods.isEmpty ? "no modifier" : selectedMods
             text = "held \(layer.trigger)   ·   \(name)   ·   \(boundCount()) bound   ·   \(freeCount()) free"
@@ -536,22 +621,16 @@ class KeymapView: NSView {
         gridKeys.count - boundCount()
     }
 
-    // Chips that pick the modifier set shown on the hyper board
-    func drawChips() {
-        chipRects = []
-        var x = margin
-        for mods in modifierSets() {
-            let width: CGFloat = 70
-            let rect = NSRect(x: x, y: listTop, width: width, height: 22)
-            chipRects.append((mods: mods, rect: rect))
-            let on = mods == selectedMods
-            (on ? NSColor(white: 1, alpha: 0.2) : NSColor(white: 1, alpha: 0.06)).setFill()
-            NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6).fill()
-            drawText(mods.isEmpty ? "plain" : mods, in: NSRect(x: rect.minX, y: rect.minY + 4, width: width, height: 16),
-                     size: 12, weight: on ? .semibold : .regular, color: on ? .white : dimColor, align: .center)
-            x += width + 6
-        }
-        // Up and down buttons at the right end of the chip row
+    // One chip. The chip that is on is brighter and bold.
+    func drawChip(_ title: String, at rect: NSRect, on: Bool) {
+        (on ? NSColor(white: 1, alpha: 0.2) : NSColor(white: 1, alpha: 0.06)).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6).fill()
+        drawText(title, in: NSRect(x: rect.minX, y: rect.minY + 4, width: rect.width, height: 16),
+                 size: 12, weight: on ? .semibold : .regular, color: on ? .white : dimColor, align: .center)
+    }
+
+    // Up and down buttons at the right end of the chip row
+    func drawStepButtons() {
         stepRects = [(delta: -1, rect: NSRect(x: panelWidth - margin - 58, y: listTop, width: 26, height: 22)),
                      (delta: 1, rect: NSRect(x: panelWidth - margin - 28, y: listTop, width: 26, height: 22))]
         for (step, label) in zip(stepRects, ["▲", "▼"]) {
@@ -560,6 +639,107 @@ class KeymapView: NSView {
             drawText(label, in: NSRect(x: step.rect.minX, y: step.rect.minY + 3, width: step.rect.width, height: 16),
                      size: 11, color: .white, align: .center)
         }
+    }
+
+    // Chips that pick the modifier set shown on the hyper board
+    func drawChips() {
+        chipRects = []
+        var x = margin
+        for mods in modifierSets() {
+            let width: CGFloat = 70
+            let rect = NSRect(x: x, y: listTop, width: width, height: 22)
+            chipRects.append((mods: mods, rect: rect))
+            drawChip(mods.isEmpty ? "plain" : mods, at: rect, on: mods == selectedMods)
+            x += width + 6
+        }
+        drawStepButtons()
+    }
+
+    // Chips that pick the F-key shown in the F-keys view
+    func drawFKeyChips() {
+        fkeyChipRects = []
+        var x = margin
+        for (i, name) in fkeyNames.enumerated() {
+            let width: CGFloat = 70
+            let rect = NSRect(x: x, y: listTop, width: width, height: 22)
+            fkeyChipRects.append((name: name, rect: rect))
+            drawChip(name, at: rect, on: i == selectedFKeyIndex)
+            x += width + 6
+        }
+        drawStepButtons()
+    }
+
+    // A modifier keycap. It is lit when the output uses that modifier.
+    func drawKeycap(_ glyph: String, in rect: NSRect, lit: Bool) {
+        let path = NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5)
+        if lit {
+            boundColor.setFill()
+            path.fill()
+        } else {
+            path.lineWidth = 1
+            NSColor(white: 1, alpha: 0.25).setStroke()
+            path.stroke()
+        }
+        drawText(glyph, in: NSRect(x: rect.minX, y: rect.minY + 1, width: rect.width, height: 16),
+                 size: 12, weight: .semibold, color: lit ? ink : dimColor, align: .center)
+    }
+
+    // The F-keys view: one row per binding of the picked F-key. Each row has four
+    // modifier keycaps, then the layer key that sends it. Left and right share one keycap.
+    func drawFKeyTable() {
+        let rows = fkeyRows()
+        let columnGap: CGFloat = 12
+        let columnWidth = (panelWidth - margin * 2 - columnGap) / 2
+        let headerY: CGFloat = 112
+        let rowsTop: CGFloat = 132
+        let rowHeight: CGFloat = 22
+        let capWidth: CGFloat = 40
+        let capStep: CGFloat = 46
+        let labelX = CGFloat(modKeycaps.count) * capStep + 4
+
+        // The second column gets its header only when it has rows
+        let columns = rows.count > fkeyRowsPerColumn ? 2 : 1
+        for column in 0..<columns {
+            let x = margin + CGFloat(column) * (columnWidth + columnGap)
+            for (c, cap) in modKeycaps.enumerated() {
+                drawText(cap.name, in: NSRect(x: x + CGFloat(c) * capStep, y: headerY, width: capWidth, height: 16),
+                         size: 10, color: dimColor, align: .center)
+            }
+            drawText("binding", in: NSRect(x: x + labelX, y: headerY, width: columnWidth - labelX, height: 16),
+                     size: 10, color: dimColor)
+        }
+
+        if rows.isEmpty {
+            drawText("No layer key sends \(fkeyName()).",
+                     in: NSRect(x: margin, y: rowsTop + 3, width: panelWidth - margin * 2, height: 18),
+                     size: 12, color: dimColor)
+            return
+        }
+        for (i, b) in rows.prefix(fkeyRowsPerColumn * 2).enumerated() {
+            let column = CGFloat(i / fkeyRowsPerColumn)
+            let row = CGFloat(i % fkeyRowsPerColumn)
+            let x = margin + column * (columnWidth + columnGap)
+            let y = rowsTop + row * rowHeight
+            for (c, cap) in modKeycaps.enumerated() {
+                let rect = NSRect(x: x + CGFloat(c) * capStep, y: y + 1, width: capWidth, height: 18)
+                drawKeycap(cap.glyph, in: rect, lit: b.mods.contains(cap.glyph))
+            }
+            drawText("\(b.layer) \(b.key) \(b.label)",
+                     in: NSRect(x: x + labelX, y: y + 3, width: columnWidth - labelX, height: 18),
+                     size: 12, color: .white)
+        }
+    }
+
+    func drawFKeyStatus() {
+        let rows = fkeyRows()
+        let combos = 1 << modKeycaps.count  // every subset of the four modifiers
+        let used = Set(rows.map { $0.mods }).count
+        var title = "\(fkeyName()) · \(rows.count) bindings · \(combos - used) of \(combos) combos free"
+        let hidden = rows.count - fkeyRowsPerColumn * 2
+        if hidden > 0 {
+            title += " · \(hidden) not shown"
+        }
+        drawStatusLines(title: title, detail: "", hint: "▲ ▼ cycle F-keys · ← → layers · / to search")
     }
 
     func drawBoard() {
@@ -876,7 +1056,7 @@ func showSearch() {
 
 // Builds the map and shows it in place of the loader
 func openMap() {
-    mapView = KeymapView(filePath: filePath)
+    mapView = KeymapView(filePath: filePath, fkeyPath: fkeyPath)
     mapView.onSearch = { showSearch() }
     render("")
     showMap(0)  // the keyboard map opens first

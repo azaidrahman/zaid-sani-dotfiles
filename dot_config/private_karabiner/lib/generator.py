@@ -484,7 +484,7 @@ INDEX_TRIGGERS = {
 
 
 def generate_key_index(app_entries, ws_entries, ws_shift_entries,
-                       shortcut_sections, pool_map, hyper_data, hyper_labels,
+                       shortcut_sections, live_fkeys, hyper_data, hyper_labels,
                        extras_entries=()):
     """Build the consolidated key index for the search HUD.
 
@@ -510,12 +510,8 @@ def generate_key_index(app_entries, ws_entries, ws_shift_entries,
     for ln in sorted(LAYERS.keys()):
         for entry in shortcut_sections.get(ln, []):
             key, label, extra = parse_entry(entry)
-            action = extra
-            if not action:
-                slot = pool_map.get(f'{ln}:{key}')
-                if slot is not None:
-                    fkey, human_mod, _ = slot_to_combo(slot)
-                    action = f'{human_mod}{fkey.upper()} (via KM/Alfred)'
+            # A description and the live F-key both show, joined by a dot
+            action = ' · '.join(p for p in (extra, live_fkeys.get((ln, key))) if p)
             add(ln, key, label, action)
 
     for section in ('hyper', 'misc'):
@@ -537,3 +533,67 @@ def generate_key_index(app_entries, ws_entries, ws_shift_entries,
         rows.append(('extra', '', combo, label or '', extra or ''))
 
     return ['\t'.join(r) for r in rows]
+
+
+# -- F-key index (for the F-keys tab of the search HUD) -----------------------
+
+# Goku modifier code -> glyph. The right-side codes count as their side.
+FKEY_MOD_GLYPHS = {'C': '⌘', 'Q': '⌘', 'T': '⌃', 'W': '⌃',
+                   'O': '⌥', 'E': '⌥', 'S': '⇧', 'R': '⇧'}
+FKEY_MOD_ORDER = '⌃⌘⌥⇧'
+FKEY_MOD_NAMES = {'⌃': 'ctrl', '⌘': 'cmd', '⌥': 'opt', '⇧': 'shift'}
+SHORTCUT_RULE = re.compile(r'^\s*\[(:\S+)\s+(:\S+)\s+:shortcut-l([123])\]')
+
+
+def live_fkey_actions(fkey_rows):
+    """Map (layer, key) to the action text the key search shows, e.g. 'cmd+F16 (via KM/Alfred)'."""
+    actions = {}
+    for row in fkey_rows:
+        fkey, glyphs, ln, key, _ = row.split('\t')
+        names = ''.join(FKEY_MOD_NAMES[g] + '+' for g in glyphs)
+        actions[(ln, key)] = f'{names}{fkey} (via KM/Alfred)'
+    return actions
+
+
+
+def split_goku(token):
+    """Split a goku token such as ':!CTOSf13' into (modifier codes, key name)."""
+    m = re.match(r'^:([!#A-Z]*)(\S+)$', token)
+    return m.group(1), m.group(2)
+
+
+def generate_fkey_index(edn_text, shortcut_sections):
+    """Build the F-key index from the shortcut rules in the built EDN.
+
+    Reads the rules that Karabiner runs, so the rows match the live keys.
+    Only labelled keys are listed. Returns TSV rows: fkey, mods, layer, key, label.
+    """
+    symbol = {goku: sym for sym, goku in GOKU_NAMES.items()}
+    labels = {}
+    for ln in LAYERS:
+        for entry in shortcut_sections.get(ln, []):
+            key, label, action = parse_entry(entry)
+            # A direct rule (open: or !combo) runs first and shadows the F-key rule
+            if direct_to(action):
+                continue
+            labels[(ln, key)] = label
+
+    rows = []
+    for line in edn_text.splitlines():
+        m = SHORTCUT_RULE.match(line)
+        if not m:
+            continue
+        from_token, to_token, n = m.groups()
+        _, goku_key = split_goku(from_token)
+        to_mods, fkey = split_goku(to_token)
+        if not re.fullmatch(r'f\d+', fkey):
+            continue
+        ln = f'l{n}'
+        key = symbol.get(goku_key, goku_key)
+        label = labels.get((ln, key))
+        if label is None:
+            continue
+        sent = {FKEY_MOD_GLYPHS[c] for c in to_mods if c in FKEY_MOD_GLYPHS}
+        glyphs = ''.join(g for g in FKEY_MOD_ORDER if g in sent)
+        rows.append('\t'.join([fkey.upper(), glyphs, ln, key, label]))
+    return rows
