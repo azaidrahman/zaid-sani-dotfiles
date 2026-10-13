@@ -94,6 +94,12 @@ out=$(printf '%s' "$input" | jq -r --arg wt "$wt" --arg br "$br" --arg show_cost
 
 IFS=$'\x01' read -r model effort cost_raw ctx_pct wt br five_h_pct seven_d_pct session_id <<< "$out"
 
+# The status line is printed as it is. A directory name can hold an escape
+# character, so remove the control characters from the names (the pill of the
+# mod is cleaned by the mod itself).
+wt=${wt//[[:cntrl:]]/}
+br=${br//[[:cntrl:]]/}
+
 # LiteLLM-routed: replace the (empty) estimate slot with this session's real
 # ledger spend, read from the cache (refreshed in the background by the helper).
 if [ "$litellm_routed" = "true" ]; then

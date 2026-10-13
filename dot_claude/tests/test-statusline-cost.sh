@@ -78,4 +78,17 @@ render=$(printf '{"session_id":"test-sess","model":{"display_name":"Opus 4.8"},"
 check "statusline shows ledger cost" "1" "$(printf '%s' "$render" | grep -c '\$1\.23')"
 rm -rf "$TMPDIR_I"
 
+# --- integration: names with control characters never reach the terminal ----
+# A fake git reports a top level and a branch with escape and bell characters.
+# With no pill file, the status line falls back to wt:/br: and prints them.
+TMPDIR_N=$(mktemp -d)
+mkdir "$TMPDIR_N/bin" "$TMPDIR_N/cache"
+printf '#!/usr/bin/env bash\nprintf "/w/a\\033]0;x\\007b\\nbr\\033[2Jx\\n"\n' > "$TMPDIR_N/bin/git"
+chmod +x "$TMPDIR_N/bin/git"
+render=$(printf '{"session_id":"test-names","workspace":{"current_dir":"/tmp"}}' \
+  | PATH="$TMPDIR_N/bin:$PATH" XDG_CACHE_HOME="$TMPDIR_N/cache" COLUMNS=200 bash "$STATUS" | strip)
+check "statusline prints the worktree name"  "1" "$(printf '%s' "$render" | grep -c 'wt:a')"
+check "statusline drops control characters"  "0" "$(printf '%s' "$render" | grep -c $'[\001-\037\177]')"
+rm -rf "$TMPDIR_N"
+
 exit $fail
