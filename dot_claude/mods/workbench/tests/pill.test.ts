@@ -3,7 +3,7 @@ import type { On } from 'claude-code'
 
 import { gitCallFor, storedValueFor } from '../hooks/diff'
 import { bitbucketPr, forgeOf, githubPr } from '../hooks/forge'
-import { prTextOf } from '../hooks/pill'
+import { dirPillOf, pillOf, prTextOf } from '../hooks/pill'
 import type { GitInfo } from '../types'
 
 const GIT: Record<string, string> = {
@@ -104,6 +104,20 @@ test('the mod writes the width of the conversation column for the status line', 
   await clock.settle()
 
   expect(world.written.get('/home/me/.cache/claude-workbench/abc123.columns')).toBe('120\n')
+})
+
+// The status line prints the pill as it is, so a directory name must not carry
+// escape characters to the terminal.
+test('a directory name with control characters does not reach the pill', () => {
+  const evil = 'a\x1b]0;x\x07b\x9bc'
+  const git = { isLinked: true, mainRoot: `/r/${evil}`, worktree: evil, branch: 'x', changed: 0, staged: 0, ahead: 0, behind: 0 }
+  const pills = [pillOf(git as GitInfo), pillOf({ ...git, isLinked: false } as GitInfo), dirPillOf(evil)]
+  for (const pill of pills) {
+    expect(pill).not.toContain('\x07')
+    expect(pill).not.toContain('\x9b')
+    // The only escape characters left are the color codes of the pill.
+    expect(pill.replace(/\x1b\[[0-9;]*m/g, '')).not.toContain('\x1b')
+  }
 })
 
 test('the forge comes from the remote, or from the Bitbucket directories', () => {

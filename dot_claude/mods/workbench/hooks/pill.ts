@@ -73,10 +73,11 @@ export function pillOf(git: GitInfo, c: Palette = DEFAULT_PALETTE): string {
   // here: the tmux status line already shows it.
 
   // Where: repository/worktree, or the repository and "main checkout".
-  const repo = git.mainRoot.split('/').pop() ?? git.mainRoot
+  const repo = nameOf(git.mainRoot.split('/').pop() ?? git.mainRoot)
+  const worktree = nameOf(git.worktree)
   const where = git.isLinked
-    ? `${repo}/${git.worktree}`
-    : `${git.worktree} ${hue(isMainCheckout && git.changed ? c.warn : c.dim, 'main checkout')}`
+    ? `${repo}/${worktree}`
+    : `${worktree} ${hue(isMainCheckout && git.changed ? c.warn : c.dim, 'main checkout')}`
   const drift = [
     git.ahead ? `${git.ahead} unpushed` : '',
     git.behind ? hue(c.warn, `${git.behind} behind`) : '',
@@ -97,7 +98,14 @@ export function pillOf(git: GitInfo, c: Palette = DEFAULT_PALETTE): string {
 // The pill when the directory of the session is not in a git repository: the
 // name of the directory, so the status line still shows the pill.
 export function dirPillOf(dir: string, c: Palette = DEFAULT_PALETTE): string {
-  return render([{ bg: c.surface, fg: c.text, text: `${dir} ${fg(c.dim)}no git${fg(c.text)}` }], c)
+  return render([{ bg: c.surface, fg: c.text, text: `${nameOf(dir)} ${fg(c.dim)}no git${fg(c.text)}` }], c)
+}
+
+// The name of a directory can hold any byte except "/". The status line prints
+// the pill as it is, so a name with an escape character could send control
+// codes to the terminal. Remove the control characters (C0, DEL and C1).
+export function nameOf(name: string): string {
+  return name.replace(/[\x00-\x1f\x7f-\x9f]/g, '')
 }
 
 function render(segments: Segment[], c: Palette): string {
