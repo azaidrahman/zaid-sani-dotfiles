@@ -106,6 +106,7 @@ hyper	⇪	⇧x	⌦	delete_forward
 hyper	⇪	f	expose	!Tup_arrow
 hyper	⇪	c	alfred clip	!CTOSc
 hyper	⇪	s	alfred snippet	!CTOSs
+hyper	⇪	z	alfred zuno search	!CTOSz
 hyper	⇪	-	alfred arc bookmarks	!CTOShyphen
 hyper	⇪	=	alfred arc opentabs	!CTOSequal_sign
 hyper	⇪	\	alfred pin bookmarks	!CTOSbackslash

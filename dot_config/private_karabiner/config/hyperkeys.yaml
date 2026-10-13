@@ -83,6 +83,9 @@ hyper:
   s:
     -: "!CTOSs" # alfred snippet
 
+  z:
+    -: "!CTOSz" # alfred zuno search
+
   -:
     -: "!CTOShyphen" # alfred arc bookmarks
 

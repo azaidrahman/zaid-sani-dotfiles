@@ -451,8 +451,9 @@ class KeymapView: NSView {
         case 53: NSApp.terminate(nil)                              // esc
         case 125 where spec.kind == .modifier: cycleChip(1)        // down arrow
         case 126 where spec.kind == .modifier: cycleChip(-1)       // up arrow
-        case 123: setLayer(current - 1)                            // left arrow
-        case 124: setLayer(current + 1)                            // right arrow
+        // Left and right wrap around the tabs: left of App is Hyper, right of Hyper is App
+        case 123: setLayer((current - 1 + layerSpecs.count) % layerSpecs.count)   // left arrow
+        case 124: setLayer((current + 1) % layerSpecs.count)                      // right arrow
         default:
             // A key on the board selects that key, as a click does
             if let typed = event.charactersIgnoringModifiers?.lowercased(), typed.count == 1 {
