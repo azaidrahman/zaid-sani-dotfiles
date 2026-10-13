@@ -1,7 +1,55 @@
 #!/usr/bin/env bash
-# Claude Code status line: [vim mode] | model | effort | ctx | rate limits   …   worktree | branch
-# (worktree/branch are right-aligned to the terminal edge)
+# Claude Code status line: pills for vim mode, model, effort, cost, rate limits,
+# ctx and session id   …   workbench pill (right-aligned to the terminal edge)
 input=$(cat)
+
+# ── Palette ────────────────────────────────────────────────────────────────────
+#
+# All colors come from palette.json (sibling file; same dir in source tree and
+# in ~/.claude when deployed). The workbench mod reads the same file. Each color
+# becomes PAL_<path>, e.g. PAL_mode_insert_hex and PAL_mode_insert_ansi.
+eval "$(jq -r 'paths(scalars) as $p | select($p[0] != "_comment")
+  | "PAL_\($p | map(tostring) | join("_"))=\(getpath($p))"' \
+  "$(dirname -- "${BASH_SOURCE[0]}")/palette.json" 2>/dev/null)"
+
+# ── Vim-mode prompt border (early, so the border changes as soon as possible) ──
+#
+# Claude Code gives the vim mode only to the status line, and it repaints when a
+# file in ~/.claude/themes/ changes. So on each mode change this rewrites the
+# custom:vim-mode theme (selected in settings) with the color of the mode. The
+# file is generated, not managed by chezmoi.
+#
+# The check starts no process, and the early return keeps the file quiet between
+# mode changes. The rest of the delay is Claude Code's: its status line refresh
+# and its theme file watcher.
+mode=""
+[[ $input =~ \"vim\"[^}]*\"mode\"[[:space:]]*:[[:space:]]*\"([A-Z_]+)\" ]] && mode=${BASH_REMATCH[1]}
+
+# mode_color <mode> <hex|ansi>
+mode_color() {
+  local name
+  case $1 in
+    INSERT)          name=insert ;;
+    VISUAL*)         name=visual ;;
+    REPLACE)         name=replace ;;
+    *)               name=normal ;;
+  esac
+  local var="PAL_mode_${name}_$2"
+  printf '%s' "${!var}"
+}
+
+vim_border() {
+  local dir="$HOME/.claude/themes" color file current=""
+  color=$(mode_color "$1" hex)
+  [ -n "$color" ] || return
+  file="$dir/vim-mode.json"
+  [ -f "$file" ] && IFS= read -r current < "$file"
+  [[ $current == *"\"promptBorder\": \"$color\""* ]] && return
+  [ -d "$dir" ] || mkdir -p "$dir"
+  printf '{ "name": "Vim mode", "base": "dark-daltonized", "overrides": { "promptBorder": "%s", "promptBorderShimmer": "%s" } }\n' \
+    "$color" "$color" > "$file.tmp" && mv "$file.tmp" "$file"
+}
+[ -n "$mode" ] && vim_border "$mode"
 
 # LiteLLM per-session cost helper (sibling file; same dir in source tree and in
 # ~/.claude when deployed).
@@ -10,9 +58,15 @@ source "$(dirname -- "${BASH_SOURCE[0]}")/statusline-cost.sh" 2>/dev/null || tru
 dir=$(printf '%s' "$input" | jq -r '.workspace.current_dir // .cwd // empty')
 [ -z "$dir" ] && dir="$PWD"
 
+# The workbench mod writes a pill of the worktree and Bitbucket PR for each
+# session. Without the mod, fall back to the plain worktree and branch.
+pill=""
+pill_sid=$(printf '%s' "$input" | jq -r '.session_id // empty')
+[ -n "$pill_sid" ] && pill=$(cat "${XDG_CACHE_HOME:-$HOME/.cache}/claude-workbench/$pill_sid" 2>/dev/null)
+
 wt=""
 br=""
-if gitinfo=$(git -C "$dir" rev-parse --show-toplevel --abbrev-ref HEAD 2>/dev/null); then
+if [ -z "$pill" ] && gitinfo=$(git -C "$dir" rev-parse --show-toplevel --abbrev-ref HEAD 2>/dev/null); then
   wt=$(basename "$(printf '%s' "$gitinfo" | sed -n 1p)")
   br=$(printf '%s' "$gitinfo" | sed -n 2p)
 fi
@@ -25,7 +79,6 @@ show_cost="false"
 
 # jq pass: emit fields joined by \x01 (non-whitespace) so IFS read preserves empty fields.
 # Tab (\t) collapses consecutive delimiters in bash IFS read; \x01 does not.
-mode=$(printf '%s' "$input" | jq -r '.vim.mode // ""')
 out=$(printf '%s' "$input" | jq -r --arg wt "$wt" --arg br "$br" --arg show_cost "$show_cost" --arg litellm "$litellm_routed" '
   [
     (.model.display_name // ""),
@@ -37,7 +90,7 @@ out=$(printf '%s' "$input" | jq -r --arg wt "$wt" --arg br "$br" --arg show_cost
     (if .rate_limits.five_hour then (.rate_limits.five_hour.used_percentage | round | tostring) else "" end),
     (if .rate_limits.seven_day then (.rate_limits.seven_day.used_percentage | round | tostring) else "" end),
     (.session_id // "")
-  ] | join("")')
+  ] | join("\u0001")')
 
 IFS=$'\x01' read -r model effort cost_raw ctx_pct wt br five_h_pct seven_d_pct session_id <<< "$out"
 
@@ -47,21 +100,29 @@ if [ "$litellm_routed" = "true" ]; then
   cost_raw=$(litellm_session_cost "${ANTHROPIC_BASE_URL:-}" "${ANTHROPIC_AUTH_TOKEN:-}" "$session_id")
 fi
 
-# ── Color helpers (256-color for tmux stability) ───────────────────────────────
+# ── Pills ──────────────────────────────────────────────────────────────────────
+#
+# Color is for state only. The mode pill has the mode color. Every other pill is
+# the surface color with light text, except for two cases:
+#  - model and effort: the text runs green → red, cheap → expensive;
+#  - an alarm (context ≥ 70%, a rate limit over 40%): the pill takes warn or crit.
 
-reset=$'\033[0m'
-gray=$'\033[38;5;244m'   # dim — for low-signal labels (session id, etc.)
+CAP_L=$'\xee\x82\xb6'   # Nerd Font U+E0B6 and U+E0B4, as UTF-8 bytes so that any bash reads them
+CAP_R=$'\xee\x82\xb4'
 
-# Shared green→red ramp (256-color, coolest→hottest = cheapest/lowest → priciest/highest).
-PALETTE=(82 226 208 196)   # green  yellow  orange  red
-GRAY=244                   # unknown / not-worth-highlighting
+# pill <bg> <fg> <text>, with 256-color numbers
+pill() {
+  printf '\033[38;5;%sm%s\033[48;5;%sm\033[38;5;%sm%s\033[0m\033[38;5;%sm%s\033[0m' \
+    "$1" "$CAP_L" "$1" "$2" "$3" "$1" "$CAP_R"
+}
 
-# rank_color <value> <rank…>: place <value> on PALETTE by its position in the
+RAMP=("$PAL_ramp_0" "$PAL_ramp_1" "$PAL_ramp_2" "$PAL_ramp_3")   # green → red
+
+# rank_color <value> <rank…>: place <value> on RAMP by its position in the
 # ordered rank list. Each rank arg is a glob (|-separated synonyms ok). The index
-# is bucketed onto the palette via floor(idx * |PALETTE| / count), so the same
-# ramp stretches over however many ranks exist — append a new model/effort in
-# cost order and every color auto-rebalances; no SGR code is ever chosen by hand.
-# Unmatched values fall through to GRAY.
+# is bucketed onto the ramp via floor(idx * |RAMP| / count), so the same ramp
+# stretches over however many ranks exist — append a new model/effort in cost
+# order and every color auto-rebalances. Unmatched values fall through to text.
 rank_color() {
   local lc; lc=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]'); shift
   local ranks=("$@") n=$# i pats pat
@@ -69,12 +130,12 @@ rank_color() {
     IFS='|' read -ra pats <<< "${ranks[$i]}"   # split synonyms; |-in-case-pattern doesn't alternate from a var
     for pat in "${pats[@]}"; do
       if [[ $lc == $pat ]]; then               # unquoted RHS globs but, inside [[ ]], won't pathname-expand
-        printf '\033[38;5;%sm' "${PALETTE[$(( i * ${#PALETTE[@]} / n ))]}"
+        printf '%s' "${RAMP[$(( i * ${#RAMP[@]} / n ))]}"
         return
       fi
     done
   done
-  printf '\033[38;5;%sm' "$GRAY"
+  printf '%s' "$PAL_text_ansi"
 }
 
 # Ordered cheap/low → pricey/high. Models match on family substring, so new
@@ -103,85 +164,57 @@ model_short() {
   printf '%s%s' "$letter" "$ver"
 }
 
-# rate_glyph <letter> <pct>: a single colored letter once usage clears 40% —
-# yellow 40–70, orange 70–90, red >90. Below 40% it's noise, so emit nothing.
-rate_glyph() {
-  local letter=$1 pct=$2 col
+# Effort label: two letters, as LO / ME / HI / XH / MA.
+effort_short() {
+  case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+    low|minimal)        printf 'LO' ;;
+    medium|normal)      printf 'ME' ;;
+    high)               printf 'HI' ;;
+    xhigh)              printf 'XH' ;;
+    max|ultra|highest)  printf 'MA' ;;
+    *)                  printf '%.2s' "$1" | tr '[:lower:]' '[:upper:]' ;;
+  esac
+}
+
+# alarm_color <pct> <warn at> <crit at>: warn or crit once the value reaches the
+# limit, else nothing.
+alarm_color() {
+  local pct=${1%%.*}
   [ -z "$pct" ] && return
-  if   [ "$pct" -le 40 ]; then return                   # hidden — not worth a glyph yet
-  elif [ "$pct" -le 70 ]; then col='\033[38;5;226m'     # yellow
-  elif [ "$pct" -le 90 ]; then col='\033[38;5;208m'     # orange
-  else                         col='\033[38;5;196m'     # red
+  if   [ "$pct" -ge "$3" ]; then printf '%s' "$PAL_crit_ansi"
+  elif [ "$pct" -ge "$2" ]; then printf '%s' "$PAL_warn_ansi"
   fi
-  printf '%b%s%b' "$col" "$letter" "$reset"
-}
-
-# color_for_ctx <pct>: gray below 30%, green→red from 30% to 85%+
-color_for_ctx() {
-  local tier
-  tier=$(awk -v p="$1" 'BEGIN {
-    if      (p < 30) print "gray"
-    else if (p < 50) print "green"
-    else if (p < 70) print "yellow"
-    else if (p < 85) print "orange"
-    else             print "red"
-  }')
-  case "$tier" in
-    gray)   printf '\033[38;5;244m' ;;
-    green)  printf '\033[38;5;82m'  ;;
-    yellow) printf '\033[38;5;226m' ;;
-    orange) printf '\033[38;5;208m' ;;
-    red)    printf '\033[38;5;196m' ;;
-  esac
-}
-
-# color_for_cost <usd>: gray below $20, green→red from $20 to $100+
-color_for_cost() {
-  local tier
-  tier=$(awk -v u="$1" 'BEGIN {
-    if      (u <  3) print "gray"
-    else if (u <  9) print "green"
-    else if (u < 18) print "yellow"
-    else if (u < 30) print "orange"
-    else             print "red"
-  }')
-  case "$tier" in
-    gray)   printf '\033[38;5;244m' ;;
-    green)  printf '\033[38;5;82m'  ;;
-    yellow) printf '\033[38;5;226m' ;;
-    orange) printf '\033[38;5;208m' ;;
-    red)    printf '\033[38;5;196m' ;;
-  esac
 }
 
 # ── Build segments ─────────────────────────────────────────────────────────────
 
-sep=" | "
+sep=" "
 segments=()        # left side
-right_segments=()  # right-aligned: worktree / branch
+right_segments=()  # right-aligned fallback without the mod: worktree / branch
 
-[ -n "$model"  ] && segments+=("$(color_for_model  "$model")$(model_short "$model")${reset}")
-if [ -n "$effort" ]; then
-  # LOW / MED / HIG / XHI / ULT — first three letters, uppercase.
-  effort_short=$(printf '%.3s' "$effort" | tr '[:lower:]' '[:upper:]')
-  segments+=("$(color_for_effort "$effort")${effort_short}${reset}")
-fi
+[ -n "$mode" ] && segments+=("$(pill "$(mode_color "$mode" ansi)" "$PAL_ink_ansi" "${mode:0:1}")")
+
+[ -n "$model"  ] && segments+=("$(pill "$PAL_surface_ansi" "$(color_for_model "$model")" "$(model_short "$model")")")
+[ -n "$effort" ] && segments+=("$(pill "$PAL_surface_ansi" "$(color_for_effort "$effort")" "$(effort_short "$effort")")")
 
 if [ -n "$cost_raw" ]; then
   cost_display=$(awk -v u="$cost_raw" 'BEGIN { printf "$%.2f", u+0 }')
-  segments+=("$(color_for_cost "$cost_raw")${cost_display}${reset}")
+  c=$(alarm_color "$cost_raw" 18 30)
+  if [ -n "$c" ]; then segments+=("$(pill "$c" "$PAL_ink_ansi" "$cost_display")")
+  else segments+=("$(pill "$PAL_surface_ansi" "$PAL_text_ansi" "$cost_display")"); fi
 fi
 
-# Rate-limit glyphs, right before ctx: S = session (5h), W = weekly (7d). Each
-# letter appears (colored by severity) only once its limit clears 40%; otherwise
-# it's omitted. So this segment is "SW", "W", "S", or absent — e.g. "SW | 50%".
-glyphs="$(rate_glyph S "$five_h_pct")$(rate_glyph W "$seven_d_pct")"
-[ -n "$glyphs" ] && segments+=("$glyphs")
+# Rate-limit pills, right before ctx: S = session (5h), W = weekly (7d). Each
+# appears only once its limit passes 40%: warn up to 90%, crit above.
+c=$(alarm_color "$five_h_pct" 41 91);  [ -n "$c" ] && segments+=("$(pill "$c" "$PAL_ink_ansi" S)")
+c=$(alarm_color "$seven_d_pct" 41 91); [ -n "$c" ] && segments+=("$(pill "$c" "$PAL_ink_ansi" W)")
 
-segments+=("$(color_for_ctx "$ctx_pct")${ctx_pct}%${reset}")
+c=$(alarm_color "$ctx_pct" 70 85)
+if [ -n "$c" ]; then segments+=("$(pill "$c" "$PAL_ink_ansi" "${ctx_pct}%")")
+else segments+=("$(pill "$PAL_surface_ansi" "$PAL_text_ansi" "${ctx_pct}%")"); fi
 
 # Session ID, last 5 chars — enough to disambiguate panes without the clutter.
-[ -n "$session_id" ] && segments+=("${gray}${session_id: -5}${reset}")
+[ -n "$session_id" ] && segments+=("$(pill "$PAL_surface_dim_ansi" "$PAL_dim_ansi" "${session_id: -5}")")
 
 [ -n "$wt" ] && right_segments+=("wt:${wt}")
 [ -n "$br" ] && right_segments+=("br:${br}")
@@ -198,35 +231,24 @@ join_segs() {
   printf '%s' "$out"
 }
 
-result=$(join_segs "$sep" "${segments[@]}")
-
-# Vim-mode indicator: blue for INSERT, gray otherwise. Shown as a single letter
-# (I / N / V …) rather than the full word.
 # Deliberately 256-color (not 24-bit) and NO trailing newline:
 #  - tmux here reports RGB=no, so a truecolor SGR gets re-downsampled every
 #    repaint; an explicit 256-color code is tmux-native and stable per frame.
 #  - a trailing \n makes Claude Code treat this as a 2-line status and redraw
 #    both rows, which flickers/duplicates during generation.
-if [ -n "$mode" ]; then
-  if [ "$mode" = "INSERT" ]; then
-    color=$'\033[38;5;75m'    # light blue (~#5fafff)
-  else
-    color=$'\033[38;5;244m'   # gray
-  fi
-  left=$(printf '%s%s\033[0m | %s' "$color" "${mode:0:1}" "$result")
-else
-  left="$result"
-fi
+left=$(join_segs "$sep" "${segments[@]}")
+right=${pill:-$(join_segs " | " "${right_segments[@]}")}
 
-right=$(join_segs "$sep" "${right_segments[@]}")
-
-# Right-align worktree/branch to the terminal edge. Claude Code exports COLUMNS
-# before running this script (tput cols does NOT work here — output is captured,
-# not attached to a tty). Visible width ignores ANSI SGR codes. If both sides
-# can't share one line, append inline instead so the status never wraps to a
-# second row (a wrapped status flickers — same reason we avoid a trailing \n).
+# Right-align the workbench pill (repository/worktree and changes) to the
+# terminal edge. The PR is on the next row: the mod adds it to the end of the
+# hint row of Claude Code. Claude Code exports COLUMNS before running this
+# script (tput cols does NOT work here — output is captured, not attached to a
+# tty). Visible width ignores ANSI SGR codes. If both sides can't share one
+# line, append inline instead so the status never wraps to a second row (a
+# wrapped status flickers — same reason we avoid a trailing \n).
 visible_len() {
-  local s; s=$(printf '%s' "$1" | sed $'s/\033\\[[0-9;]*m//g')
+  # A UTF-8 locale makes ${#s} count each Nerd Font glyph of a pill as one.
+  local LC_ALL=en_US.UTF-8 s; s=$(printf '%s' "$1" | sed $'s/\033\\[[0-9;]*m//g')
   printf '%s' "${#s}"
 }
 

@@ -1,0 +1,104 @@
+import type { GitInfo, Palette, PrInfo } from '../types'
+
+// The pill the status line prints at its right edge, as ANSI text with
+// 256-color codes (tmux here reports RGB=no). Its colors come from
+// ~/.claude/palette.json, the file the status line reads too. Color is for
+// state only: the words share the surface color, and a word takes a state
+// color when it needs attention.
+
+// The rounded caps: Nerd Font glyphs. Ghostty draws them without a patched font.
+const ICON = {
+  capLeft: '',
+  capRight: '',
+} as const
+
+// The palette when palette.json cannot be read: the same values as the file.
+export const DEFAULT_PALETTE: Palette = {
+  surface: 236,
+  surface_dim: 234,
+  text: 252,
+  dim: 248,
+  ok: 108,
+  warn: 215,
+  crit: 204,
+  merged: 141,
+}
+
+// palette.json holds { name: { hex, ansi } }; this keeps the 256-color numbers.
+export function paletteOf(json: string): Palette {
+  const file = JSON.parse(json) as Record<string, { ansi?: number }>
+  const palette = { ...DEFAULT_PALETTE }
+  for (const key of Object.keys(palette) as (keyof Palette)[]) {
+    const ansi = file[key]?.ansi
+    if (typeof ansi === 'number') palette[key] = ansi
+  }
+  return palette
+}
+
+type Segment = { bg: number; fg: number; text: string }
+
+const fg = (n: number) => `\x1b[38;5;${n}m`
+const bg = (n: number) => `\x1b[48;5;${n}m`
+const RESET = '\x1b[0m'
+
+export const DEFAULT_BRANCHES = new Set(['main', 'master', 'develop', 'HEAD'])
+
+// The PR as plain words, for the end of the hint row under the prompt. Claude
+// Code draws that text dim and without color, so it carries no ANSI codes.
+export function prTextOf(pr: PrInfo | null): string {
+  if (pr?.kind !== 'pr') return ''
+  const parts = [`PR#${pr.id} ${pr.state}`]
+  if (pr.state === 'open' || pr.state === 'draft') {
+    if (pr.reviewers || pr.approvals) parts.push(`${pr.approvals}/${Math.max(pr.reviewers, pr.approvals)} approved`)
+    if (pr.changesRequested) parts.push(`${pr.changesRequested} changes requested`)
+    if (pr.build) parts.push(`CI ${pr.build === 'ok' ? 'passed' : pr.build === 'fail' ? 'failed' : 'running'}`)
+    if (pr.comments) parts.push(`${pr.comments} comment${pr.comments === 1 ? '' : 's'}`)
+    if (pr.openTasks) parts.push(`${pr.openTasks} task${pr.openTasks === 1 ? '' : 's'}`)
+  }
+  return parts.join(' · ')
+}
+
+// The tail for a hint row of `hint` in `width` columns: the PR text, padded so
+// that it ends `margin` columns before the right edge. With too little room it
+// follows the hint after two spaces, and Claude Code cuts it at the edge.
+export function hintTailOf(hint: string, prText: string, width: number, margin = 2): string {
+  const pad = width - margin - hint.length - prText.length
+  return `${' '.repeat(Math.max(pad, 2))}${prText}`
+}
+
+// The pill of row 1 of the status line: the worktree and the local changes.
+// The PR is on row 2 (see prTextOf).
+export function pillOf(git: GitInfo, c: Palette = DEFAULT_PALETTE): string {
+  // Text in a state color, then back to the text color of the segment.
+  const hue = (color: number, text: string, back = c.text) => `${fg(color)}${text}${fg(back)}`
+  const segments: Segment[] = []
+  const isMainCheckout = !git.isLinked && DEFAULT_BRANCHES.has(git.branch)
+
+  // Each part is words, so the pill reads without a legend. The branch is not
+  // here: the tmux status line already shows it.
+
+  // Where: repository/worktree, or the repository and "main checkout".
+  const repo = git.mainRoot.split('/').pop() ?? git.mainRoot
+  const where = git.isLinked
+    ? `${repo}/${git.worktree}`
+    : `${git.worktree} ${hue(isMainCheckout && git.changed ? c.warn : c.dim, 'main checkout')}`
+  const drift = [
+    git.ahead ? `${git.ahead} unpushed` : '',
+    git.behind ? hue(c.warn, `${git.behind} behind`) : '',
+  ].filter(Boolean)
+  segments.push({ bg: c.surface, fg: c.text, text: [where, ...drift].join(' ') })
+
+  // The local changes: green when all of them are staged, warn while some are not.
+  const changes = [
+    git.changed ? hue(git.staged === git.changed ? c.ok : c.warn, `${git.staged}/${git.changed} staged`) : '',
+    git.hasCommitMsg ? hue(c.ok, 'msg ready') : '',
+    git.hasPrMsg ? hue(c.ok, 'PR draft ready') : '',
+  ].filter(Boolean)
+  if (changes.length) segments.push({ bg: c.surface, fg: c.text, text: changes.join(' ') })
+
+  const first = segments[0]!
+  const last = segments[segments.length - 1]!
+  // A dim dot between the parts.
+  const body = segments.map((s, i) => `${bg(s.bg)}${fg(s.fg)}${i ? `${fg(c.dim)} · ${fg(s.fg)}` : ''}${s.text}`).join('')
+  return `${fg(first.bg)}${ICON.capLeft}${body}${RESET}${fg(last.bg)}${ICON.capRight}${RESET}`
+}

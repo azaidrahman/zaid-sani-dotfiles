@@ -1,0 +1,19 @@
+{
+  "_comment": "The colors of the Claude status line, prompt border and workbench pill. Each color has a hex value (theme file) and a 256-color number (status line: tmux here has RGB=no). Mode colors match the nvim lualine theme.",
+  "mode": {
+    "normal": { "hex": "#828697", "ansi": 245 },
+    "insert": { "hex": "#5ca0ff", "ansi": 75 },
+    "visual": { "hex": "#ae81ff", "ansi": 141 },
+    "replace": { "hex": "#ff5874", "ansi": 204 }
+  },
+  "ink": { "hex": "#1c1e26", "ansi": 234 },
+  "surface": { "hex": "#2a2e3a", "ansi": 236 },
+  "surface_dim": { "hex": "#1c1e26", "ansi": 234 },
+  "text": { "hex": "#c3ccdc", "ansi": 252 },
+  "dim": { "hex": "#a1aab8", "ansi": 248 },
+  "ok": { "hex": "#7fbf8f", "ansi": 108 },
+  "warn": { "hex": "#ff9e64", "ansi": 215 },
+  "crit": { "hex": "#ff5874", "ansi": 204 },
+  "merged": { "hex": "#ae81ff", "ansi": 141 },
+  "ramp": [114, 186, 215, 203]
+}

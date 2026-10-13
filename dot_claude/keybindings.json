@@ -27,6 +27,7 @@
         "ctrl+x m": "chat:modelPicker",
         "ctrl+x t": "chat:thinkingToggle",
         "ctrl+x f": "chat:fastMode",
+        "ctrl+x g": "command:diff",
         "enter": "chat:submit",
         "ctrl+j": "chat:newline",
         "up": "history:previous",
