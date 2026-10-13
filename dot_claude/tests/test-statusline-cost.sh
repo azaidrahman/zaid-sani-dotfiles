@@ -79,21 +79,27 @@ check "statusline shows ledger cost" "1" "$(printf '%s' "$render" | grep -c '\$1
 rm -rf "$TMPDIR_I"
 
 # --- integration: the workbench pill is built here, from git ----------------
-# A fake git is a linked worktree whose names hold escape and bell characters.
+# A fake git is a linked worktree whose top level holds an escape, a bell, and
+# the UTF-8 form of the C1 character CSI (\xc2\x9b). The status line runs in the
+# C locale, where [[:cntrl:]] does not match the C1 character.
 TMPDIR_N=$(mktemp -d)
 mkdir "$TMPDIR_N/bin"
 cat > "$TMPDIR_N/bin/git" <<'FAKE'
 #!/usr/bin/env bash
 case " $* " in
-  *" rev-parse "*) printf '/w/a\033]0;x\007b\n/r/.git/worktrees/a\n/r/.git\nfeat\n' ;;
+  *" --show-toplevel "*) printf '/w/a\033]0;x\007b\xc2\x9b[2Jc\n' ;;
+  *" --git-common-dir "*) printf '/r/.git\n' ;;
+  *" --git-dir "*) printf '/r/.git/worktrees/a\n' ;;
+  *" --abbrev-ref "*) printf 'feat\n' ;;
   *) printf '## feat...origin/feat [ahead 2]\n M b\n' ;;
 esac
 FAKE
 chmod +x "$TMPDIR_N/bin/git"
 render=$(printf '{"session_id":"test-names","workspace":{"current_dir":"/w/a"}}' \
-  | PATH="$TMPDIR_N/bin:$PATH" COLUMNS=200 bash "$STATUS" | strip)
-check "pill names the repository and worktree" "1" "$(printf '%s' "$render" | grep -c 'r/a\]0;xb 2 unpushed · 0/1 staged')"
+  | PATH="$TMPDIR_N/bin:$PATH" LC_ALL=C COLUMNS=200 bash "$STATUS" | strip)
+check "pill names the repository and worktree" "1" "$(printf '%s' "$render" | grep -c 'r/a\]0;xb\[2Jc 2 unpushed · 0/1 staged')"
 check "pill drops control characters"          "0" "$(printf '%s' "$render" | grep -c $'[\001-\037\177]')"
+check "pill drops the C1 character CSI"        "0" "$(printf '%s' "$render" | LC_ALL=C grep -c $'\xc2\x9b')"
 rm -rf "$TMPDIR_N"
 
 # Outside git, the pill shows the name of the directory.

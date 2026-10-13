@@ -214,8 +214,13 @@ wb_bg() { printf '\033[48;5;%sm' "$1"; }
 # wb_hue <color> <text> : the text in a state color, then back to the text color
 wb_hue() { printf '%s%s%s' "$(wb_fg "$1")" "$2" "$(wb_fg "$PAL_text_ansi")"; }
 
-# wb_clean <name> : the name without control characters
-wb_clean() { printf '%s' "${1//[[:cntrl:]]/}"; }
+# wb_clean <name> : the name without control characters. The C0 and DEL bytes
+# go first. Then the UTF-8 form of the C1 characters (U+0080 to U+009F, that is
+# \xc2 and a byte from \x80 to \x9f) goes. [[:cntrl:]] does not match them in
+# the C locale, so the bytes are matched here directly.
+wb_clean() {
+  printf '%s' "$1" | LC_ALL=C sed $'s/\xc2[\x80-\x9f]//g' | LC_ALL=C tr -d '\000-\037\177'
+}
 
 # wb_render <segment>... : the pill, with a dim dot between the segments
 wb_render() {
@@ -235,14 +240,15 @@ wb_pill() {
   local ahead=0 behind=0 changed=0 staged=0 main=0 hue ok changes text
   local items=()
 
-  if ! info=$(git -C "$dir" rev-parse --path-format=absolute --show-toplevel --git-dir --git-common-dir --abbrev-ref HEAD 2>/dev/null); then
+  # One git call for each value. A path can hold a newline, so the values cannot
+  # be split from one output.
+  if ! top=$(git -C "$dir" rev-parse --path-format=absolute --show-toplevel 2>/dev/null); then
     wb_render "$(wb_clean "$(basename "$dir")") $(wb_hue "$PAL_dim_ansi" "no git")"
     return
   fi
-  top=$(sed -n 1p <<< "$info")
-  gitdir=$(sed -n 2p <<< "$info")
-  common=$(sed -n 3p <<< "$info")
-  branch=$(sed -n 4p <<< "$info")
+  gitdir=$(git -C "$dir" rev-parse --path-format=absolute --git-dir 2>/dev/null)
+  common=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
+  branch=$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null)
 
   status=$(git -C "$dir" status --porcelain=v1 --branch 2>/dev/null)
   head=$(sed -n 1p <<< "$status")
