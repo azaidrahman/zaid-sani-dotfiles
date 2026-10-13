@@ -91,7 +91,7 @@
     [:!Oslash :show-ws-help nil {:afterup :clear-ws-help}]
     ;; ? = consolidated fuzzy key search HUD (toggle)
     ;; primary: hyper(caps)+shift+/, also: ctrl+shift+/
-    [:!QWERSslash [:show-key-search-loading :key-search-run] nil {:afterup :clear-key-search-loading}]
+    [:!QWERSslash [:key-search]]
     [:!TSslash [:key-search]]
 
 ;; BEGIN SHORTCUT-DIRECT (auto-generated from config/shortcuts.yaml)

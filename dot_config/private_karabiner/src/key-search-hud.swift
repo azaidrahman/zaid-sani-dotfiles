@@ -834,9 +834,20 @@ if let screen = NSScreen.main {
     ))
 }
 
+// Shown at launch, until the keyboard map is built. The window opens at once.
+let loadingView = NSView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: mapHeight))
+loadingView.wantsLayer = true
+loadingView.layer?.backgroundColor = NSColor(white: 0.1, alpha: 0.95).cgColor
+loadingView.layer?.cornerRadius = 14
+let loadingLabel = NSTextField(labelWithString: "Opening key search…")
+loadingLabel.font = NSFont.systemFont(ofSize: 16, weight: .medium)
+loadingLabel.textColor = .white
+loadingLabel.alignment = .center
+loadingLabel.frame = NSRect(x: 0, y: (mapHeight - 22) / 2, width: panelWidth, height: 22)
+loadingView.addSubview(loadingLabel)
+
 // Both modes share one panel, kept centered on the main screen
-let mapView = KeymapView(filePath: filePath)
-mapView.onSearch = { showSearch() }
+var mapView: KeymapView!  // built by openMap(), after the loader shows
 
 func placePanel(width: CGFloat, height: CGFloat) {
     guard let screen = NSScreen.main else { return }
@@ -863,11 +874,20 @@ func showSearch() {
     panel.makeFirstResponder(searchField)
 }
 
-render("")
-showMap(0)  // the keyboard map opens first
+// Builds the map and shows it in place of the loader
+func openMap() {
+    mapView = KeymapView(filePath: filePath)
+    mapView.onSearch = { showSearch() }
+    render("")
+    showMap(0)  // the keyboard map opens first
+    panel.makeFirstResponder(mapView)
+}
+
+panel.contentView = loadingView
+placePanel(width: panelWidth, height: mapHeight)
 app.activate(ignoringOtherApps: true)
 panel.makeKeyAndOrderFront(nil)
-panel.makeFirstResponder(mapView)
+DispatchQueue.main.async { openMap() }
 
 // Retry focus shortly after launch in case activation raced
 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
