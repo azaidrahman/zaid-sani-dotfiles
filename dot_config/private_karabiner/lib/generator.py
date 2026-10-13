@@ -451,6 +451,16 @@ def generate_hyper_help(hyper_data, labels):
     return '\\n'.join(key_lines)
 
 
+# Notice shown on press of hyper+shift+/, before the key search HUD opens.
+# The HUD starts slowly, so this confirms the key press was seen.
+KEY_SEARCH_LOADING_LINES = (
+    '       :show-key-search-loading {:noti {:id "org.pqrs.notification_message_key_search"\n'
+    '                                        :text "Opening key search..."}}\n'
+    '       :clear-key-search-loading {:noti {:id "org.pqrs.notification_message_key_search"\n'
+    '                                         :text ""}}\n'
+)
+
+
 def generate_help_block(app_t, ws_t, layer_help_lines, hyper_help_line):
     """Generate the full HELP-TEXT EDN block."""
     return (
@@ -465,6 +475,7 @@ def generate_help_block(app_t, ws_t, layer_help_lines, hyper_help_line):
         '                              :text ""}}\n'
         + '\n'.join(layer_help_lines) + '\n'
         + hyper_help_line
+        + KEY_SEARCH_LOADING_LINES
         + '}\n'
         ';; END HELP-TEXT'
     )

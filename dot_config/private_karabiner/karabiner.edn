@@ -68,6 +68,10 @@
                                 :text "h:← ⇧prevTab ⌘sel ⌥word ⌥⌘selWord\nj:↓ ⇧nextApp ⌘sel ⌥⌘sel3 ⌃expose\nk:↑ ⇧prevApp ⌘sel ⌥⌘sel3\nl:→ ⇧nextTab ⌘sel ⌥word ⌥⌘selWord\nu:home ⌘sel\np:end ⌘sel\nx:⌫ ⇧⌦\nf:expose\nc:alfred clip\ns:alfred snippet\n-:alfred arc bookmarks\n=:alfred arc opentabs\n\\:alfred pin bookmarks\ne:alfred open windows\nr:alfred bitbucket repos\ni:mouseless overlay\n1:alfred todoist\n2:alfred jira ⇧alfred bitbucket prs\n0:ice bar\nq:mouseless freekey (hold)\n⌘spa:emoji  esc:caps"}}
        :clear-hyper-help {:noti {:id "org.pqrs.notificaion_message_hyper"
                                  :text ""}}
+       :show-key-search-loading {:noti {:id "org.pqrs.notification_message_key_search"
+                                        :text "Opening key search..."}}
+       :clear-key-search-loading {:noti {:id "org.pqrs.notification_message_key_search"
+                                         :text ""}}
 }
 ;; END HELP-TEXT
 
@@ -99,7 +103,7 @@
     [:!Oslash :show-ws-help nil {:afterup :clear-ws-help}]
     ;; ? = consolidated fuzzy key search HUD (toggle)
     ;; primary: hyper(caps)+shift+/, also: ctrl+shift+/
-    [:!QWERSslash [:key-search]]
+    [:!QWERSslash [:show-key-search-loading :key-search] nil {:afterup :clear-key-search-loading}]
     [:!TSslash [:key-search]]
 
 ;; BEGIN SHORTCUT-DIRECT (auto-generated from config/shortcuts.yaml)
