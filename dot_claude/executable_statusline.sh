@@ -66,15 +66,19 @@ show_cost="false"
 
 # jq pass: emit fields joined by \x01 (non-whitespace) so IFS read preserves empty fields.
 # Tab (\t) collapses consecutive delimiters in bash IFS read; \x01 does not.
+# The text values from the JSON are cleaned first: the status line prints them
+# as they are, and a control character would send codes to the terminal or
+# split a field at \x01. The clean drops C0, DEL, and C1 characters.
 out=$(printf '%s' "$input" | jq -r --arg show_cost "$show_cost" --arg litellm "$litellm_routed" '
+  def clean: gsub("[\\x{00}-\\x{1f}\\x{7f}-\\x{9f}]"; "");
   [
-    (.model.display_name // ""),
-    (.effort.level // ""),
+    ((.model.display_name // "") | clean),
+    ((.effort.level // "") | clean),
     (if $show_cost == "true" and $litellm == "false" and (.cost.total_cost_usd != null) then (.cost.total_cost_usd | tostring) else "" end),
     ((.context_window.used_percentage // 0) | tostring),
     (if .rate_limits.five_hour then (.rate_limits.five_hour.used_percentage | round | tostring) else "" end),
     (if .rate_limits.seven_day then (.rate_limits.seven_day.used_percentage | round | tostring) else "" end),
-    (.session_id // "")
+    ((.session_id // "") | clean)
   ] | join("\u0001")')
 
 IFS=$'\x01' read -r model effort cost_raw ctx_pct five_h_pct seven_d_pct session_id <<< "$out"

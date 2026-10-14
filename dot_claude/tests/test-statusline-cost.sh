@@ -107,4 +107,14 @@ render=$(printf '{"session_id":"test-nogit","workspace":{"current_dir":"/w/proj-
   | COLUMNS=200 bash "$STATUS" | strip)
 check "pill outside git shows the directory" "1" "$(printf '%s' "$render" | grep -c 'proj-nogit no git')"
 
+# --- integration: a JSON text value with control characters stays text ------
+# The model name holds an OSC title sequence, a \x01 field separator, and a C1
+# character. The status line prints the name as text: no OSC sequence reaches
+# the output, the name keeps its letters, and the fields after it keep their place.
+raw=$(printf '%s' '{"model":{"display_name":"\u001b]0;pwned\u0007Foo\u0001Bar\u009b"},"context_window":{"used_percentage":10}}' \
+  | COLUMNS=200 bash "$STATUS")
+check "model name sends no OSC sequence"   "0" "$(printf '%s' "$raw" | grep -c $'\033]0;')"
+check "model name keeps its letters"        "1" "$(printf '%s' "$raw" | grep -c 'pwnedFooBar')"
+check "fields after the name keep their place" "1" "$(printf '%s' "$raw" | strip | grep -c '10%')"
+
 exit $fail
