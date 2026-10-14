@@ -70,6 +70,9 @@ _litellm_cost_refresh() {
 litellm_session_cost() {
   local base=$1 key=$2 sid=$3
   [ -n "$sid" ] || return
+  # The id becomes part of a file path. Accept only the characters of a session
+  # id (UUID form), so that no "/" or ".." can lead the path out of TMPDIR.
+  case $sid in *[!A-Za-z0-9_-]*) return ;; esac
   local cache="${TMPDIR:-/tmp}/claude-cc-cost.$sid" need=1
   if [ -f "$cache" ]; then
     local age; age=$(_dir_age "$cache")

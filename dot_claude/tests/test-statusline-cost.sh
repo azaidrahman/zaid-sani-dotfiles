@@ -78,6 +78,15 @@ render=$(printf '{"session_id":"test-sess","model":{"display_name":"Opus 4.8"},"
 check "statusline shows ledger cost" "1" "$(printf '%s' "$render" | grep -c '\$1\.23')"
 rm -rf "$TMPDIR_I"
 
+# A session id with a path step must not read a file outside TMPDIR. The file
+# "target" holds a cost, and the id reaches it only through "d/../../target".
+TMPDIR_T=$(mktemp -d)
+mkdir "$TMPDIR_T/tmp" "$TMPDIR_T/tmp/claude-cc-cost.d"
+printf '5.00' > "$TMPDIR_T/target"
+check "session id with a path step reads nothing" "" \
+  "$(TMPDIR="$TMPDIR_T/tmp" litellm_session_cost http://x k 'd/../../target' 2>/dev/null; true)"
+rm -rf "$TMPDIR_T"
+
 # --- integration: the workbench pill is built here, from git ----------------
 # A fake git is a linked worktree whose top level holds an escape, a bell, and
 # the UTF-8 form of the C1 character CSI (\xc2\x9b). The status line runs in the
