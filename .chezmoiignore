@@ -8,6 +8,8 @@ Emoji\ Pack/
 .config/karabiner/karabiner.json
 # Retired karabiner config. Kept for reference, not deployed.
 .config/karabiner/archive/
+# Retired Keyboard Maestro macros. Kept for reference, not deployed.
+.config/keyboardmaestro/archive/
 .config/nvim/lazy-lock.json
 
 # The agent rules for this repository. Agents read the file here, in the
