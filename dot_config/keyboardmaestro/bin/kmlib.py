@@ -61,6 +61,16 @@ def read_macro_file(path: Path) -> dict:
     return data
 
 
+def archived_uids(archive_dir: Path) -> set:
+    """Collect the UID of each retired macro file in archive_dir.
+
+    A missing directory gives an empty set. km-export uses these UIDs to
+    skip retired macros that are still in the group, so they are not
+    written back into the repo.
+    """
+    return {read_macro_file(p)["UID"] for p in archive_dir.glob("*.kmmacros")}
+
+
 def find_duplicate_uids(macro_files: list) -> dict:
     """Find each UID that more than one macro file claims.
 

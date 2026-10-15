@@ -57,9 +57,16 @@ def main() -> int:
         except Exception as e:
             print(f"WARN: {p.name}: malformed macro file: {e}", file=sys.stderr)
 
+    # Retired macros keep their repo file in archive/. Skip them, because a
+    # disabled copy can still be in the group.
+    archived = kmlib.archived_uids(out_dir.parent / "archive")
+
     rc = 0
     for uid, name in kmlib.live_macros().items():
         path = by_uid.get(uid)
+        if path is None and uid in archived:
+            print(f"skip {name}: archived")
+            continue
         if path is None:
             base = kmlib.slugify(name)
             path = out_dir / f"{base}.kmmacros"

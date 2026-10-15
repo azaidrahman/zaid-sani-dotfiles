@@ -1,7 +1,10 @@
-from kmlib import find_duplicate_uids, parse_macro_locations
+import plistlib
+
+from kmlib import archived_uids, find_duplicate_uids, parse_macro_locations
 
 PUNCH = "9C3A28CA-6CE2-42BD-B325-9D4A6BAFCBF1"
 HELLO = "A0000000-0000-4000-8000-CHEZMOI00001"
+TODOIST = "3D092829-F2AE-41C5-BAA0-D9795F242B1A"
 
 
 def test_distinct_uids_report_no_duplicate():
@@ -61,3 +64,9 @@ def test_a_line_without_a_tab_is_ignored():
 
 def test_no_macros_report_no_location():
     assert parse_macro_locations("") == {}
+
+
+def test_an_archived_file_gives_its_uid(tmp_path):
+    (tmp_path / "period-launch-todoist.kmmacros").write_bytes(
+        plistlib.dumps({"UID": TODOIST}, fmt=plistlib.FMT_XML))
+    assert archived_uids(tmp_path) == {TODOIST}
