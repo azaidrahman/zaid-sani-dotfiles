@@ -417,19 +417,22 @@ def generate_hyper_help(hyper_data, labels):
 
     key_lines = []
     for key, mappings in hyper_keys.items():
+        # Escape backslash for EDN string embedding
+        display_key = '\\\\' if key == '\\' else key
         parts = []
         for mod, _ in mappings.items():
             label = labels.get(('hyper', key, mod), '')
             if not label:
                 continue
             sym = HYPER_MOD_SYMBOLS.get(mod, mod)
-            # Escape backslash for EDN string embedding
-            display_key = '\\\\' if key == '\\' else key
             if mod == '-':
                 parts.append(f'{display_key}:{label}')
             else:
                 parts.append(f'{sym}{label}')
         if parts:
+            # A key with only modifier variants still shows its name
+            if '-' not in mappings:
+                parts[0] = f'{display_key}:{parts[0]}'
             key_lines.append(' '.join(parts))
 
     # Misc keys on one line

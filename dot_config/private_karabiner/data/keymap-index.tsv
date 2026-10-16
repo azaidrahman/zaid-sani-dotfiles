@@ -111,8 +111,10 @@ hyper	⇪	i	mouseless overlay	!CTOSi
 hyper	⇪	1	alfred todoist	!CTOS1
 hyper	⇪	2	alfred jira	!CTOS2
 hyper	⇪	⇧2	alfred bitbucket prs	!CTOSp
+hyper	⇪	8	alfred menu bar search	!CTOS8
 hyper	⇪	0	ice bar	!QWER0
 hyper	⇪	q	mouseless freekey (hold)	!QWERq
+hyper	⇪	⌃o	alfred audio out	!CTOSo
 hyper	⇪	⌘spacebar	emoji	!TCspacebar
 hyper	⇪	escape	caps	!Tcaps_lock
 hyper	⇪	/	guide (hold)	hyper help overlay
