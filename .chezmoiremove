@@ -13,7 +13,12 @@
 .tmux/scripts/mobile-unlink-all.sh
 .tmux/conf.d/visual-mobile.conf
 .config/zsh/starship-mobile.toml
+# The scrytodo service replaced the todoist-ticket-sync skill and its hook.
+# The old files are in archive/claude/.
 .claude/skills/todoist-ticket-sync/jira-to-todoist.py
+.claude/skills/todoist-ticket-sync
+.claude/hooks/todoist-ticket-sync.sh
+.claude/hooks/tests/todoist-ticket-sync.test.sh
 # The ctx rule moved to ~/.agents/AGENTS.md (source: dot_agents/AGENTS.md).
 CLAUDE.md
 # Television channels that were not used. They are in archive/television/cable/.

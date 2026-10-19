@@ -27,11 +27,10 @@ export FZF_CTRL_R_COMMAND=""
 export ARGOCD_OPTS="--core"
 export GOKU_EDN_CONFIG_FILE="$HOME/.config/karabiner/karabiner.edn"
 
-# === Todoist ticket sync ===
-# ~/.claude/skills/todoist-ticket-sync/ticket-to-todoist.py reads the Todoist
-# token through this reference. A reference is not a secret, so it belongs
-# here and not in secrets.zsh. The script calls `op read` only when it writes,
-# so a shell that never syncs pays nothing for this line.
+# === Todoist ===
+# TODOIST_OP_REF is the 1Password reference of the Todoist API token. A
+# reference is not a secret, so it belongs here and not in secrets.zsh. Run
+# `op read "$TODOIST_OP_REF"` to get the token.
 #
 # The item sits in the Personal Development vault, which the personal
 # 1Password service account already covers. If a read fails, run
