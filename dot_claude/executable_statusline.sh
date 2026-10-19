@@ -78,10 +78,16 @@ out=$(printf '%s' "$input" | jq -r --arg show_cost "$show_cost" --arg litellm "$
     ((.context_window.used_percentage // 0) | tostring),
     (if .rate_limits.five_hour then (.rate_limits.five_hour.used_percentage | round | tostring) else "" end),
     (if .rate_limits.seven_day then (.rate_limits.seven_day.used_percentage | round | tostring) else "" end),
+    # Weekly pace: the use minus the elapsed part of the week, in points. The
+    # week is 604800 s, so (seconds to reset) / 6048 is the remaining percent.
+    (.rate_limits.seven_day as $w
+      | if ($w.resets_at | type) == "number" then
+          ($w.used_percentage - ([[100 - ($w.resets_at - now) / 6048, 0] | max, 100] | min)) | round | tostring
+        else "" end),
     ((.session_id // "") | clean)
   ] | join("\u0001")')
 
-IFS=$'\x01' read -r model effort cost_raw ctx_pct five_h_pct seven_d_pct session_id <<< "$out"
+IFS=$'\x01' read -r model effort cost_raw ctx_pct five_h_pct seven_d_pct seven_d_pace session_id <<< "$out"
 
 # LiteLLM-routed: replace the (empty) estimate slot with this session's real
 # ledger spend, read from the cache (refreshed in the background by the helper).
@@ -94,7 +100,8 @@ fi
 # Color is for state only. The mode pill has the mode color. Every other pill is
 # the surface color with light text, except for two cases:
 #  - model and effort: the text runs green → red, cheap → expensive;
-#  - an alarm (context ≥ 70%, a rate limit over 40%): the pill takes warn or crit.
+#  - an alarm (context ≥ 70%, the session limit over 40%): the pill takes warn or crit;
+#  - the weekly limit: the pill takes ok, warn or crit by pace (see pace_color).
 
 CAP_L=$'\xee\x82\xb6'   # Nerd Font U+E0B6 and U+E0B4, as UTF-8 bytes so that any bash reads them
 CAP_R=$'\xee\x82\xb4'
@@ -175,6 +182,16 @@ alarm_color() {
   fi
 }
 
+# pace_color <pace>: ok while the weekly use is under the elapsed part of the
+# week, warn when it is on pace, and crit at 10 points or more over it.
+pace_color() {
+  [ -z "$1" ] && return
+  if   [ "$1" -ge 10 ]; then printf '%s' "$PAL_crit_ansi"
+  elif [ "$1" -ge 0 ];  then printf '%s' "$PAL_warn_ansi"
+  else printf '%s' "$PAL_ok_ansi"
+  fi
+}
+
 # ── Build segments ─────────────────────────────────────────────────────────────
 
 sep=" "
@@ -192,10 +209,13 @@ if [ -n "$cost_raw" ]; then
   else segments+=("$(pill "$PAL_surface_ansi" "$PAL_text_ansi" "$cost_display")"); fi
 fi
 
-# Rate-limit pills, right before ctx: S = session (5h), W = weekly (7d). Each
-# appears only once its limit passes 40%: warn up to 90%, crit above.
+# Rate-limit pills, right before ctx: S = session (5h), W = weekly (7d). S
+# appears only once its limit passes 40%: warn up to 90%, crit above. W always
+# appears, colored by pace. If the reset time is missing, W uses the S rule.
 c=$(alarm_color "$five_h_pct" 41 91);  [ -n "$c" ] && segments+=("$(pill "$c" "$PAL_ink_ansi" S)")
-c=$(alarm_color "$seven_d_pct" 41 91); [ -n "$c" ] && segments+=("$(pill "$c" "$PAL_ink_ansi" W)")
+if [ -n "$seven_d_pace" ]; then c=$(pace_color "$seven_d_pace")
+else c=$(alarm_color "$seven_d_pct" 41 91); fi
+[ -n "$c" ] && segments+=("$(pill "$c" "$PAL_ink_ansi" W)")
 
 c=$(alarm_color "$ctx_pct" 70 85)
 if [ -n "$c" ]; then segments+=("$(pill "$c" "$PAL_ink_ansi" "${ctx_pct}%")")
