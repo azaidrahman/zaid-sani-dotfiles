@@ -85,16 +85,31 @@ Urgency does not live in a section. The priority and the due date carry it.
 A ticket that the user works on today is `p2` and due today, whatever
 section holds it.
 
-A blocked ticket keeps its epic section and takes the `blocked` label. A
-section cannot show that a ticket is blocked, because the ticket already
+A blocked ticket keeps its epic section and takes the `state.blocked` label.
+A section cannot show that a ticket is blocked, because the ticket already
 sits in the section for its epic.
 
 ### Labels
 
-Every ticket carries `gti`. A ticket also carries a system label
-(`gtconsole`, `hermes`, `ufb`, `llmrag`, `iris`, `obs`, `platform`) and an
-environment label (`dev`, `stg`, `prd`) when the ticket names one. A blocked
-ticket also carries `blocked`.
+A label name is a dotted path, for example `work.apps.ufb`. A filter such as
+`@work.platform*` then finds every label below that point. Give each ticket
+the deepest label that fits.
+
+- **The system.** A ticket for one app takes `work.apps.<app>`, for example
+  `work.apps.gtconsole`. A ticket for the shared platform takes
+  `work.platform.<area>`, or `work.platform.<area>.<tool>` when the ticket
+  names a tool. The areas are `cloud`, `obs`, `ci`, and `sec`.
+- **The area prefix in the title.** `gke:`, `net:`, `iam:`, `proj:`, and
+  `db:` go to `cloud`. `ci:` and `mod:` go to `ci`. `sec:` goes to `sec`.
+- **The environment.** If the ticket names an environment, add
+  `work.env.dev`, `work.env.stg`, or `work.env.prd`.
+- **A blocked ticket** also takes `state.blocked`.
+
+Do not add a `gti` label. The key in the title already marks the ticket.
+
+Use only labels that exist. To see them, call `find-labels` with
+`searchText` set to `work.`. If no label fits, say so and ask. Do not create
+a label.
 
 ## Which tool to use
 
@@ -125,7 +140,7 @@ the user and stop.
    - Project: the project that fits.
    - Section: the section for the epic of the ticket. Name your choice and
      say why.
-   - Labels: `gti`, plus the system and environment labels that fit.
+   - Labels: the system and environment labels that fit. See "Labels".
    - Description: the body of the ticket, then the link. See below.
 
 3. In an unclear case, show the ticket, the task you propose, and the
@@ -218,7 +233,7 @@ These three facts cost a session each to find. Trust them.
 - Do not create a section. If no section fits, say so and ask.
 - Do not change a Jira status here. `finish-branch` owns the Jira
   transition where that skill exists.
-- Do not remove the `blocked` label unless the blocker is gone.
+- Do not remove the `state.blocked` label unless the blocker is gone.
 - If you find an old grouping task with subtasks below it, do not rebuild
   it and do not silently flatten it. Report it, and offer to flatten it.
 - If the user declines, do nothing and do not ask again in this session.
