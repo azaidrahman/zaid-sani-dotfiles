@@ -108,7 +108,8 @@ hyper	⇪	\	alfred pin bookmarks	!CTOSbackslash
 hyper	⇪	e	alfred open windows	!CTOSe
 hyper	⇪	r	alfred bitbucket repos	!CTOSr
 hyper	⇪	i	mouseless overlay	!CTOSi
-hyper	⇪	1	alfred todoist	!CTOS1
+hyper	⇪	g	alfredo new task	!CTOSg
+hyper	⇪	⌃g	alfredo all tasks	!CSf13
 hyper	⇪	2	alfred jira	!CTOS2
 hyper	⇪	⇧2	alfred bitbucket prs	!CTOSp
 hyper	⇪	8	alfred menu bar search	!CTOS8

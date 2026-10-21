@@ -21,7 +21,8 @@ from lib.generator import (LAYERS, generate_app_rules, generate_layer,
                             generate_workspace_rules, generate_help_block,
                             generate_hyper_rules, generate_hyper_help,
                             load_hyperkeys, print_mapping, generate_key_index,
-                            generate_fkey_index, live_fkey_actions)
+                            generate_fkey_index, generate_hyper_fkey_index,
+                            live_fkey_actions)
 
 # -- Paths --------------------------------------------------------------------
 
@@ -171,7 +172,8 @@ save_pool(pool_path, pool_map)
 
 # Consolidated key index for the search HUD (ctrl+shift+/)
 # F-key index for the F-keys tab of the search HUD, read from the rules just written
-fkey_rows = generate_fkey_index(edn, shortcut_sections)
+fkey_rows = (generate_fkey_index(edn, shortcut_sections)
+             + generate_hyper_fkey_index(hyper_data, hyper_labels))
 fkey_index_path = os.path.join(dir_path, 'data', 'fkey-index.tsv')
 open(fkey_index_path, 'w').write('\n'.join(fkey_rows) + '\n')
 

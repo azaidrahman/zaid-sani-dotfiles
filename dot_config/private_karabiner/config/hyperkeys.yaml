@@ -104,8 +104,9 @@ hyper:
   i:
     -: "!CTOSi" # mouseless overlay
 
-  "1":
-    -: "!CTOS1" # alfred todoist
+  g:
+    -: "!CTOSg" # alfredo new task
+    ctrl: "!CSf13" # alfredo all tasks
 
   "2":
     -: "!CTOS2" # alfred jira

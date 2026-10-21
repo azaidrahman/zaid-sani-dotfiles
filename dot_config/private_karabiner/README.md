@@ -192,6 +192,7 @@ The F-keys tab reads `data/fkey-index.tsv`. The build step writes it from the
 shortcut rules in `karabiner.edn`, so it shows the F-keys that Karabiner sends.
 Each labelled layer key appears once, with its modifiers. Keys with a direct
 action (`open:` or a `!` combo) are left out, because they do not send an F-key.
+A hyper key that sends F13 to F20 also appears, with the layer `hyper`.
 The extras file lists the hand-written bindings from `karabiner.base.edn`.
 It is for the search index only — it does not generate rules. When you add
 a hand-written rule to `karabiner.base.edn`, mirror it in `extras.yaml`. The launcher

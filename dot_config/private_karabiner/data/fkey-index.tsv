@@ -20,3 +20,4 @@ F13	⇧	l3	[	b prev-space
 F13	⌃⇧	l3	]	b next-space
 F13	⌘⌥⇧	l3	-	b prev-tab
 F13	⌃⌘⌥⇧	l3	=	b next-tab
+F13	⌘⇧	hyper	⌃g	alfredo all tasks

@@ -596,7 +596,30 @@ def generate_fkey_index(edn_text, shortcut_sections):
         label = labels.get((ln, key))
         if label is None:
             continue
-        sent = {FKEY_MOD_GLYPHS[c] for c in to_mods if c in FKEY_MOD_GLYPHS}
-        glyphs = ''.join(g for g in FKEY_MOD_ORDER if g in sent)
-        rows.append('\t'.join([fkey.upper(), glyphs, ln, key, label]))
+        rows.append('\t'.join([fkey.upper(), fkey_glyphs(to_mods), ln, key, label]))
+    return rows
+
+
+def fkey_glyphs(goku_mods):
+    """Turn goku modifier codes such as '!CS' into ordered glyphs such as '⌘⇧'."""
+    sent = {FKEY_MOD_GLYPHS[c] for c in goku_mods if c in FKEY_MOD_GLYPHS}
+    return ''.join(g for g in FKEY_MOD_ORDER if g in sent)
+
+
+def generate_hyper_fkey_index(hyper_data, labels):
+    """Build F-key index rows for the hyper keys that send a virtual F-key (F13 to F20).
+
+    Returns TSV rows in the same shape as generate_fkey_index, with layer 'hyper'.
+    """
+    rows = []
+    for key, mappings in (hyper_data.get('hyper') or {}).items():
+        for mod, action in mappings.items():
+            label = labels.get(('hyper', key, mod))
+            if not label or not isinstance(action, str):
+                continue
+            to_mods, fkey = split_goku(':' + action.lstrip(':'))
+            if not re.fullmatch(r'f1[3-9]|f20', fkey):
+                continue
+            disp = f'{HYPER_MOD_SYMBOLS.get(mod, mod)}{key}' if mod != '-' else key
+            rows.append('\t'.join([fkey.upper(), fkey_glyphs(to_mods), 'hyper', disp, label]))
     return rows

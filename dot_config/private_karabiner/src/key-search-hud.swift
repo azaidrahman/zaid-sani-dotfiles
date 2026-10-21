@@ -264,7 +264,7 @@ func loadLayers(_ path: String) -> [String: Layer] {
 struct FKeyBinding {
     let fkey: String   // e.g. "F16"
     let mods: String   // modifier glyphs, e.g. "⌘⌥⇧"
-    let layer: String  // "l1", "l2" or "l3"
+    let layer: String  // "l1", "l2", "l3" or "hyper"
     let key: String    // the key on the board, e.g. "o"
     let label: String  // e.g. "1p"
 }
