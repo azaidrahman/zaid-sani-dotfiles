@@ -1,0 +1,29 @@
+#compdef tf-summarize
+
+# Completion for tf-summarize. The tool uses the Go flag package and has no
+# `completion` subcommand, so this file lists the flags by hand. Check it
+# against `tf-summarize -h` after an upgrade.
+#
+# The exclusion groups copy the validation of tf-summarize 0.3.20:
+#
+#   * -tree, -separate-tree and -md do not go together.
+#   * Only one of -md, -json, -json-sum and -html is permitted.
+#   * -draw needs -tree or -separate-tree. _arguments cannot show a
+#     dependency, so the description gives this rule.
+
+_tf-summarize() {
+  _arguments \
+    '(-tree -separate-tree -json -json-sum -html)-md[print the table as markdown]' \
+    '(-md -json-sum -html)-json[print the changes as JSON]' \
+    '(-md -json -html)-json-sum[print the summary as JSON]' \
+    '(-md -json -json-sum)-html[print the changes as HTML]' \
+    '(-separate-tree -md)-tree[print the changes as a tree]' \
+    '(-tree -md)-separate-tree[print a tree for each type of change]' \
+    '-draw[draw the trees (needs -tree or -separate-tree)]' \
+    '-out[write the output to a file]:output file:_files' \
+    '(- :)-v[print the version]' \
+    '(- :)'{-h,-help}'[show usage]' \
+    '1:plan file (tfplan or JSON):_files'
+}
+
+_tf-summarize "$@"
