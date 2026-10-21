@@ -126,4 +126,32 @@ check "model name sends no OSC sequence"   "0" "$(printf '%s' "$raw" | grep -c $
 check "model name keeps its letters"        "1" "$(printf '%s' "$raw" | grep -c 'pwnedFooBar')"
 check "fields after the name keep their place" "1" "$(printf '%s' "$raw" | strip | grep -c '10%')"
 
+# --- integration: the S and W pills take a color by use and pace -----------
+# limit_pill <S|W> <use> <elapsed> prints the name of the color of the pill. The
+# elapsed part of the window sets the reset time. "-" sends no reset time.
+PALETTE="$(dirname "$STATUS")/palette.json"
+limit_pill() {
+  local key secs reset="" esc=$'\033' n
+  case $1 in S) key=five_hour secs=18000 ;; W) key=seven_day secs=604800 ;; esac
+  [ "$3" != - ] && reset=",\"resets_at\":$(( $(date +%s) + (100 - $3) * secs / 100 ))"
+  n=$(printf '{"rate_limits":{"%s":{"used_percentage":%s%s}}}' "$key" "$2" "$reset" \
+    | ANTHROPIC_BASE_URL= COLUMNS=200 bash "$STATUS" \
+    | sed -nE "s/.*48;5;([0-9]+)m${esc}\[38;5;[0-9]+m$1${esc}.*/\1/p")
+  jq -r --arg n "$n" 'to_entries[] | select(.key | IN("ok", "warn", "crit"))
+    | select(.value.ansi | tostring == $n) | .key' "$PALETTE"
+}
+while read -r win use elapsed want label; do
+  check "$label" "$want" "$(limit_pill "$win" "$use" "$elapsed")"
+done <<'CASES'
+W 30 60 ok   W under 40% is ok
+W 30  5 warn W under 40% and 25 points over pace is warn
+W 50 50 warn W from 40% and on pace is warn
+W 50 75 ok   W from 40% and 25 points under pace is ok
+W 50 25 crit W from 40% and 25 points over pace is crit
+W 85 95 crit W from 80% is crit
+W 50  - warn W without a reset time takes the zone of the use
+S 30 50 ok   S shows when it is ok
+S 50 25 crit S uses a 5-hour window
+CASES
+
 exit $fail
