@@ -227,3 +227,7 @@ Apply these rules to the tests that remain:
 - Do not test the language, the standard library, or a framework.
 - Do not keep a test only because it exists. An old test is not safer than
   no test when another test already catches the same defect.
+
+## Terraform plans
+
+To show me a plan, save it, then run `tf-summarize -separate-tree tfplan`.
