@@ -8,6 +8,16 @@ zinit light zsh-users/zsh-completions
 zinit ice wait lucid
 zinit light Aloxaf/fzf-tab
 zinit light jeffreytse/zsh-vi-mode
+
+# Ctrl+G opens the command line in $EDITOR, the same key as in Claude Code.
+# It runs the widget that `vv` runs. Bind it in insert and normal mode. Do the
+# bind after zvm_init, because zvm_init makes the widget and resets the keymaps.
+_zvm_bind_ctrl_g() {
+  bindkey -M viins '^G' zvm_vi_edit_command_line
+  bindkey -M vicmd '^G' zvm_vi_edit_command_line
+}
+zvm_after_init_commands+=(_zvm_bind_ctrl_g)
+
 # NVM is disabled (see exports.zsh), no need for lazy-load wrapper
 # zinit light undg/zsh-nvm-lazy-load
 
