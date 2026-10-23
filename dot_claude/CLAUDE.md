@@ -1,4 +1,5 @@
 @~/.agents/AGENTS.md
+@~/.agents/AGENTS.local.md
 
 # Claude Code only
 
