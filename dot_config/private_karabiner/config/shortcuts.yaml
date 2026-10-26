@@ -30,7 +30,6 @@ l2:
   - o | 1p | 1Password (alt)
   - p | dot | chezmoi dotfiles (alt)
   - s | cleanshotx | CleanShot X (alt)
-  - l | todoist | Todoist (alt)
   - g | gemini | open:Gemini
   - x | codex | open-id:com.openai.codex
 

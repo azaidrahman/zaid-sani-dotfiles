@@ -27,5 +27,6 @@ app:
   - v | chrome | Google Chrome
   - b | telegram | Telegram
   - n | todoist | sh:$HOME/.config/karabiner/scripts/arc-float-tab.sh https://todoistenhanced.julesbertolino.fr
+  - o | todoist(app) | Todoist
   - x | mixlet | Mixlet
   - 0 | claude | Claude
