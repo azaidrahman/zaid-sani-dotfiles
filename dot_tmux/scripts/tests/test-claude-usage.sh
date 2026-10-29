@@ -307,6 +307,10 @@ check "the quota view alone draws one header" "1" \
 check "the cost view alone draws one header"  "1" \
   "$(PROVIDER=litellm render_cost "$BOTH_BLOB" "" | strip | grep -c '^  provider:')"
 
+check "the header draws the context section above the view" "1" \
+  "$(CONTEXT_TEXT='  gcloud   ctx-marker' PROVIDER=claude render_quota "$QUOTA_BLOB" "" \
+     | strip | grep -c 'ctx-marker')"
+
 # --- popup sizing ----------------------------------------------------------
 
 tmp=$(mktemp -d)
@@ -320,16 +324,13 @@ rm -rf "$tmp"
 check "the quota popup fits a full-cap row" "149" "$USAGE_POPUP_W"
 check "the popup width is derived, not fixed" "149" "$(( ROW_FIXED_W + BAR_CAP + 2 ))"
 
-# The combined popup is as wide as a quota row and as tall as both sections.
+# The combined popup is as wide as a quota row and as tall as both sections
+# and the context section: 2 quota rows * 2 + 3 models + 17 + 8.
 tmp=$(mktemp -d)
 printf 'QUOTA\ta\t1\t-\t-\nQUOTA\tb\t2\t-\t-\nMODEL\t1\tm1\nMODEL\t2\tm2\nMODEL\t3\tm3\n' \
   > "$tmp/claude-usage.agents.cache"
-sz=$(TMPDIR="$tmp" PROVIDER=agents bash -c "source '$SCRIPT'
-  pane_root_pid() { printf ''; }
-  PROVIDER=agents; TMPDIR='$tmp'
-  printf '%dx%d' \"\$USAGE_POPUP_W\" \
-    \"\$(( \$(rows_in_cache agents QUOTA 2) * 2 + \$(rows_in_cache agents MODEL 6) + 16 ))\"")
-check "the combined popup sizes from both record kinds" "149x23" "$sz"
+check "the combined popup sizes from both record kinds" "149x32" \
+  "$(resolve_provider() { printf agents; }; TMPDIR="$tmp" size_for '%0')"
 rm -rf "$tmp"
 
 exit $fail

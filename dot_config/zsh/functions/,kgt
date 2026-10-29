@@ -11,8 +11,8 @@
 # `use` and `unset` change the current context of the kubeconfig. Thus plain
 # kubectl, helm, and k9s use it, and you can chain commands:
 #   kubectl delete -f a.yaml && kubectl create -f b.yaml
-# The kubeconfig is global, so the change shows in all shells. The prompt
-# shows the current context (see the kgt module in starship.toml).
+# The kubeconfig is global, so the change shows in all shells. The tmux
+# prefix+u popup shows the current context.
 #
 # Plain `argocd` works when the current context is the ArgoCD cluster and the
 # namespace of that context is argocd. exports.zsh sets ARGOCD_OPTS=--core.

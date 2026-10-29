@@ -1,0 +1,12 @@
+# Retired from dot_config/zsh/starship.toml.tmpl. The tmux prefix+u popup now
+# shows the kube context. To use the module again, put this block back and
+# add ${custom.kgt} to the format line after $git_branch.
+
+# Current kubectl context. A grep of the kubeconfig is faster than kubectl.
+# Shows the last part of the name.
+[custom.kgt]
+when = 'grep -q "^current-context: ." "${KUBECONFIG:-$HOME/.kube/config}"'
+command = 'sed -n "/^current-context:/{s/^current-context: //;s/.*_//;p;}" "${KUBECONFIG:-$HOME/.kube/config}"'
+format = " [⎈ $output]($style)"
+style = "bold cyan"
+shell = ["sh"]

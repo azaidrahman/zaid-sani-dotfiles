@@ -1,5 +1,10 @@
 #!/bin/bash
-# prefix+u : show how much of an AI subscription or budget is gone, as bars.
+# prefix+u : the status center. A context section (the gcloud session and the
+# kube context) sits on top. Under it, bars show how much of an AI
+# subscription or budget is gone.
+#
+# The context section is not a provider. popups/context-status.sh draws it,
+# and main reads it one time, before the first draw.
 #
 # The script has three layers. Keep them separate.
 #   1. A provider fetches its own data and prints a canonical blob.
@@ -49,6 +54,19 @@ CODEX_IN_AGENTS=${CODEX_IN_AGENTS:-1}
 
 TAB=$'\t'
 c_reset=$'\033[0m'; c_dim=$'\033[2m'; c_bold=$'\033[1m'; c_cyan=$'\033[36m'
+
+# The context section. Chezmoi deploys the file as popups/context-status.sh.
+# A test sources this script from the chezmoi source, where the file keeps its
+# executable_ prefix. If neither file exists, the popup has no context section.
+_ctx_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/popups"
+for _ctx in "$_ctx_dir/context-status.sh" "$_ctx_dir/executable_context-status.sh"; do
+  if [ -r "$_ctx" ]; then source "$_ctx"; break; fi
+done
+unset _ctx _ctx_dir
+
+# CONTEXT_TEXT : the drawn context section. main sets it. A test leaves it
+# empty, so a view draws without the section.
+CONTEXT_TEXT=''
 # --- shared helpers ------------------------------------------------------
 
 color_for() { # pct -> green/yellow/red
@@ -274,12 +292,21 @@ bar() { # label pct epoch window
 render_header() {
   clear 2>/dev/null
   echo
+  render_context
   printf '  %s%s%s  %s%s%s\n' "$c_bold" "$(provider_hook title)" "$c_reset" "$c_dim" "$1" "$c_reset"
   printf '  provider: %s\n\n' "$(provider_hook tag)"
 }
 
 # section_rule : the divider between the two sections of the combined view.
 section_rule() { printf '\n  %s%s%s\n\n' "$c_dim" "$(repeat ─ 60)" "$c_reset"; }
+
+# render_context : the context section and a rule under it. Nothing if main
+# did not read the section.
+render_context() {
+  [ -n "$CONTEXT_TEXT" ] || return 0
+  printf '%s\n' "$CONTEXT_TEXT"
+  section_rule
+}
 
 # quota_body <blob> : one bar per QUOTA record.
 #
@@ -793,6 +820,7 @@ view_main() {
   else
     clear 2>/dev/null
     echo
+    render_context
     printf '  %s%s%s\n\n  %sLoading…%s\n' \
       "$c_bold" "$(provider_hook title)" "$c_reset" "$c_dim" "$c_reset"
   fi
@@ -820,6 +848,8 @@ view_main() {
 # +2 for the popup border, which eats a column on each side.
 USAGE_POPUP_W=$(( ROW_FIXED_W + BAR_CAP + 2 ))   # fits a full-cap bar plus its row
 COST_POPUP_W=90      # fits a full-cap 45-char bar (see the -42 offset in render_cost)
+# The context section: 4 gcloud rows, 1 kube row, and 3 rows for the rule.
+CONTEXT_POPUP_H=8
 
 # rows_in_cache <provider> <record> <fallback> : how many records of one kind
 # the cached blob holds.
@@ -841,12 +871,14 @@ size_for() {
   if [[ -s $cache ]] && grep -q "^SESSION$TAB" "$cache" 2>/dev/null; then
     has_sess=4
   fi
+  local ctx=0
+  if declare -F context_section >/dev/null; then ctx=$CONTEXT_POPUP_H; fi
   case "$(provider_hook view)" in
-    cost) printf '%dx%d' "$COST_POPUP_W" "$(( $(rows_in_cache "$PROVIDER" MODEL 6) + 14 + has_sess ))" ;;
+    cost) printf '%dx%d' "$COST_POPUP_W" "$(( $(rows_in_cache "$PROVIDER" MODEL 6) + 14 + has_sess + ctx ))" ;;
     both) printf '%dx%d' "$USAGE_POPUP_W" \
             "$(( $(rows_in_cache "$PROVIDER" QUOTA 2) * 2 \
-                 + $(rows_in_cache "$PROVIDER" MODEL 6) + 17 + has_sess ))" ;;
-    *)    printf '%dx%d' "$USAGE_POPUP_W" "$(( $(rows_in_cache "$PROVIDER" QUOTA 3) * 2 + 8 ))" ;;
+                 + $(rows_in_cache "$PROVIDER" MODEL 6) + 17 + has_sess + ctx ))" ;;
+    *)    printf '%dx%d' "$USAGE_POPUP_W" "$(( $(rows_in_cache "$PROVIDER" QUOTA 3) * 2 + 8 + ctx ))" ;;
   esac
 }
 
@@ -856,7 +888,7 @@ popup_main() {
   local pane=$1 cwd=$2 sz w h
   sz=$(size_for "$pane")
   w=${sz%x*}; h=${sz#*x}
-  tmux display-popup -E -w "$w" -h "$h" -d "$cwd" -T ' Usage ' "$0 \"$pane\" \"$cwd\""
+  tmux display-popup -E -w "$w" -h "$h" -d "$cwd" -T ' Status ' "$0 \"$pane\" \"$cwd\""
 }
 
 # Pick the provider from the per-pane marker, NOT from what happens to be
@@ -874,6 +906,7 @@ main() {
     *) SRC_PANE=$(tmux display-message -p '#{pane_id}' 2>/dev/null) ;;
   esac
   PROVIDER=$(resolve_provider)
+  if declare -F context_section >/dev/null; then CONTEXT_TEXT=$(context_section); fi
   view_main
 }
 
