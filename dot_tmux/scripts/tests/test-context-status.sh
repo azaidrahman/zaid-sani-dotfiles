@@ -37,6 +37,22 @@ check "full context extracted, no stopword stripping" \
   "gke_myproj_us-central1_gtech-svc-obs-prd" "$(parse_kube_context "$KUBECFG")"
 
 check "empty kubeconfig -> empty context" "" "$(parse_kube_context "")"
+check "an unset context -> empty context" "" "$(parse_kube_context 'current-context: ""')"
+
+# --- parse_kube_namespace --------------------------------------------------
+# contexts is the last key here, so the last entry ends at the end of the text.
+KUBECFG_NS=$'apiVersion: v1\ncurrent-context: ctx-a\ncontexts:
+- context:\n    cluster: a\n    namespace: argocd\n    user: a\n  name: ctx-a
+- context:\n    cluster: b\n    user: b\n  name: ctx-b
+- name: ctx-c\n  context:\n    cluster: c\n    namespace: "web"'
+while IFS='|' read -r label ctx want; do
+  check "$label" "$want" "$(parse_kube_namespace "$KUBECFG_NS" "$ctx")"
+done <<'EOF'
+the namespace of the context in kubectl order|ctx-a|argocd
+a context without a namespace has none|ctx-b|
+name first, a quoted value, and the last entry|ctx-c|web
+an unknown context has none|ctx-x|
+EOF
 
 # --- parse_kube_parts ------------------------------------------------------
 while IFS='|' read -r label ctx want; do
@@ -100,8 +116,10 @@ out=$(render_kube "gke_myproj_us-central1_gtech-svc-obs-prd" | strip)
 check "render shows the project first" "1" "$(printf '%s\n' "$out" | sed -n 1p | grep -c 'project  myproj$')"
 check "render shows the cluster and the type second" "1" \
   "$(printf '%s\n' "$out" | sed -n 2p | grep -c 'cluster  gtech-svc-obs-prd  (gke)$')"
+check "render shows default when the namespace is not set" "1" \
+  "$(printf '%s\n' "$out" | sed -n 3p | grep -c 'ns       default$')"
 check "render shows the full context last" "1" \
-  "$(printf '%s\n' "$out" | sed -n 3p | grep -c 'gke_myproj_us-central1_gtech-svc-obs-prd')"
+  "$(printf '%s\n' "$out" | sed -n 4p | grep -c 'gke_myproj_us-central1_gtech-svc-obs-prd')"
 check "render shows only the context when it has no parts" "1" \
   "$(render_kube minikube | strip | grep -c 'kube     minikube$')"
 
@@ -122,8 +140,15 @@ account = jane.doe@example.com
 project = my-project-123
 EOF
 
+# The same order of keys as kubectl writes.
 cat > "$TMP/kubeconfig" <<'EOF'
 apiVersion: v1
+contexts:
+- context:
+    cluster: gke_myproj_us-central1_gtech-svc-obs-prd
+    namespace: argocd
+    user: gke_myproj_us-central1_gtech-svc-obs-prd
+  name: gke_myproj_us-central1_gtech-svc-obs-prd
 current-context: gke_myproj_us-central1_gtech-svc-obs-prd
 kind: Config
 EOF
@@ -132,6 +157,7 @@ out=$(printf 'x' | GCLOUD_CONFIG_DIR="$TMP/gcloud" KUBECONFIG="$TMP/kubeconfig" 
 check "main shows gcloud account"  "1" "$(printf '%s\n' "$out" | grep -c 'jane.doe@example.com')"
 check "main shows gcloud project"  "1" "$(printf '%s\n' "$out" | grep -c 'my-project-123')"
 check "main shows kube context"    "1" "$(printf '%s\n' "$out" | grep -c 'gke_myproj_us-central1_gtech-svc-obs-prd')"
+check "main shows kube namespace"  "1" "$(printf '%s\n' "$out" | grep -c 'ns       argocd$')"
 check "main shows close hint"      "1" "$(printf '%s\n' "$out" | grep -c '\[any key to close\]')"
 
 # fake_login <HH:MM:SS> : what `gcloud auth login` leaves behind at that time

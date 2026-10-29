@@ -848,8 +848,8 @@ view_main() {
 # +2 for the popup border, which eats a column on each side.
 USAGE_POPUP_W=$(( ROW_FIXED_W + BAR_CAP + 2 ))   # fits a full-cap bar plus its row
 COST_POPUP_W=90      # fits a full-cap 45-char bar (see the -42 offset in render_cost)
-# The context section: 4 gcloud rows, 3 kube rows, and 3 rows for the rule.
-CONTEXT_POPUP_H=10
+# The context section: 4 gcloud rows, 4 kube rows, and 3 rows for the rule.
+CONTEXT_POPUP_H=11
 
 # rows_in_cache <provider> <record> <fallback> : how many records of one kind
 # the cached blob holds.

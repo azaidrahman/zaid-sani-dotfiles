@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # The context section of the prefix+u status center: the gcloud account,
-# project and login session, and the kube current-context. claude-usage.sh
-# sources this file and draws context_section above the usage view. Run alone,
-# the file draws the section in its own screen. With --tmux-alert, it prints a
-# red alert for the tmux status line when the gcloud session has ended.
+# project and login session, and the kube current-context and its namespace.
+# claude-usage.sh sources this file and draws context_section above the usage
+# view. Run alone, the file draws the section in its own screen. With
+# --tmux-alert, it prints a red alert for the tmux status line when the gcloud
+# session has ended.
 #
 # The section always shows the global state. A popup cannot read the
 # environment of the pane that opened it, and no shell sets KUBECONFIG or a
@@ -65,9 +66,29 @@ parse_gcloud_config() {
 
 # parse_kube_context <kubeconfig_text> : extract the full current-context
 # (no shortening/stopword stripping — the popup has room for the whole name).
+# `kubectl config unset current-context` writes "", which gives nothing.
 parse_kube_context() {
   local text=$1
-  printf '%s\n' "$text" | awk -F': ' '/^current-context:/{print $2; exit}'
+  printf '%s\n' "$text" | awk -F': ' '/^current-context:/{ v = $2; gsub(/"/, "", v); print v; exit }'
+}
+
+# parse_kube_namespace <kubeconfig_text> <context> : the namespace of the
+# context. Nothing when the context sets no namespace. kubectl writes each
+# entry of contexts as "- context:", the keys under it, then "  name:". A
+# hand-written file can put "- name:" first, so read each full entry.
+parse_kube_namespace() {
+  printf '%s\n' "$1" | awk -v want="$2" -v q="'" '
+    function flush() {
+      if (name != "" && name == want) { print ns; found = 1; exit }
+      name = ""; ns = ""
+    }
+    /^contexts:/      { inside = 1; next }
+    !inside           { next }
+    /^[^ -]/          { flush(); inside = 0; next }
+    /^- /             { flush() }
+    /^(- |  )name: /  { name = $0; sub(/^(- |  )name: */, "", name); gsub("[\"" q "]", "", name) }
+    /^    namespace: / { ns = $0; sub(/^    namespace: */, "", ns); gsub("[\"" q "]", "", ns) }
+    END { if (inside && !found) flush() }'
 }
 
 # parse_kube_parts <context> : split a GKE context into TYPE, PROJECT and
@@ -201,10 +222,11 @@ render_gcloud() {
   render_session "$session"
 }
 
-# render_kube <context> : kube section. A GKE context shows its project, then
-# its cluster and type, then the full name.
+# render_kube <context> <namespace> : kube section. A GKE context shows its
+# project, then its cluster and type, then the namespace, then the full name.
+# A context without a namespace uses default, as kubectl does.
 render_kube() {
-  local parts project
+  local parts project ns=${2:-default}
   if [ -z "$1" ]; then
     printf '  %s%-9s%s%sno current-context%s\n' "$c_bold" kube "$c_reset" "$c_dim" "$c_reset"
     return
@@ -213,11 +235,13 @@ render_kube() {
   project=$(blob_field "$parts" PROJECT)
   if [ -z "$project" ]; then
     printf '  %s%-9s%s%s\n' "$c_bold" kube "$c_reset" "$1"
+    printf '  %-9s%-9s%s\n' '' ns "$ns"
     return
   fi
   printf '  %s%-9s%s%-9s%s\n' "$c_bold" kube "$c_reset" project "$project"
   printf '  %-9s%-9s%s  %s(%s)%s\n' \
     '' cluster "$(blob_field "$parts" CLUSTER)" "$c_dim" "$(blob_field "$parts" TYPE)" "$c_reset"
+  printf '  %-9s%-9s%s\n' '' ns "$ns"
   printf '  %-9s%s%s%s\n' '' "$c_dim" "$1" "$c_reset"
 }
 
@@ -244,8 +268,10 @@ context_section() {
   render_gcloud "$(active_config_name "$gconf_dir")" "$gblob" \
     "$(gcloud_session_cached "$gconf_dir" "$(blob_field "$gblob" ACCOUNT)")"
 
-  local kpath="${KUBECONFIG:-$HOME/.kube/config}"
-  render_kube "$(parse_kube_context "$(cat "$kpath" 2>/dev/null)")"
+  local kpath="${KUBECONFIG:-$HOME/.kube/config}" ktext kctx
+  ktext=$(cat "$kpath" 2>/dev/null)
+  kctx=$(parse_kube_context "$ktext")
+  render_kube "$kctx" "$(parse_kube_namespace "$ktext" "$kctx")"
 }
 
 # tmux_alert : a red alert for the tmux status line when the active account

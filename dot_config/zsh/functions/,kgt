@@ -14,7 +14,7 @@
 # them, and you can chain commands:
 #   kubectl delete -f a.yaml && kubectl create -f b.yaml
 # The kubeconfig is global, so the change shows in all shells. The tmux
-# prefix+u popup shows the current context.
+# prefix+u popup shows the current context and its namespace.
 #
 # Plain `argocd` works when the current context is the ArgoCD cluster and the
 # namespace of that context is argocd. exports.zsh sets ARGOCD_OPTS=--core.
@@ -106,12 +106,19 @@ _kgt_use() {
 
 _kgt_unset() { command kubectl config unset current-context }
 
-# kubectl does not check that the namespace exists.
+# kubectl does not check that the namespace exists. The list needs the
+# cluster. A name does not, because it only changes the kubeconfig.
 _kgt_namespace() {
-  local ns="$1"
+  local ns="$1" out
   if [[ -z "$ns" ]]; then
     (( ${+commands[fzf]} )) || { print -u2 ",kgt: fzf is not installed; give a namespace"; return 1 }
-    ns="$(command kubectl get namespaces -o name | command cut -d/ -f2 |
+    # kubectl writes each error many times. Show only its last line.
+    out="$(command kubectl get namespaces -o name --request-timeout=10s 2>&1)" || {
+      print -u2 -r -- ",kgt: cannot list the namespaces: ${${(f)out}[-1]}"
+      print -u2 ",kgt: to set a namespace without the list, run: ,kgt ns <name>"
+      return 1
+    }
+    ns="$(print -rl -- ${${(M)${(f)out}:#namespace/*}#namespace/} |
       command fzf --prompt='kgt namespace> ' --height=40% --reverse --select-1)" || return
     [[ -n "$ns" ]] || return 1
   fi
