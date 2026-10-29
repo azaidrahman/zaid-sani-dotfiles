@@ -2,14 +2,16 @@
 #
 #   ,kgt use [frag]             Select a context. Without <frag>, pick with fzf.
 #   ,kgt unset                  Unset the current context of the kubeconfig.
-#   ,kgt status|st              Show the kubectl context and the ArgoCD context.
+#   ,kgt ns [name]              Set the namespace. Without <name>, pick with fzf.
+#   ,kgt status|st              Show the kubectl context, namespace, and ArgoCD.
 #   ,kgt ar|argocd <args...>    Run `argocd --core`. `,kgt ar get <app>` = app get.
 #   ,kgt apps [filter]          List ArgoCD apps: sync, health, revision.
 #   ,kgt refresh <app>          Tell ArgoCD to read git again for <app>.
 #   ,kgt reset                  Delete the cache (ArgoCD context, kubeconfig).
 #
-# `use` and `unset` change the current context of the kubeconfig. Thus plain
-# kubectl, helm, and k9s use it, and you can chain commands:
+# `use` and `unset` change the current context of the kubeconfig. `ns` changes
+# the namespace of the current context. Thus plain kubectl, helm, and k9s use
+# them, and you can chain commands:
 #   kubectl delete -f a.yaml && kubectl create -f b.yaml
 # The kubeconfig is global, so the change shows in all shells. The tmux
 # prefix+u popup shows the current context.
@@ -17,7 +19,7 @@
 # Plain `argocd` works when the current context is the ArgoCD cluster and the
 # namespace of that context is argocd. exports.zsh sets ARGOCD_OPTS=--core.
 # To set the namespace one time, run:
-#   kubectl config set-context <argocd context> --namespace=argocd
+#   ,kgt use <argocd frag> && ,kgt ns argocd
 # `,kgt ar` works for any current context.
 #
 # <frag> is a part of a context name, for example `gke-stg`. It must select
@@ -104,12 +106,27 @@ _kgt_use() {
 
 _kgt_unset() { command kubectl config unset current-context }
 
+# kubectl does not check that the namespace exists.
+_kgt_namespace() {
+  local ns="$1"
+  if [[ -z "$ns" ]]; then
+    (( ${+commands[fzf]} )) || { print -u2 ",kgt: fzf is not installed; give a namespace"; return 1 }
+    ns="$(command kubectl get namespaces -o name | command cut -d/ -f2 |
+      command fzf --prompt='kgt namespace> ' --height=40% --reverse --select-1)" || return
+    [[ -n "$ns" ]] || return 1
+  fi
+  command kubectl config set-context --current --namespace="$ns"
+}
+
 _kgt_status() {
-  local cur argo="${KGT_ARGOCD_CONTEXT:-}"
+  local cur ns argo="${KGT_ARGOCD_CONTEXT:-}"
   cur="$(command kubectl config current-context 2>/dev/null)"
+  [[ -n "$cur" ]] && ns="$(command kubectl config view --minify \
+    -o jsonpath='{.contexts[0].context.namespace}' 2>/dev/null)"
   [[ -z "$argo" && -s "$cache/argocd-context" ]] && argo="$(<"$cache/argocd-context")"
-  print -r -- "kubectl:  ${cur:-(none)}"
-  print -r -- "argocd:   ${argo:-(not found yet)}"
+  print -r -- "kubectl:   ${cur:-(none)}"
+  [[ -n "$cur" ]] && print -r -- "namespace: ${ns:-default}"
+  print -r -- "argocd:    ${argo:-(not found yet)}"
 }
 
 # A word that is not an argocd command is an app command:
@@ -156,7 +173,7 @@ _kgt_reset() { rm -rf -- "$cache" && print ",kgt: cache deleted" }
 _kgt_help() { sed -n '3,11s/^#   //p' "${functions_source[,kgt]:-$HOME/.config/zsh/functions/,kgt}" }
 
 # Short names for commands.
-local -A short=( ar argocd st status )
+local -A short=( ar argocd st status ns namespace )
 
 local cmd="${1:-help}"
 cmd="${short[$cmd]:-$cmd}"

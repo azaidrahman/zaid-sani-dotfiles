@@ -9,13 +9,21 @@ _kgt_contexts() {
   _describe -t contexts 'kube context' ctxs
 }
 
+_kgt_namespaces() {
+  local -a nss
+  nss=( ${${(f)"$(command kubectl get namespaces -o name --request-timeout=5s 2>/dev/null)"}#namespace/} )
+  _describe -t namespaces 'namespace' nss
+}
+
 _kgt() {
   local -a cmds
   cmds=(
     'use:select a context'
     'unset:unset the current context'
-    'status:show the kubectl and ArgoCD contexts'
-    'st:show the kubectl and ArgoCD contexts'
+    'ns:set the namespace of the current context'
+    'namespace:set the namespace of the current context'
+    'status:show the kubectl context, namespace, and ArgoCD'
+    'st:show the kubectl context, namespace, and ArgoCD'
     'ar:run argocd --core'
     'argocd:run argocd --core'
     'apps:list ArgoCD apps'
@@ -31,6 +39,8 @@ _kgt() {
   case $words[2] in
     use)
       (( CURRENT == 3 )) && _kgt_contexts ;;
+    ns|namespace)
+      (( CURRENT == 3 )) && _kgt_namespaces ;;
     ar|argocd)
       (( $+functions[_argocd] )) || (( $+commands[argocd] )) && source <(command argocd completion zsh 2>/dev/null)
       if (( $+functions[_argocd] )); then
