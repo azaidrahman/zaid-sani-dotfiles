@@ -57,7 +57,7 @@
        :clear-l1-help {:noti {:id "org.pqrs.notificaion_message_layer1"
                               :text ""}}
        :show-l2-help {:noti {:id "org.pqrs.notificaion_message_layer2"
-                             :text "o:1p, p:dot, s:cleanshotx, g:gemini, x:codex"}}
+                             :text "t:epoch, o:1p, p:dot, s:cleanshotx, g:gemini, x:codex"}}
        :clear-l2-help {:noti {:id "org.pqrs.notificaion_message_layer2"
                               :text ""}}
        :show-l3-help {:noti {:id "org.pqrs.notificaion_message_layer3"

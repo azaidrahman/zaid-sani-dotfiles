@@ -15,6 +15,7 @@ F20	⌘	l1	,	soundsource
 F16	⌘⌥⇧	l2	o	1p
 F16	⌃⌘⌥⇧	l2	p	dot
 F17	⌘⇧	l2	s	cleanshotx
+F17	⌥⇧	l2	t	epoch
 F13	⇧	l3	[	b prev-space
 F13	⌃⇧	l3	]	b next-space
 F13	⌘⌥⇧	l3	-	b prev-tab

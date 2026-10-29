@@ -67,6 +67,7 @@ l1	⇧⌥R	,	soundsource	cmd+F20 (via KM/Alfred)
 l2	⌃⌥R	o	1p	1Password (alt) · cmd+opt+shift+F16 (via KM/Alfred)
 l2	⌃⌥R	p	dot	chezmoi dotfiles (alt) · ctrl+cmd+opt+shift+F16 (via KM/Alfred)
 l2	⌃⌥R	s	cleanshotx	CleanShot X (alt) · cmd+shift+F17 (via KM/Alfred)
+l2	⌃⌥R	t	epoch	Epoch converter (Alfred) · opt+shift+F17 (via KM/Alfred)
 l2	⌃⌥R	g	gemini	open:Gemini
 l2	⌃⌥R	x	codex	open-id:com.openai.codex
 l3	⌘⌥R	[	b prev-space	Browser previous space · shift+F13 (via KM/Alfred)
