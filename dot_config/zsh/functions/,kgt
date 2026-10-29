@@ -1,6 +1,7 @@
 # ,kgt - Run cluster tools against the GKE clusters of the kubeconfig.
 #
 #   ,kgt use [frag]             Select a context. Without <frag>, pick with fzf.
+#   ,kgt contexts|ls            List the contexts that `use` can select.
 #   ,kgt unset                  Unset the current context of the kubeconfig.
 #   ,kgt ns [name]              Set the namespace. Without <name>, pick with fzf.
 #   ,kgt status|st              Show the kubectl context, namespace, and ArgoCD.
@@ -23,7 +24,12 @@
 # `,kgt ar` works for any current context.
 #
 # <frag> is a part of a context name, for example `gke-stg`. It must select
-# one context. A Connect Gateway context wins over a gke_ context.
+# one context. A full context name always works.
+#
+# `use` and `contexts` hide a gke_ context when a connectgateway_ context has
+# the same project and cluster. The gke_ endpoint is private, so kubectl
+# cannot connect to it from this machine. The location can differ: the gke_
+# name of a zonal cluster has a zone, and the connectgateway_ name a region.
 #
 # The ArgoCD cluster is found one time: the first context that serves
 # the argocd-cm ConfigMap in the argocd namespace. To skip the search, set
@@ -38,17 +44,29 @@ setopt local_options pipe_fail
 
 local cache="${XDG_CACHE_HOME:-$HOME/.cache}/kgt"
 
+# A context name is <type>_<project>_<location>_<cluster>.
+_kgt_contexts() {
+  local -a all keys p
+  local c k
+  all=( ${(f)"$(command kubectl config get-contexts -o name)"} ) || return
+  for c in ${(M)all:#connectgateway_*}; do
+    p=( ${(s:_:)c} )
+    keys+=( "$p[2]_$p[4]" )
+  done
+  for c in $all; do
+    p=( ${(s:_:)c} ); k="$p[2]_$p[4]"
+    [[ $c == gke_* ]] && (( $#p == 4 && ${keys[(Ie)$k]} )) && continue
+    print -r -- "$c"
+  done
+}
+
 _kgt_resolve() {
   local frag="$1"
   [[ -n "$frag" ]] || { print -u2 ",kgt: give a context fragment"; return 2 }
   local -a all hits
   all=( ${(f)"$(command kubectl config get-contexts -o name)"} )
   if (( ${all[(Ie)$frag]} )); then print -r -- "$frag"; return; fi
-  hits=( ${(M)all:#*${frag}*} )
-  if (( $#hits > 1 )); then
-    local -a cg=( ${(M)hits:#connectgateway_*} )
-    (( $#cg )) && hits=( $cg )
-  fi
+  hits=( ${(M)${(f)"$(_kgt_contexts)"}:#*${frag}*} )
   case $#hits in
     0) print -u2 ",kgt: no context matches '$frag'"; return 1 ;;
     1) print -r -- "$hits[1]" ;;
@@ -97,7 +115,7 @@ _kgt_use() {
     ctx="$(_kgt_resolve "$1")" || return
   else
     (( ${+commands[fzf]} )) || { print -u2 ",kgt: fzf is not installed; give a fragment"; return 1 }
-    ctx="$(command kubectl config get-contexts -o name |
+    ctx="$(_kgt_contexts |
       command fzf --prompt='kgt context> ' --height=40% --reverse --select-1)" || return
     [[ -n "$ctx" ]] || return 1
   fi
@@ -177,10 +195,11 @@ _kgt_refresh() {
 
 _kgt_reset() { rm -rf -- "$cache" && print ",kgt: cache deleted" }
 
-_kgt_help() { sed -n '3,11s/^#   //p' "${functions_source[,kgt]:-$HOME/.config/zsh/functions/,kgt}" }
+# The help is the block of lines from line 3 to the first "#" line.
+_kgt_help() { sed -n '3,/^#$/s/^#   //p' "${functions_source[,kgt]:-$HOME/.config/zsh/functions/,kgt}" }
 
 # Short names for commands.
-local -A short=( ar argocd st status ns namespace )
+local -A short=( ar argocd st status ns namespace ls contexts )
 
 local cmd="${1:-help}"
 cmd="${short[$cmd]:-$cmd}"

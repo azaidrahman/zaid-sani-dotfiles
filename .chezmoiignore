@@ -35,6 +35,7 @@ AGENTS.md
 
 # Test directories
 .tmux/scripts/tests
+tests/
 .omp/agent/node_modules
 
 # omp runtime state (sessions, prompt history, model cache)

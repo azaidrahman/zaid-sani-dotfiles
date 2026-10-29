@@ -1,15 +1,18 @@
 #compdef ,kgt
 
-# Completion for ,kgt. Context names come from the kubeconfig. For `ar` and
+# Completion for ,kgt. Context names come from `,kgt contexts`. For `ar` and
 # `argocd`, the completion of argocd does the work.
+#
+# ,kgt defines a _kgt_<command> function for each command, so the names of
+# the helpers here start with _kgt_complete_.
 
-_kgt_contexts() {
+_kgt_complete_contexts() {
   local -a ctxs
-  ctxs=( ${(f)"$(command kubectl config get-contexts -o name 2>/dev/null)"} )
+  ctxs=( ${(f)"$(,kgt contexts 2>/dev/null)"} )
   _describe -t contexts 'kube context' ctxs
 }
 
-_kgt_namespaces() {
+_kgt_complete_namespaces() {
   local -a nss
   nss=( ${${(f)"$(command kubectl get namespaces -o name --request-timeout=5s 2>/dev/null)"}#namespace/} )
   _describe -t namespaces 'namespace' nss
@@ -19,6 +22,8 @@ _kgt() {
   local -a cmds
   cmds=(
     'use:select a context'
+    'contexts:list the contexts that use can select'
+    'ls:list the contexts that use can select'
     'unset:unset the current context'
     'ns:set the namespace of the current context'
     'namespace:set the namespace of the current context'
@@ -38,9 +43,9 @@ _kgt() {
 
   case $words[2] in
     use)
-      (( CURRENT == 3 )) && _kgt_contexts ;;
+      (( CURRENT == 3 )) && _kgt_complete_contexts ;;
     ns|namespace)
-      (( CURRENT == 3 )) && _kgt_namespaces ;;
+      (( CURRENT == 3 )) && _kgt_complete_namespaces ;;
     ar|argocd)
       (( $+functions[_argocd] )) || (( $+commands[argocd] )) && source <(command argocd completion zsh 2>/dev/null)
       if (( $+functions[_argocd] )); then
