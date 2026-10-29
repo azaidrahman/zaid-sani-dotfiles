@@ -848,8 +848,8 @@ view_main() {
 # +2 for the popup border, which eats a column on each side.
 USAGE_POPUP_W=$(( ROW_FIXED_W + BAR_CAP + 2 ))   # fits a full-cap bar plus its row
 COST_POPUP_W=90      # fits a full-cap 45-char bar (see the -42 offset in render_cost)
-# The context section: 4 gcloud rows, 1 kube row, and 3 rows for the rule.
-CONTEXT_POPUP_H=8
+# The context section: 4 gcloud rows, 3 kube rows, and 3 rows for the rule.
+CONTEXT_POPUP_H=10
 
 # rows_in_cache <provider> <record> <fallback> : how many records of one kind
 # the cached blob holds.
@@ -883,12 +883,15 @@ size_for() {
 }
 
 # popup_main <pane_id> <cwd> : called from the keybinding (outside any popup)
-# to open the popup at the size the view needs.
+# to open the popup at the size the view needs. tmux runs the popup command
+# with a shell, so each argument is quoted with %q. A directory name can hold
+# quotes or $(...), and the shell must not run them.
 popup_main() {
   local pane=$1 cwd=$2 sz w h
   sz=$(size_for "$pane")
   w=${sz%x*}; h=${sz#*x}
-  tmux display-popup -E -w "$w" -h "$h" -d "$cwd" -T ' Status ' "$0 \"$pane\" \"$cwd\""
+  tmux display-popup -E -w "$w" -h "$h" -d "$cwd" -T ' Status ' \
+    "$(printf '%q %q %q' "$0" "$pane" "$cwd")"
 }
 
 # Pick the provider from the per-pane marker, NOT from what happens to be

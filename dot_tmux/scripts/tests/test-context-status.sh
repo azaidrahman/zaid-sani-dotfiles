@@ -38,6 +38,15 @@ check "full context extracted, no stopword stripping" \
 
 check "empty kubeconfig -> empty context" "" "$(parse_kube_context "")"
 
+# --- parse_kube_parts ------------------------------------------------------
+while IFS='|' read -r label ctx want; do
+  check "$label" "$want" "$(parse_kube_parts "$ctx" | tr '\n' ' ' | sed 's/ $//')"
+done <<'EOF'
+a gke context splits into its parts|gke_myproj_us-central1_obs-prd|TYPE gke PROJECT myproj CLUSTER obs-prd
+a connect gateway context splits too|connectgateway_myproj_us-central1_obs-prd|TYPE connectgateway PROJECT myproj CLUSTER obs-prd
+another context has no parts|minikube|
+EOF
+
 # --- render_gcloud --------------------------------------------------------
 strip() { sed $'s/\033\\[[0-9;]*m//g'; }
 
@@ -88,8 +97,13 @@ check "no session asks for a login" "1" "$(printf '%s\n' "$out" | grep -c 'no lo
 
 # --- render_kube -----------------------------------------------------------
 out=$(render_kube "gke_myproj_us-central1_gtech-svc-obs-prd" | strip)
-check "render shows full context" "1" \
-  "$(printf '%s\n' "$out" | grep -c 'gke_myproj_us-central1_gtech-svc-obs-prd')"
+check "render shows the project first" "1" "$(printf '%s\n' "$out" | sed -n 1p | grep -c 'project  myproj$')"
+check "render shows the cluster and the type second" "1" \
+  "$(printf '%s\n' "$out" | sed -n 2p | grep -c 'cluster  gtech-svc-obs-prd  (gke)$')"
+check "render shows the full context last" "1" \
+  "$(printf '%s\n' "$out" | sed -n 3p | grep -c 'gke_myproj_us-central1_gtech-svc-obs-prd')"
+check "render shows only the context when it has no parts" "1" \
+  "$(render_kube minikube | strip | grep -c 'kube     minikube$')"
 
 out_empty=$(render_kube "" | strip)
 check "render kube fallback when no context" "1" \
@@ -98,6 +112,7 @@ check "render kube fallback when no context" "1" \
 # --- main(): end-to-end with fixture config dirs, no real gcloud/kube ------
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
+export TMPDIR="$TMP"   # the session cache goes here, not in the real TMPDIR
 
 mkdir -p "$TMP/gcloud/configurations"
 echo -n "work" > "$TMP/gcloud/active_config"
@@ -119,25 +134,45 @@ check "main shows gcloud project"  "1" "$(printf '%s\n' "$out" | grep -c 'my-pro
 check "main shows kube context"    "1" "$(printf '%s\n' "$out" | grep -c 'gke_myproj_us-central1_gtech-svc-obs-prd')"
 check "main shows close hint"      "1" "$(printf '%s\n' "$out" | grep -c '\[any key to close\]')"
 
-# The session comes from the login log. gcloud writes the log in local time.
-mkdir -p "$TMP/gcloud/logs/2026.10.29"
-cat > "$TMP/gcloud/logs/2026.10.29/10.46.10.599208.log" <<'EOF'
-2026-10-29 10:46:10,615 DEBUG    root            Running [gcloud.auth.login] with arguments: []
-2026-10-29 10:48:21,046 INFO     ___FILE_ONLY___
-You are now logged in as [jane.doe@example.com].
-EOF
-login=$(date -j -f '%Y-%m-%d %H:%M:%S' '2026-10-29 10:48:21' +%s)
-out=$(printf 'x' | FAKE_NOW=$(( login + 3 * HOUR )) GCLOUD_CONFIG_DIR="$TMP/gcloud" \
-  KUBECONFIG="$TMP/kubeconfig" bash "$SCRIPT" | strip)
-check "main reads the session from the login log" "1" "$(printf '%s\n' "$out" | grep -c '✓ 13h 0m left')"
+# fake_login <HH:MM:SS> : what `gcloud auth login` leaves behind at that time
+# on 2026-10-29: a log in local time, and a new time on the credential file.
+LOGS="$TMP/gcloud/logs/2026.10.29"
+CRED="$TMP/gcloud/legacy_credentials/jane.doe@example.com/adc.json"
+fake_login() {
+  mkdir -p "$LOGS" "${CRED%/*}"
+  printf '%s\n' \
+    "2026-10-29 $1,615 DEBUG    root            Running [gcloud.auth.login] with arguments: []" \
+    "2026-10-29 $1,046 INFO     ___FILE_ONLY___" \
+    "You are now logged in as [jane.doe@example.com]." > "$LOGS/${1//:/.}.000000.log"
+  touch -t "20261029$(printf '%s' "${1%:*}" | tr -d :).${1##*:}" "$CRED"
+}
+epoch_at() { date -j -f '%Y-%m-%d %H:%M:%S' "2026-10-29 $1" +%s; }
+show() { printf 'x' | FAKE_NOW=$1 GCLOUD_CONFIG_DIR="$TMP/gcloud" KUBECONFIG="$TMP/kubeconfig" bash "$SCRIPT" | strip; }
+
+fake_login 10:48:21
+login=$(epoch_at 10:48:21)
+check "main reads the session from the login log" "1" \
+  "$(show $(( login + 3 * HOUR )) | grep -c '✓ 13h 0m left')"
+
+# The tmux alert shows only when the session has ended.
+alert() { FAKE_NOW=$1 GCLOUD_CONFIG_DIR="$TMP/gcloud" bash "$SCRIPT" --tmux-alert; }
+check "the tmux alert is empty in a live session" "" "$(alert $(( login + 3 * HOUR )))"
+check "the tmux alert is red after the session ends" "#[fg=#ffffff,bg=#ff0000,bold] ✗ gcloud not authed #[default]" \
+  "$(alert $(( login + SESSION )))"
+
+# Each login gives the credential file a new time. While that time stays the
+# same, the session comes from the cache and the logs are not read again.
+rm -rf "$LOGS"
+fake_login 11:48:21
+touch -t 202610291048.21 "$CRED"
+check "an unchanged credential file reuses the cached session" "1" \
+  "$(show $(( login + 3 * HOUR )) | grep -c '✓ 13h 0m left')"
 
 # Without a login log, the time of the credential file starts the session.
-rm -rf "$TMP/gcloud/logs"
-mkdir -p "$TMP/gcloud/legacy_credentials/jane.doe@example.com"
-touch -t 202610291048.21 "$TMP/gcloud/legacy_credentials/jane.doe@example.com/adc.json"
-out=$(printf 'x' | FAKE_NOW=$(( login + 3 * HOUR )) GCLOUD_CONFIG_DIR="$TMP/gcloud" \
-  KUBECONFIG="$TMP/kubeconfig" bash "$SCRIPT" | strip)
-check "main falls back to the credential file" "1" "$(printf '%s\n' "$out" | grep -c '✓ 13h 0m left')"
+rm -rf "$LOGS"
+touch -t 202610290948.21 "$CRED"
+check "main falls back to the credential file" "1" \
+  "$(show $(( login + 3 * HOUR )) | grep -c '✓ 12h 0m left')"
 
 # Missing config dirs -> both fallbacks, no crash
 out=$(printf 'x' | GCLOUD_CONFIG_DIR="$TMP/no-such-dir" KUBECONFIG="$TMP/no-such-kubeconfig" bash "$SCRIPT" | strip)

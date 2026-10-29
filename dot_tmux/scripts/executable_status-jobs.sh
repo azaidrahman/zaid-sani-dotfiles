@@ -13,9 +13,16 @@
 #   closed-windows.sh     the pane snapshot for the log of closed windows
 #                         (prefix+X).
 #
-# Each job prints nothing, so the status line does not change. The script
-# adds a job only if status-right does not have it, so a config reload does
-# not add a second copy.
+# These two jobs print nothing, so the status line does not change.
+#
+# One job prints text, and it comes last, so it is at the right end:
+#
+#   context-status.sh     a red "gcloud not authed" alert when the gcloud
+#                         session has ended (see prefix+u). Nothing while the
+#                         session is live.
+#
+# The script adds a job only if status-right does not have it, so a config
+# reload does not add a second copy.
 set -u
 
 # add_job MATCH COMMAND — add #(COMMAND) to status-right if no job in it
@@ -30,3 +37,4 @@ add_job() {
 continuum="$HOME/.tmux/plugins/tmux-continuum/scripts/continuum_save.sh"
 [ -x "$continuum" ] && add_job continuum_save.sh "$continuum"
 add_job "closed-windows.sh snapshot" "$HOME/.tmux/scripts/closed-windows.sh snapshot"
+add_job "context-status.sh --tmux-alert" "$HOME/.tmux/scripts/popups/context-status.sh --tmux-alert"

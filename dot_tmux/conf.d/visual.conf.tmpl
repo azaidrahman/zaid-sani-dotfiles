@@ -26,6 +26,11 @@ run-shell 'tmux set -g status-right "$(tmux show-options -gv status-right | sed 
 run-shell 'tmux set -g status-right "$(tmux show-options -gv status-right | sed "s|plugins/tokyo-night-tmux/src/datetime-widget.sh|scripts/datetime-widget.sh|")"'
 run-shell 'tmux set -g status-left "$(tmux show-options -gv status-left | sed "s|plugins/tokyo-night-tmux/src/hostname-widget.sh|scripts/hostname-widget.sh|")"'
 
+# tmux cuts status-right at status-right-length, and it cuts the end. The red
+# gcloud alert of status-jobs.sh is at the end, so give the widgets more room
+# than the 150 of the theme.
+set -g status-right-length 200
+
 # Override session bar color per device: cyan for aqua, dark purple for onyx
 {{ if eq .chezmoi.hostname "aqua" -}}
 run-shell 'tmux set -g status-left "$(tmux show-options -gv status-left | sed "s|fg=#414868,bg=#7aa2f7|fg=#000000,bg=#04d1f9|")"'

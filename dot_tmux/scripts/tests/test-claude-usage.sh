@@ -325,12 +325,22 @@ check "the quota popup fits a full-cap row" "149" "$USAGE_POPUP_W"
 check "the popup width is derived, not fixed" "149" "$(( ROW_FIXED_W + BAR_CAP + 2 ))"
 
 # The combined popup is as wide as a quota row and as tall as both sections
-# and the context section: 2 quota rows * 2 + 3 models + 17 + 8.
+# and the context section: 2 quota rows * 2 + 3 models + 17 + 10.
 tmp=$(mktemp -d)
 printf 'QUOTA\ta\t1\t-\t-\nQUOTA\tb\t2\t-\t-\nMODEL\t1\tm1\nMODEL\t2\tm2\nMODEL\t3\tm3\n' \
   > "$tmp/claude-usage.agents.cache"
-check "the combined popup sizes from both record kinds" "149x32" \
+check "the combined popup sizes from both record kinds" "149x34" \
   "$(resolve_provider() { printf agents; }; TMPDIR="$tmp" size_for '%0')"
+rm -rf "$tmp"
+
+# tmux runs the popup command with a shell. A directory name with quotes or
+# $(...) must reach the script as one plain argument.
+tmp=$(mktemp -d)
+evil="$tmp/a\"b \$(touch $tmp/ran)"
+cmd=$(tmux() { if [ "$1" = display-popup ]; then for last; do :; done; printf '%s' "$last"; fi; }
+      TMPDIR="$tmp" popup_main '%1' "$evil")
+eval "set -- $cmd"
+check "the popup command keeps the directory as one argument" "$evil" "${3:-}"
 rm -rf "$tmp"
 
 exit $fail

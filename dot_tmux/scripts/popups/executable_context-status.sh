@@ -2,7 +2,8 @@
 # The context section of the prefix+u status center: the gcloud account,
 # project and login session, and the kube current-context. claude-usage.sh
 # sources this file and draws context_section above the usage view. Run alone,
-# the file draws the section in its own screen.
+# the file draws the section in its own screen. With --tmux-alert, it prints a
+# red alert for the tmux status line when the gcloud session has ended.
 #
 # The section always shows the global state. A popup cannot read the
 # environment of the pane that opened it, and no shell sets KUBECONFIG or a
@@ -69,14 +70,29 @@ parse_kube_context() {
   printf '%s\n' "$text" | awk -F': ' '/^current-context:/{print $2; exit}'
 }
 
+# parse_kube_parts <context> : split a GKE context into TYPE, PROJECT and
+# CLUSTER lines. gcloud names the contexts <type>_<project>_<location>_<cluster>,
+# and none of the parts can hold an underscore. Nothing for another context.
+parse_kube_parts() {
+  [[ $1 =~ ^(gke|connectgateway)_([^_]+)_([^_]+)_([^_]+)$ ]] || return 0
+  printf 'TYPE %s\nPROJECT %s\nCLUSTER %s\n' \
+    "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[4]}"
+}
+
 # login_epochs <logs_dir> <account> : the epoch of each completed
 # `gcloud auth login` of the account, oldest first. A login is complete when
 # gcloud writes "You are now logged in as [account]". The time is the time of
 # the log line before it, which is the token exchange.
+#
+# gcloud writes the command name in the first 10 lines of a log. A busy day
+# can hold thousands of logs and gigabytes of text, so awk reads only the
+# start of each file.
 login_epochs() {
   local dir=$1 account=$2 day f ts
   ls -1d "$dir"/*/ 2>/dev/null | tail -n "$LOGIN_SCAN_DAYS" | while IFS= read -r day; do
-    grep -l -F 'Running [gcloud.auth.login]' "$day"*.log 2>/dev/null
+    awk 'FNR > 12 { nextfile }
+         index($0, "Running [gcloud.auth.login]") { print FILENAME; nextfile }' \
+      "$day"*.log 2>/dev/null
   done | while IFS= read -r f; do
     ts=$(awk -v acct="$account" '
       /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] / { ts = substr($0, 1, 19) }
@@ -113,6 +129,36 @@ gcloud_session() {
   printf '%s' "$blob"
 }
 
+# gcloud_session_cached <gcloud_config_dir> <account> : gcloud_session, from a
+# cache when possible. Each login gives the credential file a new time, so the
+# session can change only when that time changes. The cache key is the config
+# dir, the account and that time. tmux asks for the session at each
+# status-interval, and a scan of a busy day of logs takes about half a second.
+gcloud_session_cached() {
+  local dir=$1 account=$2 cache key mtime blob
+  [ -n "$account" ] || return 0
+  cache="${TMPDIR:-/tmp}/context-status.session.cache"
+  mtime=$(stat -f %m "$dir/legacy_credentials/$account/adc.json" 2>/dev/null)
+  key="$dir $account ${mtime:--}"
+  if [ "$(head -n 1 "$cache" 2>/dev/null)" = "$key" ]; then
+    tail -n +2 "$cache"
+    return
+  fi
+  blob=$(gcloud_session "$dir" "$account")
+  # The popup and the status line can write at the same time, so write a
+  # private file and move it into place.
+  printf '%s\n%s\n' "$key" "$blob" > "$cache.$$" 2>/dev/null && mv -f "$cache.$$" "$cache"
+  printf '%s' "$blob"
+}
+
+# session_end <gcloud_session output> : the epoch when the session ends.
+# Nothing without a session.
+session_end() {
+  local start; start=$(blob_field "$1" START)
+  [ -n "$start" ] || return 0
+  printf '%s' "$(( start + GCLOUD_SESSION_HOURS * 3600 ))"
+}
+
 # render_session <gcloud_session output> : the time left in the session, and
 # when it started.
 render_session() {
@@ -122,7 +168,7 @@ render_session() {
     printf '  %-9s%-9s%sno login found · run gcloud auth login%s\n' '' session "$c_red" "$c_reset"
     return
   fi
-  end=$(( start + GCLOUD_SESSION_HOURS * 3600 ))
+  end=$(session_end "$1")
   left=$(( end - $(ctx_now) ))
   if (( left <= 0 )); then
     printf '  %-9s%-9s%s✗ ended %s · run gcloud auth login%s\n' \
@@ -155,24 +201,65 @@ render_gcloud() {
   render_session "$session"
 }
 
-# render_kube <context> : kube section.
+# render_kube <context> : kube section. A GKE context shows its project, then
+# its cluster and type, then the full name.
 render_kube() {
+  local parts project
   if [ -z "$1" ]; then
     printf '  %s%-9s%s%sno current-context%s\n' "$c_bold" kube "$c_reset" "$c_dim" "$c_reset"
-  else
-    printf '  %s%-9s%s%s\n' "$c_bold" kube "$c_reset" "$1"
+    return
   fi
+  parts=$(parse_kube_parts "$1")
+  project=$(blob_field "$parts" PROJECT)
+  if [ -z "$project" ]; then
+    printf '  %s%-9s%s%s\n' "$c_bold" kube "$c_reset" "$1"
+    return
+  fi
+  printf '  %s%-9s%s%-9s%s\n' "$c_bold" kube "$c_reset" project "$project"
+  printf '  %-9s%-9s%s  %s(%s)%s\n' \
+    '' cluster "$(blob_field "$parts" CLUSTER)" "$c_dim" "$(blob_field "$parts" TYPE)" "$c_reset"
+  printf '  %-9s%s%s%s\n' '' "$c_dim" "$1" "$c_reset"
+}
+
+gcloud_dir() { printf '%s' "${GCLOUD_CONFIG_DIR:-$HOME/.config/gcloud}"; }
+
+# active_config_name <gcloud_config_dir> : the name of the active gcloud
+# configuration.
+active_config_name() {
+  local active; active=$(cat "$1/active_config" 2>/dev/null)
+  printf '%s' "${active:-default}"
+}
+
+# active_gcloud_blob <gcloud_config_dir> : parse_gcloud_config of the active
+# configuration.
+active_gcloud_blob() {
+  parse_gcloud_config "$(cat "$1/configurations/config_$(active_config_name "$1")" 2>/dev/null)"
 }
 
 # context_section : read the gcloud and kube files, and draw both sections.
 context_section() {
-  local gconf_dir="${GCLOUD_CONFIG_DIR:-$HOME/.config/gcloud}"
-  local active; active=$(cat "$gconf_dir/active_config" 2>/dev/null); active=${active:-default}
-  local gblob; gblob=$(parse_gcloud_config "$(cat "$gconf_dir/configurations/config_${active}" 2>/dev/null)")
-  render_gcloud "$active" "$gblob" "$(gcloud_session "$gconf_dir" "$(blob_field "$gblob" ACCOUNT)")"
+  local gconf_dir gblob
+  gconf_dir=$(gcloud_dir)
+  gblob=$(active_gcloud_blob "$gconf_dir")
+  render_gcloud "$(active_config_name "$gconf_dir")" "$gblob" \
+    "$(gcloud_session_cached "$gconf_dir" "$(blob_field "$gblob" ACCOUNT)")"
 
   local kpath="${KUBECONFIG:-$HOME/.kube/config}"
   render_kube "$(parse_kube_context "$(cat "$kpath" 2>/dev/null)")"
+}
+
+# tmux_alert : a red alert for the tmux status line when the active account
+# has no live session. Nothing when the session is live, or when gcloud has no
+# account. status-jobs.sh adds it at the right end of status-right.
+tmux_alert() {
+  local gconf_dir account end
+  gconf_dir=$(gcloud_dir)
+  account=$(blob_field "$(active_gcloud_blob "$gconf_dir")" ACCOUNT)
+  [ -n "$account" ] || return 0
+  end=$(session_end "$(gcloud_session_cached "$gconf_dir" "$account")")
+  if [ -z "$end" ] || (( end <= $(ctx_now) )); then
+    printf '#[fg=#ffffff,bg=#ff0000,bold] ✗ gcloud not authed #[default]'
+  fi
 }
 
 context_main() {
@@ -188,4 +275,9 @@ context_main() {
   [ -n "$old_stty" ] && stty "$old_stty" 2>/dev/null
 }
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then context_main "$@"; fi
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  case "${1:-}" in
+    --tmux-alert) tmux_alert ;;
+    *)            context_main "$@" ;;
+  esac
+fi
