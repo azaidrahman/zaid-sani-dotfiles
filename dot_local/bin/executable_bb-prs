@@ -7,15 +7,24 @@
 #
 # prefix+B opens this script in a tmux popup. It also runs in a plain terminal.
 #
-# The list has two sources. The script removes the duplicates:
+# ctrl-t changes the list. There are three lists:
 #
-#   * each open PR in the repo of the current directory, if its origin
-#     remote is on bitbucket.org
-#   * the workspace inbox of twg: the PRs that wait for your review, and your
-#     own open PRs, also in other repos
+#   open     the open PRs. They come from two sources, and the script removes
+#            the duplicates:
+#              * each open PR in the repo of the current directory, if its
+#                origin remote is on bitbucket.org
+#              * the workspace inbox of twg: the PRs that wait for your review,
+#                and your own open PRs, also in other repos
+#            The inbox alone is not sufficient. On 2026-10-30 it showed only 2
+#            of the 7 open PRs of one repo.
+#   closed   the PRs that were merged or declined last in the repo of the
+#            current directory, and your own merged PRs in other repos
+#   log      what you did in this picker: each review, sync, approval and
+#            merge, with the time and the result. The script keeps the log in
+#            $XDG_STATE_HOME/bb-prs/actions.tsv.
 #
-# The inbox alone is not sufficient. On 2026-10-30 it showed only 2 of the 7
-# open PRs of one repo.
+# ctrl-v changes the preview: details, activity (the timeline of the PR) or
+# commits.
 #
 # Keys:
 #
@@ -26,14 +35,19 @@
 #   ctrl-a   approve the selected PRs
 #   ctrl-y   approve and merge the selected PRs. The script asks first.
 #   ctrl-o   open the PR in the browser
+#   ctrl-t   change the list: open, closed, log
+#   ctrl-v   change the preview: details, activity, commits
 #   ctrl-r   load the list again
 #   tab      select more than one PR
 #
-# Cache: the list opens at once from the cache of the last run. A refresh in
+# Sync, approve and merge act only on open PRs. They skip the rows of the
+# closed list and of the log.
+#
+# Cache: each list opens at once from the cache of the last run. A refresh in
 # the background loads the new list, and sends it to fzf through the socket of
 # `fzf --listen`. The prompt shows "loading" until then. The refresh also makes
-# the previews in advance. A preview stays valid for PREVIEW_TTL_MIN minutes,
-# or until the PR changes.
+# the details previews in advance. A preview stays valid for PREVIEW_TTL_MIN
+# minutes, or until the PR changes.
 #
 # Sync: Bitbucket has no API for its "Sync now" button. ctrl-s does the same as
 # the rebase option of that button, in a temporary worktree of the repo of the
@@ -58,6 +72,7 @@ set -euo pipefail
 
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/bb-prs"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/bb-prs"
+LOG_FILE="$STATE_DIR/actions.tsv"
 PREVIEW_TTL_MIN=15
 
 # The terminal for tuicr and for the prompts. bb_pick sets BB_PRS_TTY to the
@@ -76,6 +91,8 @@ Show the open Bitbucket PRs for you in fzf.
   ctrl-a   approve the selected PRs
   ctrl-y   approve and merge the selected PRs (asks first)
   ctrl-o   open in the browser
+  ctrl-t   change the list: open, closed, log of your actions
+  ctrl-v   change the preview: details, activity, commits
   ctrl-r   load again
   tab      select more than one PR
 
@@ -115,14 +132,18 @@ twg_json() {
     cat "$path"
 }
 
-# Run a twg write. If it fails, print the message from the twg envelope.
+# Run a twg write. If it fails, print the message from the twg envelope, and
+# keep it in TWG_ERR for the log.
+TWG_ERR=""
 twg_do() {
-    local out msg
+    local out
+    TWG_ERR=""
     if out=$(twg "$@" 2>&1); then
         return 0
     fi
-    msg=$(printf '%s\n' "$out" | sed -n 's/^  message: "\{0,1\}\(.*[^"]\)"\{0,1\}$/\1/p' | head -3)
-    printf '    %s\n' "${msg:-$(printf '%s\n' "$out" | head -3)}"
+    TWG_ERR=$(printf '%s\n' "$out" | sed -n 's/^  message: "\{0,1\}\(.*[^"]\)"\{0,1\}$/\1/p' | head -1)
+    TWG_ERR=${TWG_ERR:-$(printf '%s\n' "$out" | head -1)}
+    printf '    %s\n' "$TWG_ERR"
     return 1
 }
 
@@ -131,6 +152,42 @@ fzf_post() {
     [[ -n "${BB_PRS_SOCK:-}" && -S "$BB_PRS_SOCK" ]] || return 0
     curl -s --max-time 2 --unix-socket "$BB_PRS_SOCK" -X POST http://localhost \
         -d "$1" >/dev/null 2>&1 || true
+}
+
+# Append one line to the log of your actions. Fields: time, action (approve,
+# merge, sync, review), result (ok, failed, conflict, opened), repo, id, url,
+# source branch, destination branch, title, note.
+bb_log() {
+    local f out
+    mkdir -p "$STATE_DIR"
+    out=$(date '+%Y-%m-%d %H:%M')
+    for f in "$@"; do
+        f=${f//$'\t'/ }
+        out+=$'\t'"${f:--}"
+    done
+    printf '%s\n' "$out" >>"$LOG_FILE"
+}
+
+# The state of one picker session: the list (open, closed, log) and the
+# preview (details, activity, commits). The files are in the run directory
+# of bb_pick.
+get_mode() { cat "${BB_PRS_RUN:-/nonexistent}/mode" 2>/dev/null || echo open; }
+get_view() { cat "${BB_PRS_RUN:-/nonexistent}/view" 2>/dev/null || echo details; }
+
+list_file() { # mode
+    printf '%s-%s.tsv' "${BB_PRS_LIST_BASE:-/nonexistent}" "$1"
+}
+
+mode_prompt() { # mode [loading]
+    local p="$BB_PRS_PROMPT"
+    [[ "$1" == open ]] || p+=" · $1"
+    [[ -z "${2:-}" ]] || p+=" · loading"
+    printf '%s> ' "$p"
+}
+
+# Only these rows are open PRs. Sync, approve and merge skip the others.
+actionable() {
+    [[ "$1" == mine || "$1" == review || "$1" == open ]]
 }
 
 # Print <workspace>/<repo> for the origin remote of a directory. Print nothing
@@ -143,16 +200,23 @@ bb_remote_repo() {
 }
 
 # One TSV row per PR: repo, id, role, url, updated, source branch, destination
-# branch, author, title, draft. The role is "mine", "review" or "open". If two
-# sources have the same PR, the first source in this order wins: author inbox,
-# reviewer inbox, repo query. An empty value becomes "-", because `read` joins
-# two tabs into one.
+# branch, author, title, draft. An empty value becomes "-", because `read`
+# joins two tabs into one.
+#
+# For open PRs, the role is "mine", "review" or "open". If two sources have
+# the same PR, the first source in this order wins: author inbox, reviewer
+# inbox, repo query. The PRs of the current repo go first.
+#
+# With $5 set (the closed list), the role is the state of the PR, for example
+# "merged", and the newest PR goes first.
 #
 # $1 repo query JSON, $2 reviewer inbox JSON, $3 author inbox JSON. A file
-# can be empty. $4 is the repo of the current directory: its PRs go first.
+# can be empty. $4 is the repo of the current directory.
 bb_rows() {
-    jq -rn --slurpfile q "$1" --slurpfile r "$2" --slurpfile a "$3" --arg cur "${4:-}" '
-        def inbox($role): {repo, id, role: $role, url: .link, updated: .updatedOn,
+    jq -rn --slurpfile q "$1" --slurpfile r "$2" --slurpfile a "$3" \
+        --arg cur "${4:-}" --arg closed "${5:-}" '
+        def role($r): if $closed != "" then (.state // "closed" | ascii_downcase) else $r end;
+        def inbox($r): {repo, id, role: role($r), url: .link, updated: .updatedOn,
             src: .sourceBranch, dst: .destinationBranch,
             author: .author.displayName, title, draft};
         ($r[0].currentUser.uuid // $a[0].currentUser.uuid // "") as $me
@@ -161,26 +225,29 @@ bb_rows() {
           + [ ($q[0] // [])[]
               | {repo: (.links.html.href | capture("bitbucket\\.org/(?<r>[^/]+/[^/]+)/").r),
                  id,
-                 role: (if .author.uuid == $me then "mine" else "open" end),
+                 role: role(if .author.uuid == $me then "mine" else "open" end),
                  url: .links.html.href, updated: .updated_on,
                  src: .source.branch.name, dst: .destination.branch.name,
                  author: .author.display_name, title, draft} ]
         | unique_by([.repo, .id])
-        | sort_by([(.repo != $cur), .repo, -.id])[]
+        | if $closed != "" then sort_by(.updated) | reverse
+          else sort_by([(.repo != $cur), .repo, -.id]) end
+        | .[]
         | [.repo, .id, .role, .url, .updated, .src, .dst, .author, .title,
            (if .draft then "draft" else null end)]
         | map(if . == null or . == "" then "-" else tostring end)
         | @tsv'
 }
 
-# Add the display text as field 8 to each row of bb_rows. For a PR in the repo
-# of the current directory, "↓N" shows that the PR is N commits behind its
-# destination.
+# Turn the rows of bb_rows into the rows of the list: repo, id, role, url,
+# updated, source branch, destination branch, display text, title. fzf shows
+# field 8 only. For a PR in the repo of the current directory, "↓N" shows
+# that the PR is N commits behind its destination.
 bb_format() {
     local repo id role url updated src dst author title draft behind mark pad color display
     while IFS=$'\t' read -r repo id role url updated src dst author title draft; do
         behind=""
-        if [[ -n "${BB_PRS_DIR:-}" && "$repo" == "${BB_PRS_REPO:-}" ]]; then
+        if [[ -n "${BB_PRS_DIR:-}" && "$repo" == "${BB_PRS_REPO:-}" ]] && actionable "$role"; then
             behind=$(git -C "$BB_PRS_DIR" rev-list --count \
                 "refs/remotes/origin/$src..refs/remotes/origin/$dst" 2>/dev/null || true)
         fi
@@ -190,20 +257,46 @@ bb_format() {
             mark="↓$behind" pad=$((4 - ${#behind}))
         fi
         case "$role" in
-            mine)   color=36 ;;
-            review) color=33 ;;
-            *)      color=2 ;;
+            mine)     color=36 ;;
+            review)   color=33 ;;
+            merged)   color=32 ;;
+            declined) color=31 ;;
+            *)        color=2 ;;
         esac
         [[ "$draft" == "draft" ]] && title="[draft] $title"
-        printf -v display '#%-5s %-20.20s \033[%sm%-6s\033[0m \033[35m%s\033[0m%*s %-18.18s %s' \
+        printf -v display '#%-5s %-20.20s \033[%sm%-8s\033[0m \033[35m%s\033[0m%*s %-18.18s %s' \
             "$id" "${repo##*/}" "$color" "$role" "$mark" "$pad" "" "$author" "$title"
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-            "$repo" "$id" "$role" "$url" "$updated" "$src" "$dst" "$display"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$repo" "$id" "$role" "$url" "$updated" "$src" "$dst" "$display" "$title"
     done
 }
 
-# Load the sources and `git fetch` at the same time, then print the rows. A
-# source that fails gives an error row, so that the list does not look empty.
+# The rows of the log, newest first. The role is "log", so that sync, approve
+# and merge skip them. Enter, ctrl-o and the preview still work.
+bb_log_rows() {
+    [[ -f "$LOG_FILE" ]] || return 0
+    local time action result repo id url src dst title note word color display
+    awk '{ line[NR] = $0 } END { for (i = NR; i > 0 && i > NR - 300; i--) print line[i] }' "$LOG_FILE" |
+    while IFS=$'\t' read -r time action result repo id url src dst title note; do
+        case "$action:$result" in
+            approve:ok) word="approved" color=32 ;;
+            merge:ok)   word="merged" color=32 ;;
+            sync:ok)    word="synced" color=32 ;;
+            review:*)   word="reviewed" color=2 ;;
+            *:conflict) word="$action conflict" color=33 ;;
+            *)          word="$action failed" color=31 ;;
+        esac
+        [[ "$note" == "-" ]] && note=""
+        printf -v display '%s  #%-5s %-20.20s \033[%sm%-15s\033[0m %s\033[2m%s\033[0m' \
+            "$time" "$id" "${repo##*/}" "$color" "$word" "$title" "${note:+  ($note)}"
+        printf '%s\t%s\tlog\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$repo" "$id" "$url" "$time" "$src" "$dst" "$display" "$title"
+    done
+}
+
+# The open list: load the sources and `git fetch` at the same time, then print
+# the rows. A source that fails gives an error row, so that the list does not
+# look empty.
 bb_list() {
     local tmp rc=0
     tmp=$(mktemp -d)
@@ -220,41 +313,88 @@ bb_list() {
     { twg_json bitbucket inbox --workspace "$BB_PRS_WS" --role author -n 50 >"$tmp/a" \
         || { : >"$tmp/a"; echo "your open PRs" >>"$tmp/err"; }; } &
     wait
-    if [[ -s "$tmp/err" ]]; then
-        while IFS= read -r what; do
-            printf '\t\t\t\t\t\t\t\033[31m! could not load the %s\033[0m\n' "$what"
-        done <"$tmp/err"
-    fi
+    error_rows "$tmp/err"
     bb_rows "$tmp/q" "$tmp/r" "$tmp/a" "${BB_PRS_REPO:-}" | bb_format || rc=$?
     rm -rf "$tmp"
     return "$rc"
 }
 
-# --cached: the list of the last refresh.
+# The closed list. `--state` takes one state, so merged and declined PRs are
+# two queries.
+bb_list_closed() {
+    local tmp rc=0
+    tmp=$(mktemp -d)
+    : >"$tmp/m"
+    : >"$tmp/d"
+    : >"$tmp/r"
+    if [[ -n "${BB_PRS_REPO:-}" ]]; then
+        { twg_json bitbucket pull-requests query --repo "$BB_PRS_REPO" --state MERGED -n 25 >"$tmp/m" \
+            || { : >"$tmp/m"; echo "merged PRs of $BB_PRS_REPO" >>"$tmp/err"; }; } &
+        { twg_json bitbucket pull-requests query --repo "$BB_PRS_REPO" --state DECLINED -n 15 >"$tmp/d" \
+            || { : >"$tmp/d"; echo "declined PRs of $BB_PRS_REPO" >>"$tmp/err"; }; } &
+    fi
+    { twg_json bitbucket inbox --workspace "$BB_PRS_WS" --role author --state MERGED -n 15 >"$tmp/a" \
+        || { : >"$tmp/a"; echo "your merged PRs" >>"$tmp/err"; }; } &
+    wait
+    error_rows "$tmp/err"
+    jq -s 'add // []' "$tmp/m" "$tmp/d" >"$tmp/q"
+    bb_rows "$tmp/q" "$tmp/r" "$tmp/a" "${BB_PRS_REPO:-}" closed | bb_format || rc=$?
+    rm -rf "$tmp"
+    return "$rc"
+}
+
+error_rows() { # file with one failed source per line
+    [[ -s "$1" ]] || return 0
+    local what
+    while IFS= read -r what; do
+        printf '\t\t\t\t\t\t\t\033[31m! could not load the %s\033[0m\t\n' "$what"
+    done <"$1"
+}
+
+# --cached: the rows of the current list, from the cache or the log.
 bb_cached() {
-    cat "${BB_PRS_LIST:-/dev/null}" 2>/dev/null || true
+    local mode
+    mode=$(get_mode)
+    if [[ "$mode" == log ]]; then
+        bb_log_rows
+    else
+        cat "$(list_file "$mode")" 2>/dev/null || true
+    fi
 }
 
-# Remove a PR from the cached list, for example after a merge.
+# Remove a PR from the cached open list, for example after a merge.
 bb_cache_drop() {
-    [[ -n "${BB_PRS_LIST:-}" && -f "$BB_PRS_LIST" ]] || return 0
-    awk -F'\t' -v r="$1" -v i="$2" '!($1 == r && $2 == i)' "$BB_PRS_LIST" >"$BB_PRS_LIST.$$" \
-        && mv "$BB_PRS_LIST.$$" "$BB_PRS_LIST"
+    local list
+    list=$(list_file open)
+    [[ -f "$list" ]] || return 0
+    awk -F'\t' -v r="$1" -v i="$2" '!($1 == r && $2 == i)' "$list" >"$list.$$" \
+        && mv "$list.$$" "$list"
 }
 
-# reload-sync goes last. With --track, fzf is blocked until the reload is
-# complete, and it drops the actions and posts that come in that time.
+# Show the current list. reload-sync goes last: with --track, fzf is blocked
+# until the reload is complete, and it drops the actions and posts that come
+# in that time.
 bb_show_cached() {
-    fzf_post "change-prompt[$BB_PRS_PROMPT> ]+reload-sync[$BB_PRS_SELF --cached]"
+    local mode loading=""
+    mode=$(get_mode)
+    [[ "$mode" == log || ! -d "$(list_file "$mode").lock" ]] || loading=1
+    fzf_post "change-prompt[$(mode_prompt "$mode" "$loading")]+reload-sync[$BB_PRS_SELF --cached]"
 }
 
-# --refresh: runs in the background. One refresh at a time per list. If
-# another refresh runs, for example from a popup that you closed, wait for it
-# and show its list. A lock that is older than 2 minutes is from a refresh
-# that stopped, so remove it.
+# --refresh: runs in the background, for the current list. One refresh at a
+# time per list. If another refresh runs, for example from a popup that you
+# closed, wait for it and show its list. A lock that is older than 2 minutes
+# is from a refresh that stopped, so remove it.
 bb_refresh() {
-    local lock="$BB_PRS_LIST.lock" waited=0
-    fzf_post "change-prompt[$BB_PRS_PROMPT · loading> ]"
+    local mode list lock waited=0
+    mode=$(get_mode)
+    if [[ "$mode" == log ]]; then
+        bb_show_cached
+        return 0
+    fi
+    list=$(list_file "$mode")
+    lock="$list.lock"
+    fzf_post "change-prompt[$(mode_prompt "$mode" loading)]"
     if ! mkdir "$lock" 2>/dev/null; then
         if [[ -z "$(find "$lock" -maxdepth 0 -mmin +2 2>/dev/null)" ]]; then
             while [[ -d "$lock" && "$waited" -lt 120 ]]; do
@@ -272,10 +412,10 @@ bb_refresh() {
     # shellcheck disable=SC2064
     trap "rm -rf $(printf '%q' "$lock")" EXIT
 
-    if bb_list >"$BB_PRS_LIST.$$"; then
-        mv "$BB_PRS_LIST.$$" "$BB_PRS_LIST"
+    if { if [[ "$mode" == closed ]]; then bb_list_closed; else bb_list; fi; } >"$list.$$"; then
+        mv "$list.$$" "$list"
     else
-        rm -f "$BB_PRS_LIST.$$"
+        rm -f "$list.$$"
     fi
     # The lock guards the list only. Two prefetches at the same time do no harm.
     rm -rf "$lock"
@@ -283,7 +423,38 @@ bb_refresh() {
     bb_show_cached
 
     find "$CACHE_DIR/preview" -type f -mmin +1440 -delete 2>/dev/null || true
-    bb_prefetch
+    bb_prefetch "$list"
+}
+
+# --next-mode: change the list. fzf runs this with `transform` and does the
+# actions that it prints.
+bb_next_mode() {
+    local mode
+    case "$(get_mode)" in
+        open)   mode=closed ;;
+        closed) mode=log ;;
+        *)      mode=open ;;
+    esac
+    printf '%s\n' "$mode" >"$BB_PRS_RUN/mode"
+    if [[ "$mode" == log ]]; then
+        printf 'clear-selection+change-prompt[%s]+reload-sync[%s --cached]' \
+            "$(mode_prompt log)" "$BB_PRS_SELF"
+    else
+        printf 'clear-selection+change-prompt[%s]+execute-silent[nohup %s --refresh </dev/null >/dev/null 2>&1 &]+reload-sync[%s --cached]' \
+            "$(mode_prompt "$mode" loading)" "$BB_PRS_SELF" "$BB_PRS_SELF"
+    fi
+}
+
+# --next-view: change the preview, with `transform` like --next-mode.
+bb_next_view() {
+    local view
+    case "$(get_view)" in
+        details)  view=activity ;;
+        activity) view=commits ;;
+        *)        view=details ;;
+    esac
+    printf '%s\n' "$view" >"$BB_PRS_RUN/view"
+    printf 'change-preview-label[ %s · ctrl-v ]+refresh-preview' "$view"
 }
 
 # Read the rows of a list file. Skip the error rows, which have no id.
@@ -291,11 +462,11 @@ selected_rows() {
     awk -F'\t' '$2 != ""' "$1"
 }
 
-preview_file() { # repo id updated
-    printf '%s/preview/%s-%s-%s.txt' "$CACHE_DIR" "${1//\//_}" "$2" "${3//[^0-9A-Za-z]/}"
+preview_file() { # repo id updated view
+    printf '%s/preview/%s-%s-%s-%s.txt' "$CACHE_DIR" "${1//\//_}" "$2" "${3//[^0-9A-Za-z]/}" "$4"
 }
 
-preview_fresh() { # repo id updated
+preview_fresh() { # repo id updated view
     local f
     f=$(preview_file "$@")
     [[ -s "$f" && -z "$(find "$f" -mmin +"$PREVIEW_TTL_MIN" 2>/dev/null)" ]]
@@ -306,18 +477,19 @@ preview_drop() { # repo id
     rm -f "$CACHE_DIR/preview/${1//\//_}-$2-"*.txt
 }
 
-# Print the preview of a PR: the state, the merge checks, the changed files,
-# and the description.
-preview_build() { # repo id
+# The details: the state, the merge checks, the changed files, and the
+# description.
+preview_details() { # repo id
     local pr checks
     pr=$(twg_json bitbucket pull-requests get "$2" --repo "$1") || return 1
     checks=$(twg_json bitbucket pull-requests mergeability "$2" --repo "$1" 2>/dev/null) || checks='[]'
     jq -r '
         "#\(.id)  \(.title)",
-        "\(.author.display_name)  \(.source.branch.name) -> \(.destination.branch.name)",
+        "\(.author.display_name)  \(.source.branch.name) -> \(.destination.branch.name)  \(.state)",
         "Updated \(.updated_on[0:16] | sub("T"; " "))  Comments \(.comment_count)  Tasks \(.task_count)",
         "Approved by: \([.participants[]? | select(.approved) | .user.display_name] | if length == 0 then "nobody" else join(", ") end)",
         "Reviewers:   \([.reviewers[]?.display_name] | if length == 0 then "none" else join(", ") end)",
+        (if .closed_by then "Closed by:   \(.closed_by.display_name)" else empty end),
         (if .draft then "DRAFT" else empty end)' <<<"$pr"
     jq -r '
         ([.[] | select(.type == "git_mergeability_check") | .reason // .status][0] // "unknown") as $git
@@ -337,14 +509,54 @@ preview_build() { # repo id
     jq -r '.description // ""' <<<"$pr"
 }
 
+# The activity: one line per event, oldest first. The oldest update is the
+# creation of the PR.
+preview_activity() { # repo id
+    local events
+    events=$(twg_json bitbucket pull-requests activity "$2" --repo "$1" -n 100) || return 1
+    jq -r '
+        [ .[] | del(.pull_request) | to_entries[0] | .key as $k | .value as $v
+          | { t: ($v.date // $v.created_on // $v.updated_on // ""),
+              who: ($v.author.display_name // $v.user.display_name // "?"),
+              what: (
+                if $k == "approval" then "approved"
+                elif $k == "changes_requested" then "requested changes"
+                elif $k == "comment" then
+                    "commented"
+                    + (if $v.inline.path then " on \($v.inline.path):\($v.inline.to // $v.inline.from // "")" else "" end)
+                    + ": " + ($v.content.raw // "" | split("\n")[0] | .[0:100])
+                elif $k == "update" then
+                    if ($v.changes // {} | has("status")) then ($v.state // "" | ascii_downcase)
+                    elif ($v.changes // {} | length) > 0 then "changed " + ($v.changes | keys | join(", "))
+                    else "updated" end
+                else $k end) } ]
+        | sort_by(.t)
+        | if length > 0 and .[0].what == "updated" then .[0].what = "opened" else . end
+        | .[]
+        | [(.t[0:16] | sub("T"; " ")), (.who | .[0:20]), (.what | gsub("\t"; " "))]
+        | @tsv' <<<"$events" | column -t -s $'\t'
+}
+
+# The commits of the PR, newest first.
+preview_commits() { # repo id
+    local commits
+    commits=$(twg_json bitbucket pull-requests commits "$2" --repo "$1" -n 100) || return 1
+    jq -r '"\(length) commit(s), newest first", ""' <<<"$commits"
+    jq -r '.[]
+        | [.hash[0:8], (.date[0:16] | sub("T"; " ")),
+           (.author.user.display_name // (.author.raw // "?" | sub(" <.*"; "")) | .[0:20]),
+           (.message // "" | split("\n")[0] | gsub("\t"; " "))]
+        | @tsv' <<<"$commits" | column -t -s $'\t'
+}
+
 # Build a preview into the cache. Write it to a temporary file first, so that
 # a reader never sees half a preview.
-preview_save() { # repo id updated
+preview_save() { # repo id updated view
     local f
     f=$(preview_file "$@")
     mkdir -p "${f%/*}"
-    if preview_build "$1" "$2" >"$f.$$"; then
-        preview_drop "$1" "$2"
+    if "preview_$4" "$1" "$2" >"$f.$$"; then
+        rm -f "$CACHE_DIR/preview/${1//\//_}-$2-"*"-$4.txt"
         mv "$f.$$" "$f"
     else
         rm -f "$f.$$"
@@ -352,22 +564,24 @@ preview_save() { # repo id updated
     fi
 }
 
-# Make the previews that are not in the cache, 4 at a time.
-bb_prefetch() {
+# Make the details previews that are not in the cache, 4 at a time.
+bb_prefetch() { # list file
     local repo id updated n=0
     while IFS=$'\t' read -r -u 3 repo id _ _ updated _; do
-        preview_fresh "$repo" "$id" "$updated" && continue
-        preview_save "$repo" "$id" "$updated" >/dev/null 2>&1 &
+        preview_fresh "$repo" "$id" "$updated" details && continue
+        preview_save "$repo" "$id" "$updated" details >/dev/null 2>&1 &
         (( ++n % 4 )) || wait
-    done 3< <(selected_rows "$BB_PRS_LIST")
+    done 3< <(selected_rows "$1")
     wait
 }
 
-# --preview <repo> <id> <updated> <src> <dst>
+# --preview <repo> <id> <role> <updated> <src> <dst>
 bb_preview() {
-    local repo="$1" id="$2" updated="$3" src="$4" dst="$5" behind
+    local repo="$1" id="$2" role="$3" updated="$4" src="$5" dst="$6" view behind
     [[ -n "$id" ]] || return 0
-    if [[ -n "${BB_PRS_DIR:-}" && "$repo" == "${BB_PRS_REPO:-}" ]] \
+    view=$(get_view)
+    if [[ "$view" == details && -n "${BB_PRS_DIR:-}" && "$repo" == "${BB_PRS_REPO:-}" ]] \
+        && actionable "$role" \
         && behind=$(git -C "$BB_PRS_DIR" rev-list --count \
             "refs/remotes/origin/$src..refs/remotes/origin/$dst" 2>/dev/null); then
         if [[ "$behind" -gt 0 ]]; then
@@ -376,20 +590,23 @@ bb_preview() {
             printf 'Up to date with %s.\n' "$dst"
         fi
     fi
-    preview_fresh "$repo" "$id" "$updated" || preview_save "$repo" "$id" "$updated" \
-        || { echo "Could not load PR $id of $repo."; return 0; }
-    cat "$(preview_file "$repo" "$id" "$updated")"
+    preview_fresh "$repo" "$id" "$updated" "$view" || preview_save "$repo" "$id" "$updated" "$view" \
+        || { echo "Could not load the $view of PR $id of $repo."; return 0; }
+    cat "$(preview_file "$repo" "$id" "$updated" "$view")"
 }
 
-# --review <repo> <id> <url>
+# --review <file>: the row under the cursor.
 bb_review() {
-    [[ -n "${3:-}" ]] || return 0
-    if ! tuicr pr "$3" <"$TTY"; then
-        echo "tuicr failed for $3"
+    local repo id role url src dst title
+    IFS=$'\t' read -r repo id role url _ src dst _ title <"$1" || true
+    [[ -n "${url:-}" ]] || return 0
+    bb_log review opened "$repo" "$id" "$url" "$src" "$dst" "$title"
+    if ! tuicr pr "$url" <"$TTY"; then
+        echo "tuicr failed for $url"
         press_key
     fi
     # The review can add comments or an approval.
-    preview_drop "$1" "$2"
+    preview_drop "$repo" "$id"
 }
 
 print_rows() {
@@ -398,7 +615,9 @@ print_rows() {
     done
 }
 
-approve_one() {
+# Approve one row. Return 1 when the row was not approved. The arguments are
+# the fields of the row.
+approve_one() { # repo id role url updated src dst display title
     local repo="$1" id="$2" role="$3"
     if [[ "$role" == "mine" ]]; then
         printf '  %s#%s: your own PR, no approval\n' "${repo##*/}" "$id"
@@ -406,29 +625,47 @@ approve_one() {
     fi
     if twg_do bitbucket pull-requests approve "$id" --repo "$repo"; then
         printf '  %s#%s: approved\n' "${repo##*/}" "$id"
+        bb_log approve ok "$repo" "$id" "$4" "$6" "$7" "${9:-}"
         preview_drop "$repo" "$id"
     else
         printf '  %s#%s: approval FAILED\n' "${repo##*/}" "$id"
+        bb_log approve failed "$repo" "$id" "$4" "$6" "$7" "${9:-}" "$TWG_ERR"
         return 1
     fi
+}
+
+# Print the open PRs of a {+f} file, and a line for each row that is skipped.
+open_rows() { # file
+    local row role
+    while IFS= read -r row; do
+        role=$(cut -f3 <<<"$row")
+        if actionable "$role"; then
+            printf '%s\n' "$row"
+        else
+            printf '  #%s is not an open PR (%s), skipped\n' "$(cut -f2 <<<"$row")" "$role" >&2
+        fi
+    done < <(selected_rows "$1")
 }
 
 # --approve <file>
 bb_approve() {
     # Read the rows on fd 3, so that a command in the loop cannot read them.
-    local repo id role
-    while IFS=$'\t' read -r -u 3 repo id role _; do
-        approve_one "$repo" "$id" "$role" || true
-    done 3< <(selected_rows "$1")
+    local repo id role url updated src dst display title
+    while IFS=$'\t' read -r -u 3 repo id role url updated src dst display title; do
+        approve_one "$repo" "$id" "$role" "$url" "$updated" "$src" "$dst" "$display" "$title" || true
+    done 3< <(open_rows "$1")
     press_key
 }
 
 # --merge <file>: approve, then merge, one PR at a time. A failure does not
 # stop the other PRs.
 bb_merge() {
-    local rows repo id role answer failed=0
-    rows=$(selected_rows "$1")
-    [[ -n "$rows" ]] || return 0
+    local rows repo id role url updated src dst display title answer failed=0
+    rows=$(open_rows "$1")
+    if [[ -z "$rows" ]]; then
+        press_key
+        return 0
+    fi
     echo "Approve and merge these PRs (merge commit, close the source branch)?"
     print_rows <<<"$rows"
     read -r -p "[y/N] " answer <"$TTY" || answer=""
@@ -437,17 +674,19 @@ bb_merge() {
         press_key
         return 0
     fi
-    while IFS=$'\t' read -r -u 3 repo id role _; do
+    while IFS=$'\t' read -r -u 3 repo id role url updated src dst display title; do
         # A failed approval does not skip the merge. The PR can already have
         # enough approvals, and the merge reports the real block.
-        approve_one "$repo" "$id" "$role" || true
+        approve_one "$repo" "$id" "$role" "$url" "$updated" "$src" "$dst" "$display" "$title" || true
         if twg_do bitbucket pull-requests merge --pull-request "$id" --repo "$repo" \
             --merge-strategy merge_commit --close-source-branch --wait; then
             printf '  %s#%s: merged\n' "${repo##*/}" "$id"
+            bb_log merge ok "$repo" "$id" "$url" "$src" "$dst" "$title"
             bb_cache_drop "$repo" "$id"
             preview_drop "$repo" "$id"
         else
             printf '  %s#%s: merge FAILED\n' "${repo##*/}" "$id"
+            bb_log merge failed "$repo" "$id" "$url" "$src" "$dst" "$title" "$TWG_ERR"
             failed=$((failed + 1))
         fi
     done 3<<<"$rows"
@@ -488,21 +727,24 @@ sync_one() { # dir src dst
 
 # --sync <file>: show how far behind each PR is, ask, then sync each PR.
 bb_sync() {
-    local rows repo id src dst behind todo="" answer rc
+    local rows repo id url src dst title behind todo="" answer rc
     if [[ -z "${BB_PRS_DIR:-}" ]]; then
         echo "Sync needs a checkout. Open bb-prs in the repo of the PR."
         press_key
         return 0
     fi
-    rows=$(selected_rows "$1")
-    [[ -n "$rows" ]] || return 0
+    rows=$(open_rows "$1")
+    if [[ -z "$rows" ]]; then
+        press_key
+        return 0
+    fi
     echo "Fetching origin ..."
     if ! git -C "$BB_PRS_DIR" fetch -q origin; then
         echo "git fetch failed."
         press_key
         return 0
     fi
-    while IFS=$'\t' read -r -u 3 repo id _ _ _ src dst _; do
+    while IFS=$'\t' read -r -u 3 repo id _ url _ src dst _ title; do
         if [[ "$repo" != "$BB_PRS_REPO" ]]; then
             printf '  %s#%s: not in %s, skipped\n' "${repo##*/}" "$id" "$BB_PRS_REPO"
             continue
@@ -517,7 +759,7 @@ bb_sync() {
             continue
         fi
         printf '  #%s: %s is %s commit(s) behind %s\n' "$id" "$src" "$behind" "$dst"
-        todo+="$repo"$'\t'"$id"$'\t'"$src"$'\t'"$dst"$'\n'
+        todo+="$repo"$'\t'"$id"$'\t'"$url"$'\t'"$src"$'\t'"$dst"$'\t'"$title"$'\n'
     done 3<<<"$rows"
     if [[ -z "$todo" ]]; then
         press_key
@@ -532,15 +774,18 @@ bb_sync() {
         press_key
         return 0
     fi
-    while IFS=$'\t' read -r -u 3 repo id src dst; do
+    while IFS=$'\t' read -r -u 3 repo id url src dst title; do
         [[ -n "$id" ]] || continue
         rc=0
         sync_one "$BB_PRS_DIR" "$src" "$dst" || rc=$?
         case "$rc" in
             0) printf '  #%s: synced\n' "$id"
+               bb_log sync ok "$repo" "$id" "$url" "$src" "$dst" "$title"
                preview_drop "$repo" "$id" ;;
-            2) printf '  #%s: conflicts, nothing changed. Run: git pr-conflicts %s\n' "$id" "$id" ;;
-            *) printf '  #%s: sync FAILED\n' "$id" ;;
+            2) printf '  #%s: conflicts, nothing changed. Run: git pr-conflicts %s\n' "$id" "$id"
+               bb_log sync conflict "$repo" "$id" "$url" "$src" "$dst" "$title" ;;
+            *) printf '  #%s: sync FAILED\n' "$id"
+               bb_log sync failed "$repo" "$id" "$url" "$src" "$dst" "$title" ;;
         esac
     done 3<<<"$todo"
     press_key
@@ -572,19 +817,21 @@ bb_pick() {
 
     BB_PRS_PROMPT=${BB_PRS_REPO:-$BB_PRS_WS}
     mkdir -p "$CACHE_DIR"
-    BB_PRS_LIST="$CACHE_DIR/list-${BB_PRS_PROMPT//\//_}.tsv"
+    BB_PRS_LIST_BASE="$CACHE_DIR/list-${BB_PRS_PROMPT//\//_}"
 
     # Call the script through bash, so that the bindings also work from the
     # chezmoi source, where the file has no execute bit.
     BB_PRS_SELF="bash $(printf '%q' "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")")"
 
-    # The refresh talks to fzf through this socket. mktemp -d makes a
-    # directory that only you can read.
-    local sock_dir
-    sock_dir=$(mktemp -d)
-    BB_PRS_SOCK="$sock_dir/fzf.sock"
-    export BB_PRS_REPO BB_PRS_WS BB_PRS_DIR BB_PRS_TTY BB_PRS_PROMPT BB_PRS_LIST \
-        BB_PRS_SELF BB_PRS_SOCK
+    # The run directory holds the state of this session and the socket that
+    # the refresh uses to talk to fzf. mktemp -d makes a directory that only
+    # you can read.
+    BB_PRS_RUN=$(mktemp -d)
+    BB_PRS_SOCK="$BB_PRS_RUN/fzf.sock"
+    echo open >"$BB_PRS_RUN/mode"
+    echo details >"$BB_PRS_RUN/view"
+    export BB_PRS_REPO BB_PRS_WS BB_PRS_DIR BB_PRS_TTY BB_PRS_PROMPT BB_PRS_LIST_BASE \
+        BB_PRS_SELF BB_PRS_RUN BB_PRS_SOCK
 
     # nohup: the refresh must finish and write the cache also when you close
     # the popup first. Start it before reload-sync in each chain: fzf drops an
@@ -596,18 +843,21 @@ bb_pick() {
 
     fzf --listen="$BB_PRS_SOCK" --ansi --multi --track --id-nth 1,2 \
         --delimiter '\t' --with-nth 8 \
-        --prompt "$BB_PRS_PROMPT · loading> " \
-        --header 'enter review · ctrl-s sync · ctrl-a approve · ctrl-y approve+merge · ctrl-o browser · ctrl-r reload · tab select' \
-        --preview "$self --preview {1} {2} {5} {6} {7}" --preview-window 'right,50%,wrap' \
+        --prompt "$(mode_prompt open loading)" \
+        --header $'enter review · ctrl-s sync · ctrl-a approve · ctrl-y approve+merge · ctrl-o browser\nctrl-t open/closed/log · ctrl-v details/activity/commits · ctrl-r reload · tab select' \
+        --preview "$self --preview {1} {2} {3} {5} {6} {7}" --preview-window 'right,50%,wrap' \
+        --preview-label ' details · ctrl-v ' \
         --bind "start:$refresh+$show" \
         --bind "ctrl-r:$refresh" \
-        --bind "enter:execute($self --review {1} {2} {4})+$refresh" \
+        --bind "ctrl-t:transform($self --next-mode)" \
+        --bind "ctrl-v:transform($self --next-view)" \
+        --bind "enter:execute($self --review {f})+$refresh" \
         --bind "ctrl-s:execute($self --sync {+f})+$after" \
         --bind "ctrl-a:execute($self --approve {+f})+$after" \
         --bind "ctrl-y:execute($self --merge {+f})+$after" \
         --bind 'ctrl-o:execute-silent(open {4})' \
         </dev/null || true
-    rm -rf "$sock_dir"
+    rm -rf "$BB_PRS_RUN"
 }
 
 main() {
@@ -615,8 +865,10 @@ main() {
         "")          bb_pick ;;
         --cached)    bb_cached ;;
         --refresh)   bb_refresh ;;
-        --preview)   bb_preview "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${6:-}" ;;
-        --review)    bb_review "${2:-}" "${3:-}" "${4:-}" ;;
+        --next-mode) bb_next_mode ;;
+        --next-view) bb_next_view ;;
+        --preview)   bb_preview "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${6:-}" "${7:-}" ;;
+        --review)    bb_review "$2" ;;
         --approve)   bb_approve "$2" ;;
         --merge)     bb_merge "$2" ;;
         --sync)      bb_sync "$2" ;;

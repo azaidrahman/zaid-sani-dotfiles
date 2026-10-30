@@ -17,7 +17,7 @@ check() { # label expected actual
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-export BB_PRS_TTY="$tmp/tty" XDG_CACHE_HOME="$tmp/cache"
+export BB_PRS_TTY="$tmp/tty" XDG_CACHE_HOME="$tmp/cache" XDG_STATE_HOME="$tmp/state"
 # Your git config can sign commits and run hooks. The test must not use it.
 printf '[user]\n\tname = t\n\temail = t@example.com\n' >"$tmp/gitconfig"
 export GIT_CONFIG_GLOBAL="$tmp/gitconfig" GIT_CONFIG_NOSYSTEM=1
@@ -58,13 +58,19 @@ check "rows: dedupe, roles, order" \
     "$(bb_rows "$tmp/q" "$tmp/r" "$tmp/a" ws/cur | awk -F'\t' '{print $1, $2, $3}' | paste -sd'|' -)"
 : >"$tmp/empty"
 check "rows: all sources empty" "" "$(bb_rows "$tmp/empty" "$tmp/empty" "$tmp/empty" ws/cur)"
+# The closed list: the role is the state, and the newest PR goes first.
+printf '[{"id":1,"state":"MERGED","updated_on":"2026-01-01","links":{"html":{"href":"https://bitbucket.org/ws/cur/pull-requests/1"}}},{"id":2,"state":"DECLINED","updated_on":"2026-02-01","links":{"html":{"href":"https://bitbucket.org/ws/cur/pull-requests/2"}}}]' >"$tmp/closed"
+check "rows: closed list" "2 declined|1 merged" \
+    "$(bb_rows "$tmp/closed" "$tmp/empty" "$tmp/empty" ws/cur closed | awk -F'\t' '{print $2, $3}' | paste -sd'|' -)"
 
 # --- bb_merge -------------------------------------------------------------------
-# Your own PR gets no approval. Error rows are skipped. "n" merges nothing.
+# Your own PR gets no approval. Error rows, closed PRs and log rows are
+# skipped. "n" merges nothing. Each action goes into the log.
 mkdir "$tmp/bin"
 printf '#!/bin/sh\necho "$*" >>"%s/twg.log"\n' "$tmp" >"$tmp/bin/twg"
 chmod +x "$tmp/bin/twg"
-printf 'ws/cur\t11\tmine\tu\td\nws/cur\t12\treview\tu\td\n\t\t\t\t! could not load\n' >"$tmp/sel"
+printf '%s\n' $'ws/cur\t11\tmine\tu\td' $'ws/cur\t12\treview\tu\td' $'ws/cur\t13\tmerged\tu\td' \
+    $'ws/cur\t14\tlog\tu\td' $'\t\t\t\t! could not load' >"$tmp/sel"
 merge_log() { # answer
     : >"$tmp/twg.log"
     printf '%s\n' "$1" >"$tmp/tty"
@@ -75,6 +81,8 @@ flags="--merge-strategy merge_commit --close-source-branch --wait"
 check "merge: approve others, merge all" \
     "bitbucket pull-requests merge --pull-request 11 --repo ws/cur $flags|bitbucket pull-requests approve 12 --repo ws/cur|bitbucket pull-requests merge --pull-request 12 --repo ws/cur $flags" \
     "$(merge_log y)"
+check "merge: actions in the log" "merge ok 11|approve ok 12|merge ok 12" \
+    "$(awk -F'\t' '{print $2, $3, $5}' "$tmp/state/bb-prs/actions.tsv" | paste -sd'|' -)"
 check "merge: n merges nothing" "" "$(merge_log n)"
 
 # --- sync_one -------------------------------------------------------------------
