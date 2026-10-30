@@ -41,7 +41,7 @@ EOF
 
 # --- bb_rows --------------------------------------------------------------------
 # PR 11 is in the repo query and the author inbox. PR 12 is in the repo query
-# and the reviewer inbox. The inbox role must win, and the current repo goes first.
+# and the reviewer inbox. The inbox role must win.
 pr() { # id author-uuid
     printf '{"id":%s,"title":"t%s","draft":false,"author":{"uuid":"%s","display_name":"a"},"links":{"html":{"href":"https://bitbucket.org/ws/cur/pull-requests/%s"}}}' \
         "$1" "$1" "$2" "$1"
@@ -53,15 +53,31 @@ item() { # repo id
 printf '[%s,%s,%s]' "$(pr 10 '{o}')" "$(pr 11 '{me}')" "$(pr 12 '{o}')" >"$tmp/q"
 printf '{"currentUser":{"uuid":"{me}"},"items":[%s,%s]}' "$(item ws/cur 12)" "$(item ws/other 5)" >"$tmp/r"
 printf '{"currentUser":{"uuid":"{me}"},"items":[%s,%s]}' "$(item ws/cur 11)" "$(item ws/zzz 7)" >"$tmp/a"
-check "rows: dedupe, roles, order" \
-    "ws/cur 12 review|ws/cur 11 mine|ws/cur 10 open|ws/other 5 review|ws/zzz 7 mine" \
+check "rows: dedupe, roles" \
+    "ws/cur 10 open|ws/cur 11 mine|ws/cur 12 review|ws/other 5 review|ws/zzz 7 mine" \
     "$(bb_rows "$tmp/q" "$tmp/r" "$tmp/a" ws/cur | awk -F'\t' '{print $1, $2, $3}' | paste -sd'|' -)"
 : >"$tmp/empty"
 check "rows: all sources empty" "" "$(bb_rows "$tmp/empty" "$tmp/empty" "$tmp/empty" ws/cur)"
-# The closed list: the role is the state, and the newest PR goes first.
-printf '[{"id":1,"state":"MERGED","updated_on":"2026-01-01","links":{"html":{"href":"https://bitbucket.org/ws/cur/pull-requests/1"}}},{"id":2,"state":"DECLINED","updated_on":"2026-02-01","links":{"html":{"href":"https://bitbucket.org/ws/cur/pull-requests/2"}}}]' >"$tmp/closed"
-check "rows: closed list" "2 declined|1 merged" \
+# The closed list: the role is the state.
+printf '[{"id":1,"state":"MERGED","updated_on":"2026-01-01T00:00:00","links":{"html":{"href":"https://bitbucket.org/ws/cur/pull-requests/1"}}},{"id":2,"state":"DECLINED","updated_on":"2026-02-01T00:00:00","links":{"html":{"href":"https://bitbucket.org/ws/cur/pull-requests/2"}}}]' >"$tmp/closed"
+check "rows: closed list" "1 merged|2 declined" \
     "$(bb_rows "$tmp/closed" "$tmp/empty" "$tmp/empty" ws/cur closed | awk -F'\t' '{print $2, $3}' | paste -sd'|' -)"
+
+# --- bb_sort --------------------------------------------------------------------
+# Field 11 is the time sent and field 12 the time updated, in epoch seconds.
+data() { # repo id sent updated
+    printf '%s\t%s\topen\tu\td\ts\tm\ta\tt\t-\t%s\t%s\n' "$@"
+}
+{ data ws/b 5 300 1; data ws/a 9 100 3; data ws/cur 2 200 2; data ws/cur 4 400 4; } >"$tmp/data"
+while IFS='|' read -r mode order want; do
+    check "sort: $mode $order" "$want" \
+        "$(BB_PRS_REPO=ws/cur bb_sort "$mode" "$order" <"$tmp/data" | cut -f2 | paste -sd' ' -)"
+done <<'EOF'
+open|oldest|9 2 5 4
+open|newest|4 5 2 9
+open|repo|4 2 9 5
+closed|oldest|4 9 2 5
+EOF
 
 # --- bb_merge -------------------------------------------------------------------
 # Your own PR gets no approval. Error rows, closed PRs and log rows are
@@ -94,14 +110,14 @@ printf '#!/bin/sh\necho "$*" >>"%s/twg.log"\nprintf %s\nexit 1\n' "$tmp" \
 chmod +x "$tmp/bin429/twg"
 export BB_PRS_LIST_BASE="$tmp/cache/list" BB_PRS_WS=ws BB_PRS_PROMPT=ws BB_PRS_SELF=x
 mkdir -p "$tmp/cache"
-printf 'ws/cur\t10\topen\tu\td\ts\tm\tshown\tt\n' >"$tmp/cache/list-open.tsv"
-touch -t 202601010000 "$tmp/cache/list-open.tsv"
+printf 'ws/cur\t10\topen\tu\td\ts\tm\tshown\tt\n' >"$tmp/cache/list-open.v2.tsv"
+touch -t 202601010000 "$tmp/cache/list-open.v2.tsv"
 (PATH="$tmp/bin429:$PATH" bb_refresh >/dev/null 2>&1)
-check "refresh: failure keeps the list" "10" "$(cut -f2 "$tmp/cache/list-open.tsv")"
+check "refresh: failure keeps the list" "10" "$(cut -f2 "$tmp/cache/list-open.v2.tsv")"
 check "refresh: failure tells why" "rate limit|showing the list from" \
-    "$(grep -o -e 'rate limit' -e 'showing the list from' "$tmp/cache/list-open.tsv.err" | sort -u | paste -sd'|' -)"
-rm -f "$tmp/cache/list-open.tsv.err"
-touch "$tmp/cache/list-open.tsv"
+    "$(grep -o -e 'rate limit' -e 'showing the list from' "$tmp/cache/list-open.v2.tsv.err" | sort -u | paste -sd'|' -)"
+rm -f "$tmp/cache/list-open.v2.tsv.err"
+touch "$tmp/cache/list-open.v2.tsv"
 : >"$tmp/twg.log"
 (PATH="$tmp/bin429:$PATH" bb_refresh auto >/dev/null 2>&1)
 check "refresh: auto skips a new list" "0" "$(wc -l <"$tmp/twg.log" | tr -d ' ')"

@@ -26,6 +26,10 @@
 # ctrl-v changes the preview: details, activity (the timeline of the PR) or
 # commits.
 #
+# alt-s changes the order of the open list: oldest sent first (the default),
+# newest sent first, or by repo. "Sent" is the time when the PR was opened.
+# Each row shows its age. The closed list shows the newest closed PR first.
+#
 # Keys:
 #
 #   enter    review the PR in tuicr. In tuicr, use :submit to post your
@@ -37,6 +41,7 @@
 #   ctrl-o   open the PR in the browser
 #   ctrl-t   change the list: open, closed, log
 #   ctrl-v   change the preview: details, activity, commits
+#   alt-s    change the order: oldest sent, newest sent, by repo
 #   ctrl-r   load the list again
 #   tab      select more than one PR
 #
@@ -45,9 +50,11 @@
 #
 # Cache: each list opens at once from the cache of the last run. A refresh in
 # the background loads the new list, and sends it to fzf through the socket of
-# `fzf --listen`. The prompt shows "loading" until then. The refresh also makes
-# the details previews in advance. A preview stays valid for PREVIEW_TTL_MIN
-# minutes, or until the PR changes.
+# `fzf --listen`. The label of the search box shows "loading" until then. The
+# cache holds the data, not the text of the rows: --cached sorts and formats
+# the rows each time, so that the ages are correct and alt-s calls nothing.
+# The refresh also makes the details previews in advance. A preview stays
+# valid for PREVIEW_TTL_MIN minutes, or until the PR changes.
 #
 # Sync: Bitbucket has no API for its "Sync now" button. ctrl-s does the same as
 # the rebase option of that button, in a temporary worktree of the repo of the
@@ -95,6 +102,7 @@ Show the open Bitbucket PRs for you in fzf.
   ctrl-o   open in the browser
   ctrl-t   change the list: open, closed, log of your actions
   ctrl-v   change the preview: details, activity, commits
+  alt-s    change the order: oldest sent, newest sent, by repo
   ctrl-r   load again
   tab      select more than one PR
 
@@ -174,21 +182,37 @@ bb_log() {
     printf '%s\n' "$out" >>"$LOG_FILE"
 }
 
-# The state of one picker session: the list (open, closed, log) and the
-# preview (details, activity, commits). The files are in the run directory
-# of bb_pick.
+# The state of one picker session: the list (open, closed, log), the preview
+# (details, activity, commits) and the order of the open list (oldest,
+# newest, repo). The files are in the run directory of bb_pick.
 get_mode() { cat "${BB_PRS_RUN:-/nonexistent}/mode" 2>/dev/null || echo open; }
 get_view() { cat "${BB_PRS_RUN:-/nonexistent}/view" 2>/dev/null || echo details; }
+get_sort() { cat "${BB_PRS_RUN:-/nonexistent}/sort" 2>/dev/null || echo oldest; }
 
+# v2: the cache holds the data of the rows. A v1 cache held the text of the
+# rows, so a new name makes the script ignore it.
 list_file() { # mode
-    printf '%s-%s.tsv' "${BB_PRS_LIST_BASE:-/nonexistent}" "$1"
+    printf '%s-%s.v2.tsv' "${BB_PRS_LIST_BASE:-/nonexistent}" "$1"
 }
 
-mode_prompt() { # mode [loading]
-    local p="$BB_PRS_PROMPT"
+# The label of the search box: the repo, the list, and "loading" during a
+# refresh.
+mode_label() { # mode [loading]
+    local p=" ⌕ $BB_PRS_PROMPT"
     [[ "$1" == open ]] || p+=" · $1"
     [[ -z "${2:-}" ]] || p+=" · loading"
-    printf '%s> ' "$p"
+    printf '%s ' "$p"
+}
+
+# The label of the list: the order of the rows.
+list_label() { # mode
+    case "$1:$(get_sort)" in
+        open:oldest) echo ' oldest sent first ' ;;
+        open:newest) echo ' newest sent first ' ;;
+        open:*)      echo ' by repo ' ;;
+        closed:*)    echo ' newest closed first ' ;;
+        *)           echo ' your actions ' ;;
+    esac
 }
 
 # Only these rows are open PRs. Sync, approve and merge skip the others.
@@ -205,16 +229,18 @@ bb_remote_repo() {
     printf '%s/%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]%.git}"
 }
 
-# One TSV row per PR: repo, id, role, url, updated, source branch, destination
-# branch, author, title, draft. An empty value becomes "-", because `read`
-# joins two tabs into one.
+# One TSV row of data per PR: repo, id, role, url, updated, source branch,
+# destination branch, author, title, draft, sent (epoch seconds), updated
+# (epoch seconds). An empty value becomes "-", because `read` joins two tabs
+# into one. The list cache holds these rows. bb_sort and bb_format turn them
+# into the rows of the list.
 #
 # For open PRs, the role is "mine", "review" or "open". If two sources have
 # the same PR, the first source in this order wins: author inbox, reviewer
-# inbox, repo query. The PRs of the current repo go first.
+# inbox, repo query.
 #
 # With $5 set (the closed list), the role is the state of the PR, for example
-# "merged", and the newest PR goes first.
+# "merged".
 #
 # $1 repo query JSON, $2 reviewer inbox JSON, $3 author inbox JSON. A file
 # can be empty. $4 is the repo of the current directory.
@@ -222,8 +248,9 @@ bb_rows() {
     jq -rn --slurpfile q "$1" --slurpfile r "$2" --slurpfile a "$3" \
         --arg cur "${4:-}" --arg closed "${5:-}" '
         def role($r): if $closed != "" then (.state // "closed" | ascii_downcase) else $r end;
+        def epoch: if . == null or . == "" then 0 else (.[0:19] + "Z" | fromdateiso8601) end;
         def inbox($r): {repo, id, role: role($r), url: .link, updated: .updatedOn,
-            src: .sourceBranch, dst: .destinationBranch,
+            created: .createdOn, src: .sourceBranch, dst: .destinationBranch,
             author: .author.displayName, title, draft};
         ($r[0].currentUser.uuid // $a[0].currentUser.uuid // "") as $me
         | [ ($a[0].items // [])[] | inbox("mine") ]
@@ -232,30 +259,66 @@ bb_rows() {
               | {repo: (.links.html.href | capture("bitbucket\\.org/(?<r>[^/]+/[^/]+)/").r),
                  id,
                  role: role(if .author.uuid == $me then "mine" else "open" end),
-                 url: .links.html.href, updated: .updated_on,
+                 url: .links.html.href, updated: .updated_on, created: .created_on,
                  src: .source.branch.name, dst: .destination.branch.name,
                  author: .author.display_name, title, draft} ]
-        | unique_by([.repo, .id])
-        | if $closed != "" then sort_by(.updated) | reverse
-          else sort_by([(.repo != $cur), .repo, -.id]) end
-        | .[]
+        | unique_by([.repo, .id])[]
         | [.repo, .id, .role, .url, .updated, .src, .dst, .author, .title,
-           (if .draft then "draft" else null end)]
+           (if .draft then "draft" else null end),
+           (.created | epoch), (.updated | epoch)]
         | map(if . == null or . == "" then "-" else tostring end)
         | @tsv'
 }
 
-# Turn the rows of bb_rows into the rows of the list: repo, id, role, url,
-# updated, source branch, destination branch, display text, title. fzf shows
-# field 8 only. For a PR in the repo of the current directory, "↓N" shows
-# that the PR is N commits behind its destination.
+# Sort the data rows of bb_rows. The closed list: the newest closed PR first.
+# The open list: by the time sent (oldest or newest first), or by repo with
+# the repo of the current directory first and the newest id first.
+bb_sort() { # mode sort
+    local cur="${BB_PRS_REPO:-}"
+    if [[ "$1" == closed ]]; then
+        LC_ALL=C sort -t $'\t' -k12,12nr
+        return
+    fi
+    case "$2" in
+        newest) LC_ALL=C sort -t $'\t' -k11,11nr ;;
+        repo)   awk -F'\t' -v cur="$cur" '{ print ($1 == cur ? 0 : 1) "\t" $0 }' \
+                    | LC_ALL=C sort -t $'\t' -k1,1n -k2,2 -k3,3nr | cut -f2- ;;
+        *)      LC_ALL=C sort -t $'\t' -k11,11n ;;
+    esac
+}
+
+# Print an age like 5m, 3h or 12d.
+age() { # seconds
+    local s=$1
+    if (( s < 3600 )); then
+        printf '%dm' $((s / 60))
+    elif (( s < 86400 )); then
+        printf '%dh' $((s / 3600))
+    else
+        printf '%dd' $((s / 86400))
+    fi
+}
+
+# Turn the data rows into the rows of the list: repo, id, role, url, updated,
+# source branch, destination branch, display text, title. fzf shows field 8
+# only. The display text has the age (since sent, or since closed for a
+# closed PR), a dot in the color of the role, "↓N" when the PR is N commits
+# behind its destination (repo of the current directory only), the author,
+# the repo when it is not the repo of the current directory, the id and the
+# title.
 bb_format() {
-    local repo id role url updated src dst author title draft behind mark pad color display
-    while IFS=$'\t' read -r repo id role url updated src dst author title draft; do
-        behind=""
-        if [[ -n "${BB_PRS_DIR:-}" && "$repo" == "${BB_PRS_REPO:-}" ]] && actionable "$role"; then
-            behind=$(git -C "$BB_PRS_DIR" rev-list --count \
-                "refs/remotes/origin/$src..refs/remotes/origin/$dst" 2>/dev/null || true)
+    local repo id role url updated src dst author title draft sent changed
+    local now behind mark pad color when where display
+    now=$(date +%s)
+    while IFS=$'\t' read -r repo id role url updated src dst author title draft sent changed; do
+        behind="" when=$sent
+        if actionable "$role"; then
+            if [[ -n "${BB_PRS_DIR:-}" && "$repo" == "${BB_PRS_REPO:-}" ]]; then
+                behind=$(git -C "$BB_PRS_DIR" rev-list --count \
+                    "refs/remotes/origin/$src..refs/remotes/origin/$dst" 2>/dev/null || true)
+            fi
+        else
+            when=$changed
         fi
         # Pad by hand: printf pads bytes, and the arrow is 3 bytes.
         mark="" pad=5
@@ -267,11 +330,13 @@ bb_format() {
             review)   color=33 ;;
             merged)   color=32 ;;
             declined) color=31 ;;
-            *)        color=2 ;;
+            *)        color=34 ;;
         esac
-        [[ "$draft" == "draft" ]] && title="[draft] $title"
-        printf -v display '#%-5s %-20.20s \033[%sm%-8s\033[0m \033[35m%s\033[0m%*s %-18.18s %s' \
-            "$id" "${repo##*/}" "$color" "$role" "$mark" "$pad" "" "$author" "$title"
+        where=""
+        [[ "$repo" == "${BB_PRS_REPO:-}" ]] || where=$'\e[36m'"${repo##*/}"$'\e[0m '
+        [[ "$draft" == "draft" ]] && title=$'\e[2m[draft]\e[0m '"$title"
+        printf -v display '\033[2m%4s\033[0m  \033[%sm●\033[0m %-8s \033[35m%s\033[0m%*s \033[2m%-14.14s\033[0m %s\033[1m#%s\033[0m %s' \
+            "$(age $((now - ${when:-0})))" "$color" "$role" "$mark" "$pad" "" "$author" "$where" "$id" "$title"
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "$repo" "$id" "$role" "$url" "$updated" "$src" "$dst" "$display" "$title"
     done
@@ -281,20 +346,22 @@ bb_format() {
 # and merge skip them. Enter, ctrl-o and the preview still work.
 bb_log_rows() {
     [[ -f "$LOG_FILE" ]] || return 0
-    local time action result repo id url src dst title note word color display
+    local time action result repo id url src dst title note word color where display
     awk '{ line[NR] = $0 } END { for (i = NR; i > 0 && i > NR - 300; i--) print line[i] }' "$LOG_FILE" |
     while IFS=$'\t' read -r time action result repo id url src dst title note; do
         case "$action:$result" in
             approve:ok) word="approved" color=32 ;;
             merge:ok)   word="merged" color=32 ;;
             sync:ok)    word="synced" color=32 ;;
-            review:*)   word="reviewed" color=2 ;;
+            review:*)   word="reviewed" color=34 ;;
             *:conflict) word="$action conflict" color=33 ;;
             *)          word="$action failed" color=31 ;;
         esac
         [[ "$note" == "-" ]] && note=""
-        printf -v display '%s  #%-5s %-20.20s \033[%sm%-15s\033[0m %s\033[2m%s\033[0m' \
-            "$time" "$id" "${repo##*/}" "$color" "$word" "$title" "${note:+  ($note)}"
+        where=""
+        [[ "$repo" == "${BB_PRS_REPO:-}" ]] || where=$'\e[36m'"${repo##*/}"$'\e[0m '
+        printf -v display '\033[2m%s\033[0m  \033[%sm●\033[0m %-15s %s\033[1m#%s\033[0m %s\033[2m%s\033[0m' \
+            "${time:5}" "$color" "$word" "$where" "$id" "$title" "${note:+  ($note)}"
         printf '%s\t%s\tlog\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "$repo" "$id" "$url" "$time" "$src" "$dst" "$display" "$title"
     done
@@ -332,7 +399,7 @@ bb_list() {
     load_source "$tmp" a "your open PRs" \
         bitbucket inbox --workspace "$BB_PRS_WS" --role author -n 50 &
     wait
-    bb_rows "$tmp/q" "$tmp/r" "$tmp/a" "${BB_PRS_REPO:-}" | bb_format || rc=$?
+    bb_rows "$tmp/q" "$tmp/r" "$tmp/a" "${BB_PRS_REPO:-}" || rc=$?
     if [[ -s "$tmp/err" ]]; then
         error_rows "$tmp/err"
         rc=3
@@ -359,7 +426,7 @@ bb_list_closed() {
         bitbucket inbox --workspace "$BB_PRS_WS" --role author --state MERGED -n 15 &
     wait
     jq -s 'add // []' "$tmp/m" "$tmp/d" >"$tmp/q"
-    bb_rows "$tmp/q" "$tmp/r" "$tmp/a" "${BB_PRS_REPO:-}" closed | bb_format || rc=$?
+    bb_rows "$tmp/q" "$tmp/r" "$tmp/a" "${BB_PRS_REPO:-}" closed || rc=$?
     if [[ -s "$tmp/err" ]]; then
         error_rows "$tmp/err"
         rc=3
@@ -388,7 +455,8 @@ bb_cached() {
     fi
     list=$(list_file "$mode")
     cat "$list.err" 2>/dev/null || true
-    selected_rows "$list" 2>/dev/null || true
+    [[ -f "$list" ]] || return 0
+    selected_rows "$list" | bb_sort "$mode" "$(get_sort)" | bb_format
 }
 
 # Remove a PR from the cached open list, for example after a merge.
@@ -407,7 +475,7 @@ bb_show_cached() {
     local mode loading=""
     mode=$(get_mode)
     [[ "$mode" == log || ! -d "$(list_file "$mode").lock" ]] || loading=1
-    fzf_post "change-prompt[$(mode_prompt "$mode" "$loading")]+reload-sync[$BB_PRS_SELF --cached]"
+    fzf_post "change-input-label[$(mode_label "$mode" "$loading")]+reload-sync[$BB_PRS_SELF --cached]"
 }
 
 # --refresh [auto]: runs in the background, for the current list. With auto
@@ -432,7 +500,7 @@ bb_refresh() {
         bb_show_cached
         return 0
     fi
-    fzf_post "change-prompt[$(mode_prompt "$mode" loading)]"
+    fzf_post "change-input-label[$(mode_label "$mode" loading)]"
     if ! mkdir "$lock" 2>/dev/null; then
         if [[ -z "$(find "$lock" -maxdepth 0 -mmin +2 2>/dev/null)" ]]; then
             while [[ -d "$lock" && "$waited" -lt 120 ]]; do
@@ -489,13 +557,28 @@ bb_next_mode() {
         *)      mode=open ;;
     esac
     printf '%s\n' "$mode" >"$BB_PRS_RUN/mode"
+    printf 'clear-selection+change-list-label[%s]+' "$(list_label "$mode")"
     if [[ "$mode" == log ]]; then
-        printf 'clear-selection+change-prompt[%s]+reload-sync[%s --cached]' \
-            "$(mode_prompt log)" "$BB_PRS_SELF"
+        printf 'change-input-label[%s]+reload-sync[%s --cached]' \
+            "$(mode_label log)" "$BB_PRS_SELF"
     else
-        printf 'clear-selection+change-prompt[%s]+execute-silent[nohup %s --refresh auto </dev/null >/dev/null 2>&1 &]+reload-sync[%s --cached]' \
-            "$(mode_prompt "$mode" loading)" "$BB_PRS_SELF" "$BB_PRS_SELF"
+        printf 'change-input-label[%s]+execute-silent[nohup %s --refresh auto </dev/null >/dev/null 2>&1 &]+reload-sync[%s --cached]' \
+            "$(mode_label "$mode" loading)" "$BB_PRS_SELF" "$BB_PRS_SELF"
     fi
+}
+
+# --next-sort: change the order of the open list, with `transform` like
+# --next-mode. The rows come from the cache, so this calls no API.
+bb_next_sort() {
+    local sort
+    [[ "$(get_mode)" == open ]] || return 0
+    case "$(get_sort)" in
+        oldest) sort=newest ;;
+        newest) sort=repo ;;
+        *)      sort=oldest ;;
+    esac
+    printf '%s\n' "$sort" >"$BB_PRS_RUN/sort"
+    printf 'change-list-label[%s]+reload-sync[%s --cached]' "$(list_label open)" "$BB_PRS_SELF"
 }
 
 # --next-view: change the preview, with `transform` like --next-mode.
@@ -886,6 +969,7 @@ bb_pick() {
     BB_PRS_SOCK="$BB_PRS_RUN/fzf.sock"
     echo open >"$BB_PRS_RUN/mode"
     echo details >"$BB_PRS_RUN/view"
+    echo oldest >"$BB_PRS_RUN/sort"
     export BB_PRS_REPO BB_PRS_WS BB_PRS_DIR BB_PRS_TTY BB_PRS_PROMPT BB_PRS_LIST_BASE \
         BB_PRS_SELF BB_PRS_RUN BB_PRS_SOCK
 
@@ -900,16 +984,30 @@ bb_pick() {
     auto="execute-silent[nohup $self --refresh auto </dev/null >/dev/null 2>&1 &]"
     after="clear-selection+$refresh+$show"
 
+    # The look: each section in a rounded box with a label (--style full), the
+    # search box at the top, and the keys in the footer. The colors are ANSI
+    # numbers, so they follow the theme of the terminal.
+    local k=$'\e[1;35m' d=$'\e[0m' footer
+    footer="${k}⏎${d} review  ${k}^s${d} sync  ${k}^a${d} approve  ${k}^y${d} approve+merge  ${k}^o${d} browser"
+    footer+=$'\n'"${k}^t${d} open/closed/log  ${k}^v${d} details/activity/commits  ${k}alt-s${d} sort  ${k}^r${d} reload  ${k}tab${d} select"
+
     fzf --listen="$BB_PRS_SOCK" --ansi --multi --track --id-nth 1,2 \
         --delimiter '\t' --with-nth 8 \
-        --prompt "$(mode_prompt open loading)" \
-        --header $'enter review · ctrl-s sync · ctrl-a approve · ctrl-y approve+merge · ctrl-o browser\nctrl-t open/closed/log · ctrl-v details/activity/commits · ctrl-r reload · tab select' \
+        --style full:rounded --layout reverse --highlight-line --info inline-right \
+        --prompt '❯ ' --pointer '▌' --marker '┃' --gutter ' ' \
+        --ghost 'filter by title, author or repo' \
+        --input-label "$(mode_label open loading)" \
+        --list-label "$(list_label open)" \
+        --footer "$footer" --footer-label ' keys ' \
+        --color 'border:8,label:7,input-label:13:bold,list-label:14:bold,preview-label:11,footer-label:8' \
+        --color 'pointer:13,marker:10,prompt:13,info:8,spinner:13,hl:11,hl+:11:bold,ghost:8' \
         --preview "$self --preview {1} {2} {3} {5} {6} {7}" --preview-window 'right,50%,wrap' \
         --preview-label ' details · ctrl-v ' \
         --bind "start:$auto+$show" \
         --bind "ctrl-r:$refresh" \
         --bind "ctrl-t:transform($self --next-mode)" \
         --bind "ctrl-v:transform($self --next-view)" \
+        --bind "alt-s:transform($self --next-sort)" \
         --bind "enter:execute($self --review {f})+$auto" \
         --bind "ctrl-s:execute($self --sync {+f})+$after" \
         --bind "ctrl-a:execute($self --approve {+f})+$after" \
@@ -926,6 +1024,7 @@ main() {
         --refresh)   bb_refresh "${2:-}" ;;
         --next-mode) bb_next_mode ;;
         --next-view) bb_next_view ;;
+        --next-sort) bb_next_sort ;;
         --preview)   bb_preview "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${6:-}" "${7:-}" ;;
         --review)    bb_review "$2" ;;
         --approve)   bb_approve "$2" ;;
