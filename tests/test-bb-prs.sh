@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Tests for dot_local/bin/executable_bb-prs (prefix+B).
 #
-# The tests use JSON fixtures and a fake `twg` that records its arguments.
-# They never call Bitbucket. Run with bash.
+# The tests use JSON fixtures, a fake `twg` that records its arguments, and a
+# local bare repo as origin. They never call Bitbucket. Run with bash.
 set -u
 SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/dot_local/bin/executable_bb-prs"
 fail=0
@@ -17,7 +17,10 @@ check() { # label expected actual
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-export BB_PRS_TTY="$tmp/tty"
+export BB_PRS_TTY="$tmp/tty" XDG_CACHE_HOME="$tmp/cache"
+# Your git config can sign commits and run hooks. The test must not use it.
+printf '[user]\n\tname = t\n\temail = t@example.com\n' >"$tmp/gitconfig"
+export GIT_CONFIG_GLOBAL="$tmp/gitconfig" GIT_CONFIG_NOSYSTEM=1
 # shellcheck source=/dev/null
 source "$SCRIPT"
 set +e
@@ -73,5 +76,28 @@ check "merge: approve others, merge all" \
     "bitbucket pull-requests merge --pull-request 11 --repo ws/cur $flags|bitbucket pull-requests approve 12 --repo ws/cur|bitbucket pull-requests merge --pull-request 12 --repo ws/cur $flags" \
     "$(merge_log y)"
 check "merge: n merges nothing" "" "$(merge_log n)"
+
+# --- sync_one -------------------------------------------------------------------
+# feat is one commit behind main and rebases clean. clash changes the same
+# line as main, so its rebase stops. Either way no worktree stays behind.
+git init -q --bare -b main "$tmp/origin.git"
+git clone -q "$tmp/origin.git" "$tmp/work" 2>/dev/null
+w="$tmp/work"
+commit() { printf '%s\n' "$2" >"$w/$1" && git -C "$w" add "$1" && git -C "$w" commit -qm "$2"; }
+commit a.txt base
+git -C "$w" push -q origin HEAD:main
+git -C "$w" checkout -q -b feat && commit b.txt feat && git -C "$w" push -q origin feat
+git -C "$w" checkout -q -b clash main && commit a.txt clash && git -C "$w" push -q origin clash
+git -C "$w" checkout -q main && commit a.txt main2 && git -C "$w" push -q origin main
+git -C "$w" fetch -q origin
+o="$tmp/origin.git"
+clash_before=$(git -C "$o" rev-parse clash)
+sync_one "$w" feat main >/dev/null 2>&1
+check "sync: clean rebase is pushed" "0 1" \
+    "$(git -C "$o" rev-list --count feat..main) $(git -C "$o" rev-list --count main..feat)"
+sync_one "$w" clash main >/dev/null 2>&1
+check "sync: conflict returns 2" "2" "$?"
+check "sync: conflict leaves the branch" "$clash_before" "$(git -C "$o" rev-parse clash)"
+check "sync: no worktree stays" "1" "$(git -C "$w" worktree list | wc -l | tr -d ' ')"
 
 exit "$fail"
