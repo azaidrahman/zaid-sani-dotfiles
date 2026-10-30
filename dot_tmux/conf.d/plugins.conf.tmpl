@@ -14,8 +14,7 @@
 # ~/.local/bin is appended, not prepended, so Homebrew keeps winning exactly as
 # it does in the interactive shell. Binaries installed outside Homebrew live
 # there and would otherwise be invisible to popups while resolving fine in a
-# normal shell — prefix+e's `tuicr` is one (a local fork build symlinked into
-# ~/.local/bin, with the Homebrew formula unlinked).
+# normal shell — prefix+B's `bb-prs` and `twg` are two.
 set-environment -g PATH '/opt/homebrew/bin:/bin:/usr/bin:{{ .chezmoi.homeDir }}/.local/bin'
 
 # --- Functional plugins (always loaded) ---

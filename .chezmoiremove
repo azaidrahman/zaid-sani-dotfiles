@@ -70,3 +70,6 @@ CLAUDE.md
 .config/zsh/functions/,gt
 # chezmoi deployed the tests of the repository to ~/tests. .chezmoiignore stops that now.
 tests/test-omp.zsh
+# Upstream tuicr opens Bitbucket PRs now, and bb-prs (prefix+B) starts it.
+# The old script is in archive/tuicr/.
+.local/bin/tuicr-bb

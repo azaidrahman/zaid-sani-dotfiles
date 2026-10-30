@@ -1,0 +1,31 @@
+# Retired 2026-10-30. This block was in dot_config/tuicr/config.toml.tmpl for
+# the hosts that ran a local fork build of tuicr. Upstream tuicr has a
+# Bitbucket backend since v0.21.0, so these hosts use the homebrew-core
+# formula now. bb-prs (prefix+B) opens Bitbucket PRs with `tuicr pr <url>`.
+{{ if has .chezmoi.hostname (list "aqua" "onyx") }}
+# --- fork-build hosts only ---
+#
+# tuicr here is a LOCAL FORK build, not the Homebrew release:
+#   ~/.local/bin/tuicr -> ~/projects/not-mine/tuicr/target/release/tuicr
+# with the Homebrew formula deliberately unlinked (`brew unlink tuicr`). The
+# fork carries a Bitbucket Cloud forge backend (src/forge/bitbucket/) that
+# upstream does not have yet — see issue #498.
+#
+# That backend still shells out to the `bkt` CLI, which is why the Brewfile
+# keeps bitbucket-cli installed. Nothing else in these dotfiles uses bkt any
+# more; the shell scripts and skills all moved to twg. Porting the fork's
+# backend to twg would let bitbucket-cli go entirely.
+#
+# Add a hostname to the list above when you set the fork build up on a new box;
+# a host NOT in the list keeps its Homebrew tuicr and its update checks.
+#
+# no_update_check is REQUIRED for that setup. tuicr classifies any binary
+# outside Cellar/cargo/nix as a "direct binary" install, so `tuicr update` would
+# fetch an upstream GitHub release and overwrite the fork build, silently
+# dropping Bitbucket support. Never run `tuicr update` on this host — rebuild:
+#   cd ~/projects/not-mine/tuicr && cargo build --release
+# The symlink picks up the new binary automatically.
+#
+# Once Bitbucket support lands upstream, drop this block and `brew link tuicr`.
+no_update_check = true
+{{ end -}}

@@ -1,0 +1,329 @@
+#!/usr/bin/env bash
+#
+# bb-prs - Pick Bitbucket PRs in fzf: review in tuicr, approve, merge
+#
+# The one-line summary above is the cheatsheet entry: prefix+? lists every
+# script in ~/.local/bin that starts with a "# <name> - <summary>" line.
+#
+# prefix+B opens this script in a tmux popup. It also runs in a plain terminal.
+#
+# The list has two sources. The script removes the duplicates:
+#
+#   * each open PR in the repo of the current directory, if its origin
+#     remote is on bitbucket.org
+#   * the workspace inbox of twg: the PRs that wait for your review, and your
+#     own open PRs, also in other repos
+#
+# The inbox alone is not sufficient. On 2026-10-30 it showed only 2 of the 7
+# open PRs of one repo.
+#
+# Keys:
+#
+#   enter    review the PR in tuicr. In tuicr, use :submit to post your
+#            comments, or to post them and approve the PR.
+#   ctrl-a   approve the selected PRs
+#   ctrl-y   approve and merge the selected PRs. The script asks first.
+#   ctrl-o   open the PR in the browser
+#   ctrl-r   load the list again
+#   tab      select more than one PR
+#
+# A merge makes a merge commit and closes the source branch. Your own PRs get
+# no approval, because Bitbucket does not let the author approve.
+#
+# The workspace comes from the origin remote of the current directory. Outside
+# a Bitbucket repo, it comes from $BB_WORKSPACE, else from the last workspace
+# that the script found. The script keeps that workspace in
+# $XDG_STATE_HOME/bb-prs/workspace. Do not write the workspace into this file:
+# the dotfiles repo is public.
+#
+# The subcommands that start with -- are for the fzf bindings. Do not call
+# them by hand.
+
+set -euo pipefail
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/bb-prs"
+
+# The terminal for tuicr and for the prompts. bb_pick sets BB_PRS_TTY to the
+# real device, for example /dev/ttys004, because tuicr cannot use /dev/tty on
+# macOS. The test sets BB_PRS_TTY to a file that holds the answers.
+TTY="${BB_PRS_TTY:-/dev/tty}"
+
+usage() {
+    cat <<'EOF'
+Usage: bb-prs
+
+Show the open Bitbucket PRs for you in fzf.
+
+  enter    review in tuicr (:submit posts comments, or comments and approval)
+  ctrl-a   approve the selected PRs
+  ctrl-y   approve and merge the selected PRs (asks first)
+  ctrl-o   open in the browser
+  ctrl-r   load again
+  tab      select more than one PR
+
+Environment:
+  BB_WORKSPACE   the workspace to use outside a Bitbucket repo
+EOF
+}
+
+# In a popup, the popup closes when the script stops. Wait for a key, so that
+# the message stays on the screen.
+pause() {
+    [[ -n "${BB_PRS_POPUP:-}" ]] || return 0
+    read -rsn1 -p "Press any key to close." <"$TTY" || true
+}
+
+die() {
+    printf 'bb-prs: %s\n' "$1" >&2
+    pause
+    exit 1
+}
+
+# `twg -o json` writes bare JSON only when stdout is a terminal. When stdout
+# is a pipe, twg writes a YAML envelope, and the JSON goes to the temporary
+# file that `output_files.stdout` names. Print the JSON in both cases.
+twg_json() {
+    local envelope path
+    envelope=$(twg "$@" -o json) || return 1
+    case ${envelope:0:1} in
+        '{'|'[') printf '%s' "$envelope"; return 0 ;;
+    esac
+    path=$(printf '%s' "$envelope" | sed -n 's/^  stdout: "\(.*\)"$/\1/p' | head -1)
+    [[ -n "$path" && -f "$path" ]] || return 1
+    cat "$path"
+}
+
+# Run a twg write. If it fails, print the message from the twg envelope.
+twg_do() {
+    local out msg
+    if out=$(twg "$@" 2>&1); then
+        return 0
+    fi
+    msg=$(printf '%s\n' "$out" | sed -n 's/^  message: "\{0,1\}\(.*[^"]\)"\{0,1\}$/\1/p' | head -3)
+    printf '    %s\n' "${msg:-$(printf '%s\n' "$out" | head -3)}"
+    return 1
+}
+
+# Print <workspace>/<repo> for the origin remote of a directory. Print nothing
+# when the remote is not on bitbucket.org.
+bb_remote_repo() {
+    local url
+    url=$(git -C "$1" remote get-url origin 2>/dev/null) || return 0
+    [[ "$url" =~ bitbucket\.org[:/]([^/]+)/([^/]+)$ ]] || return 0
+    printf '%s/%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]%.git}"
+}
+
+# One TSV row per PR: repo, id, role, url, display text. The role is "mine",
+# "review" or "open". If two sources have the same PR, the first source in
+# this order wins: author inbox, reviewer inbox, repo query.
+#
+# $1 repo query JSON, $2 reviewer inbox JSON, $3 author inbox JSON. A file
+# can be empty. $4 is the repo of the current directory: its PRs go first.
+bb_rows() {
+    jq -rn --slurpfile q "$1" --slurpfile r "$2" --slurpfile a "$3" --arg cur "${4:-}" '
+        def pad($n): tostring | if length >= $n then .[0:$n] else . + (" " * ($n - length)) end;
+        def color: {mine: "\u001b[36m", review: "\u001b[33m", open: "\u001b[2m"}[.];
+        ($r[0].currentUser.uuid // $a[0].currentUser.uuid // "") as $me
+        | [ ($a[0].items // [])[]
+              | {repo, id, role: "mine", url: .link,
+                 author: .author.displayName, title, draft} ]
+          + [ ($r[0].items // [])[]
+              | {repo, id, role: "review", url: .link,
+                 author: .author.displayName, title, draft} ]
+          + [ ($q[0] // [])[]
+              | {repo: (.links.html.href | capture("bitbucket\\.org/(?<r>[^/]+/[^/]+)/").r),
+                 id,
+                 role: (if .author.uuid == $me then "mine" else "open" end),
+                 url: .links.html.href,
+                 author: .author.display_name, title, draft} ]
+        | unique_by([.repo, .id])
+        | sort_by([(.repo != $cur), .repo, -.id])[]
+        | [ .repo, (.id | tostring), .role, .url,
+            ("#" + (.id | pad(5)) + " "
+             + (.repo | split("/")[-1] | pad(20)) + " "
+             + (.role | color) + (.role | pad(6)) + "\u001b[0m "
+             + (.author // "" | pad(18)) + " "
+             + (if .draft then "[draft] " else "" end) + .title) ]
+        | @tsv'
+}
+
+# --list: load the sources at the same time, then print the rows. A source
+# that fails gives an error row, so that the list does not look empty.
+bb_list() {
+    local tmp rc=0
+    tmp=$(mktemp -d)
+    : >"$tmp/q"
+    if [[ -n "${BB_PRS_REPO:-}" ]]; then
+        { twg_json bitbucket pull-requests query --repo "$BB_PRS_REPO" -n 50 >"$tmp/q" \
+            || { : >"$tmp/q"; echo "open PRs of $BB_PRS_REPO" >>"$tmp/err"; }; } &
+    fi
+    { twg_json bitbucket inbox --workspace "$BB_PRS_WS" -n 50 >"$tmp/r" \
+        || { : >"$tmp/r"; echo "review inbox" >>"$tmp/err"; }; } &
+    { twg_json bitbucket inbox --workspace "$BB_PRS_WS" --role author -n 50 >"$tmp/a" \
+        || { : >"$tmp/a"; echo "your open PRs" >>"$tmp/err"; }; } &
+    wait
+    if [[ -s "$tmp/err" ]]; then
+        while IFS= read -r what; do
+            printf '\t\t\t\t\033[31m! could not load the %s\033[0m\n' "$what"
+        done <"$tmp/err"
+    fi
+    bb_rows "$tmp/q" "$tmp/r" "$tmp/a" "${BB_PRS_REPO:-}" || rc=$?
+    rm -rf "$tmp"
+    return "$rc"
+}
+
+# --preview <repo> <id>: the PR state, the changed files, and the description.
+bb_preview() {
+    local repo="$1" id="$2" pr
+    [[ -n "$id" ]] || return 0
+    pr=$(twg_json bitbucket pull-requests get "$id" --repo "$repo") \
+        || { echo "Could not load PR $id of $repo."; return 0; }
+    jq -r '
+        "#\(.id)  \(.title)",
+        "\(.author.display_name)  \(.source.branch.name) -> \(.destination.branch.name)",
+        "Updated \(.updated_on[0:16] | sub("T"; " "))  Comments \(.comment_count)  Tasks \(.task_count)",
+        "Approved by: \([.participants[]? | select(.approved) | .user.display_name] | if length == 0 then "nobody" else join(", ") end)",
+        "Reviewers:   \([.reviewers[]?.display_name] | if length == 0 then "none" else join(", ") end)",
+        (if .draft then "DRAFT" else empty end),
+        ""' <<<"$pr"
+    twg_json bitbucket pull-requests diffstat "$id" --repo "$repo" 2>/dev/null \
+        | jq -r '.[] | "\(.status[0:1] | ascii_upcase) +\(.lines_added) -\(.lines_removed)\t\(.new.path // .old.path)"' \
+        | column -t -s $'\t' || echo "Could not load the changed files."
+    echo
+    jq -r '.description // ""' <<<"$pr"
+}
+
+# --review <url>
+bb_review() {
+    [[ -n "${1:-}" ]] || return 0
+    if ! tuicr pr "$1" <"$TTY"; then
+        echo "tuicr failed for $1"
+        read -rsn1 -p "Press any key." <"$TTY" || true
+    fi
+}
+
+# Read the rows that fzf wrote to the {+f} file. Skip the error rows.
+selected_rows() {
+    awk -F'\t' '$2 != ""' "$1"
+}
+
+print_rows() {
+    while IFS=$'\t' read -r repo id role _; do
+        printf '  %s#%s (%s)\n' "${repo##*/}" "$id" "$role"
+    done
+}
+
+approve_one() {
+    local repo="$1" id="$2" role="$3"
+    if [[ "$role" == "mine" ]]; then
+        printf '  %s#%s: your own PR, no approval\n' "${repo##*/}" "$id"
+        return 0
+    fi
+    if twg_do bitbucket pull-requests approve "$id" --repo "$repo"; then
+        printf '  %s#%s: approved\n' "${repo##*/}" "$id"
+    else
+        printf '  %s#%s: approval FAILED\n' "${repo##*/}" "$id"
+        return 1
+    fi
+}
+
+# --approve <file>
+bb_approve() {
+    # Read the rows on fd 3, so that a command in the loop cannot read them.
+    local repo id role
+    while IFS=$'\t' read -r -u 3 repo id role _; do
+        approve_one "$repo" "$id" "$role" || true
+    done 3< <(selected_rows "$1")
+    read -rsn1 -p "Press any key." <"$TTY" || true
+}
+
+# --merge <file>: approve, then merge, one PR at a time. A failure does not
+# stop the other PRs.
+bb_merge() {
+    local rows repo id role answer failed=0
+    rows=$(selected_rows "$1")
+    [[ -n "$rows" ]] || return 0
+    echo "Approve and merge these PRs (merge commit, close the source branch)?"
+    print_rows <<<"$rows"
+    read -r -p "[y/N] " answer <"$TTY" || answer=""
+    if [[ "$answer" != [yY] ]]; then
+        echo "Nothing merged."
+        read -rsn1 -p "Press any key." <"$TTY" || true
+        return 0
+    fi
+    while IFS=$'\t' read -r -u 3 repo id role _; do
+        # A failed approval does not skip the merge. The PR can already have
+        # enough approvals, and the merge reports the real block.
+        approve_one "$repo" "$id" "$role" || true
+        if twg_do bitbucket pull-requests merge --pull-request "$id" --repo "$repo" \
+            --merge-strategy merge_commit --close-source-branch --wait; then
+            printf '  %s#%s: merged\n' "${repo##*/}" "$id"
+        else
+            printf '  %s#%s: merge FAILED\n' "${repo##*/}" "$id"
+            failed=$((failed + 1))
+        fi
+    done 3<<<"$rows"
+    [[ "$failed" -eq 0 ]] || echo "$failed merge(s) failed."
+    read -rsn1 -p "Press any key." <"$TTY" || true
+}
+
+bb_pick() {
+    local cmd
+    for cmd in twg fzf jq tuicr; do
+        command -v "$cmd" >/dev/null 2>&1 || die "$cmd is not installed."
+    done
+
+    BB_PRS_REPO=$(bb_remote_repo "$PWD")
+    BB_PRS_WS=${BB_PRS_REPO%%/*}
+    if [[ -n "$BB_PRS_WS" ]]; then
+        mkdir -p "$STATE_DIR"
+        printf '%s\n' "$BB_PRS_WS" >"$STATE_DIR/workspace"
+    else
+        BB_PRS_WS=${BB_WORKSPACE:-$(cat "$STATE_DIR/workspace" 2>/dev/null || true)}
+    fi
+    [[ -n "$BB_PRS_WS" ]] \
+        || die "no workspace. Run bb-prs in a Bitbucket repo one time, or set BB_WORKSPACE."
+    export BB_PRS_REPO BB_PRS_WS
+
+    # fzf gives no terminal to stdin of an execute command. Keep the name of
+    # the real terminal device for tuicr: with stdin on /dev/tty, tuicr stops
+    # with "Failed to initialize input reader".
+    BB_PRS_TTY=$(tty) || die "stdin is not a terminal."
+    export BB_PRS_TTY
+
+    # Call the script through bash, so that the bindings also work from the
+    # chezmoi source, where the file has no execute bit.
+    local self reload
+    self="bash $(printf '%q' "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")")"
+    reload="reload($self --list)"
+
+    fzf --ansi --multi --delimiter '\t' --with-nth 5 \
+        --prompt "${BB_PRS_REPO:-$BB_PRS_WS}> " \
+        --header 'enter review · ctrl-a approve · ctrl-y approve+merge · ctrl-o browser · ctrl-r reload · tab select' \
+        --preview "$self --preview {1} {2}" --preview-window 'right,50%,wrap' \
+        --bind "start:$reload" \
+        --bind "ctrl-r:$reload" \
+        --bind "enter:execute($self --review {4})+$reload" \
+        --bind "ctrl-a:execute($self --approve {+f})+clear-selection+$reload" \
+        --bind "ctrl-y:execute($self --merge {+f})+clear-selection+$reload" \
+        --bind 'ctrl-o:execute-silent(open {4})' \
+        </dev/null || true
+}
+
+main() {
+    case "${1:-}" in
+        "")          bb_pick ;;
+        --list)      bb_list ;;
+        --preview)   bb_preview "${2:-}" "${3:-}" ;;
+        --review)    bb_review "${2:-}" ;;
+        --approve)   bb_approve "$2" ;;
+        --merge)     bb_merge "$2" ;;
+        -h|--help)   usage ;;
+        *)           usage >&2; exit 2 ;;
+    esac
+}
+
+# Run main only when the script is executed. The test sources it.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi

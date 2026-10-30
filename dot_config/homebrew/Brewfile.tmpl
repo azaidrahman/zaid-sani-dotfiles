@@ -101,12 +101,13 @@ brew "can1357/tap/omp"
 brew "nginx"
 brew "hunk"
 # bitbucket-cli (bkt) is NOT used by these dotfiles any more - twg replaced it.
-# It stays installed because the local tuicr fork's Bitbucket forge backend
-# shells out to `bkt` from Rust (src/forge/bitbucket/bkt.rs). Remove this line
-# only after that backend is ported or dropped.
+# It stays installed because the Bitbucket backend of tuicr calls `bkt` for
+# each Bitbucket operation. Remove this line only if tuicr stops that.
 brew "avivsinai/tap/bitbucket-cli"
 brew "exercism"
-brew "agavra/tap/tuicr"
+# homebrew-core, not agavra/tap: the tap formula stopped at 0.19.1, before
+# the Bitbucket backend.
+brew "tuicr"
 brew "borders"
 brew "openclaw/tap/wacli"
 brew "codex"
