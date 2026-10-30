@@ -74,6 +74,8 @@ STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/bb-prs"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/bb-prs"
 LOG_FILE="$STATE_DIR/actions.tsv"
 PREVIEW_TTL_MIN=15
+CLOSED_PREVIEW_TTL_MIN=1440
+AUTO_REFRESH_MIN=3
 
 # The terminal for tuicr and for the prompts. bb_pick sets BB_PRS_TTY to the
 # real device, for example /dev/ttys004, because tuicr cannot use /dev/tty on
@@ -120,10 +122,14 @@ press_key() {
 
 # `twg -o json` writes bare JSON only when stdout is a terminal. When stdout
 # is a pipe, twg writes a YAML envelope, and the JSON goes to the temporary
-# file that `output_files.stdout` names. Print the JSON in both cases.
+# file that `output_files.stdout` names. Print the JSON in both cases. On a
+# failure, print the message of twg to stderr.
 twg_json() {
     local envelope path
-    envelope=$(twg "$@" -o json) || return 1
+    if ! envelope=$(twg "$@" -o json); then
+        printf '%s\n' "$envelope" | sed -n 's/^  message: "\{0,1\}\(.*[^"]\)"\{0,1\}$/\1/p' | head -1 >&2
+        return 1
+    fi
     case ${envelope:0:1} in
         '{'|'[') printf '%s' "$envelope"; return 0 ;;
     esac
@@ -294,27 +300,43 @@ bb_log_rows() {
     done
 }
 
+# Load one source of a list into $tmp/<name>. Run it in the background. On a
+# failure, the file is empty, and $tmp/err gets a line: what failed, and why.
+load_source() { # tmp name what twg-args...
+    local tmp="$1" name="$2" what="$3"
+    shift 3
+    if ! twg_json "$@" >"$tmp/$name" 2>"$tmp/$name.why"; then
+        : >"$tmp/$name"
+        printf '%s: %s\n' "$what" "$(head -1 "$tmp/$name.why")" >>"$tmp/err"
+    fi
+}
+
 # The open list: load the sources and `git fetch` at the same time, then print
-# the rows. A source that fails gives an error row, so that the list does not
-# look empty.
+# the rows. Return 3 when a source failed, after an error row for each failed
+# source.
+#
+# Each inbox call scans the 25 most recent repos of the workspace, so it costs
+# about 30 API calls. Bitbucket allows about 1,000 calls in an hour.
 bb_list() {
     local tmp rc=0
     tmp=$(mktemp -d)
     : >"$tmp/q"
     if [[ -n "${BB_PRS_REPO:-}" ]]; then
-        { twg_json bitbucket pull-requests query --repo "$BB_PRS_REPO" -n 50 >"$tmp/q" \
-            || { : >"$tmp/q"; echo "open PRs of $BB_PRS_REPO" >>"$tmp/err"; }; } &
+        load_source "$tmp" q "open PRs of $BB_PRS_REPO" \
+            bitbucket pull-requests query --repo "$BB_PRS_REPO" -n 50 &
     fi
     if [[ -n "${BB_PRS_DIR:-}" ]]; then
         git -C "$BB_PRS_DIR" fetch -q origin >/dev/null 2>&1 &
     fi
-    { twg_json bitbucket inbox --workspace "$BB_PRS_WS" -n 50 >"$tmp/r" \
-        || { : >"$tmp/r"; echo "review inbox" >>"$tmp/err"; }; } &
-    { twg_json bitbucket inbox --workspace "$BB_PRS_WS" --role author -n 50 >"$tmp/a" \
-        || { : >"$tmp/a"; echo "your open PRs" >>"$tmp/err"; }; } &
+    load_source "$tmp" r "review inbox" bitbucket inbox --workspace "$BB_PRS_WS" -n 50 &
+    load_source "$tmp" a "your open PRs" \
+        bitbucket inbox --workspace "$BB_PRS_WS" --role author -n 50 &
     wait
-    error_rows "$tmp/err"
     bb_rows "$tmp/q" "$tmp/r" "$tmp/a" "${BB_PRS_REPO:-}" | bb_format || rc=$?
+    if [[ -s "$tmp/err" ]]; then
+        error_rows "$tmp/err"
+        rc=3
+    fi
     rm -rf "$tmp"
     return "$rc"
 }
@@ -328,38 +350,45 @@ bb_list_closed() {
     : >"$tmp/d"
     : >"$tmp/r"
     if [[ -n "${BB_PRS_REPO:-}" ]]; then
-        { twg_json bitbucket pull-requests query --repo "$BB_PRS_REPO" --state MERGED -n 25 >"$tmp/m" \
-            || { : >"$tmp/m"; echo "merged PRs of $BB_PRS_REPO" >>"$tmp/err"; }; } &
-        { twg_json bitbucket pull-requests query --repo "$BB_PRS_REPO" --state DECLINED -n 15 >"$tmp/d" \
-            || { : >"$tmp/d"; echo "declined PRs of $BB_PRS_REPO" >>"$tmp/err"; }; } &
+        load_source "$tmp" m "merged PRs of $BB_PRS_REPO" \
+            bitbucket pull-requests query --repo "$BB_PRS_REPO" --state MERGED -n 25 &
+        load_source "$tmp" d "declined PRs of $BB_PRS_REPO" \
+            bitbucket pull-requests query --repo "$BB_PRS_REPO" --state DECLINED -n 15 &
     fi
-    { twg_json bitbucket inbox --workspace "$BB_PRS_WS" --role author --state MERGED -n 15 >"$tmp/a" \
-        || { : >"$tmp/a"; echo "your merged PRs" >>"$tmp/err"; }; } &
+    load_source "$tmp" a "your merged PRs" \
+        bitbucket inbox --workspace "$BB_PRS_WS" --role author --state MERGED -n 15 &
     wait
-    error_rows "$tmp/err"
     jq -s 'add // []' "$tmp/m" "$tmp/d" >"$tmp/q"
     bb_rows "$tmp/q" "$tmp/r" "$tmp/a" "${BB_PRS_REPO:-}" closed | bb_format || rc=$?
+    if [[ -s "$tmp/err" ]]; then
+        error_rows "$tmp/err"
+        rc=3
+    fi
     rm -rf "$tmp"
     return "$rc"
 }
 
-error_rows() { # file with one failed source per line
+error_rows() { # file with one "what: why" line per failed source
     [[ -s "$1" ]] || return 0
-    local what
-    while IFS= read -r what; do
-        printf '\t\t\t\t\t\t\t\033[31m! could not load the %s\033[0m\t\n' "$what"
+    local line
+    while IFS= read -r line; do
+        [[ "$line" != *429* ]] || line+=" (Bitbucket rate limit: wait some minutes, then ctrl-r)"
+        printf '\t\t\t\t\t\t\t\033[31m! could not load the %s\033[0m\t\n' "$line"
     done <"$1"
 }
 
-# --cached: the rows of the current list, from the cache or the log.
+# --cached: the rows of the current list, from the cache or the log. The
+# errors of the last refresh go first.
 bb_cached() {
-    local mode
+    local mode list
     mode=$(get_mode)
     if [[ "$mode" == log ]]; then
         bb_log_rows
-    else
-        cat "$(list_file "$mode")" 2>/dev/null || true
+        return 0
     fi
+    list=$(list_file "$mode")
+    cat "$list.err" 2>/dev/null || true
+    selected_rows "$list" 2>/dev/null || true
 }
 
 # Remove a PR from the cached open list, for example after a merge.
@@ -381,12 +410,16 @@ bb_show_cached() {
     fzf_post "change-prompt[$(mode_prompt "$mode" "$loading")]+reload-sync[$BB_PRS_SELF --cached]"
 }
 
-# --refresh: runs in the background, for the current list. One refresh at a
-# time per list. If another refresh runs, for example from a popup that you
-# closed, wait for it and show its list. A lock that is older than 2 minutes
-# is from a refresh that stopped, so remove it.
+# --refresh [auto]: runs in the background, for the current list. With auto
+# (when the picker opens, or the list changes), a list from the last
+# AUTO_REFRESH_MIN minutes is new enough, and the refresh does nothing. This
+# keeps the API calls under the limit of Bitbucket.
+#
+# One refresh at a time per list. If another refresh runs, for example from a
+# popup that you closed, wait for it and show its list. A lock that is older
+# than 2 minutes is from a refresh that stopped, so remove it.
 bb_refresh() {
-    local mode list lock waited=0
+    local mode list lock waited=0 rc=0
     mode=$(get_mode)
     if [[ "$mode" == log ]]; then
         bb_show_cached
@@ -394,6 +427,11 @@ bb_refresh() {
     fi
     list=$(list_file "$mode")
     lock="$list.lock"
+    if [[ "${1:-}" == auto && -s "$list" && ! -s "$list.err" \
+        && -z "$(find "$list" -mmin +"$AUTO_REFRESH_MIN" 2>/dev/null)" ]]; then
+        bb_show_cached
+        return 0
+    fi
     fzf_post "change-prompt[$(mode_prompt "$mode" loading)]"
     if ! mkdir "$lock" 2>/dev/null; then
         if [[ -z "$(find "$lock" -maxdepth 0 -mmin +2 2>/dev/null)" ]]; then
@@ -412,10 +450,23 @@ bb_refresh() {
     # shellcheck disable=SC2064
     trap "rm -rf $(printf '%q' "$lock")" EXIT
 
-    if { if [[ "$mode" == closed ]]; then bb_list_closed; else bb_list; fi; } >"$list.$$"; then
-        mv "$list.$$" "$list"
-    else
+    { if [[ "$mode" == closed ]]; then bb_list_closed; else bb_list; fi; } >"$list.$$" || rc=$?
+    # The list file holds PR rows only. The error rows go to $list.err. When a
+    # source failed, keep the last good list: a list without the inbox, or a
+    # list of errors only, is worse than an old list.
+    awk -F'\t' '$2 == ""' "$list.$$" >"$list.err.$$"
+    if [[ "$rc" -ne 0 ]] && [[ -n "$(selected_rows "$list" 2>/dev/null | head -1)" ]]; then
+        printf '\t\t\t\t\t\t\t\033[31m! showing the list from %s\033[0m\t\n' \
+            "$(stat -f '%Sm' -t '%H:%M' "$list")" >>"$list.err.$$"
         rm -f "$list.$$"
+    else
+        selected_rows "$list.$$" >"$list"
+        rm -f "$list.$$"
+    fi
+    if [[ -s "$list.err.$$" ]]; then
+        mv "$list.err.$$" "$list.err"
+    else
+        rm -f "$list.err.$$" "$list.err"
     fi
     # The lock guards the list only. Two prefetches at the same time do no harm.
     rm -rf "$lock"
@@ -423,7 +474,9 @@ bb_refresh() {
     bb_show_cached
 
     find "$CACHE_DIR/preview" -type f -mmin +1440 -delete 2>/dev/null || true
-    bb_prefetch "$list"
+    # Only the open list gets previews in advance. The closed list is long,
+    # and you look at few of its PRs.
+    [[ "$rc" -ne 0 || "$mode" != open ]] || bb_prefetch "$list"
 }
 
 # --next-mode: change the list. fzf runs this with `transform` and does the
@@ -440,7 +493,7 @@ bb_next_mode() {
         printf 'clear-selection+change-prompt[%s]+reload-sync[%s --cached]' \
             "$(mode_prompt log)" "$BB_PRS_SELF"
     else
-        printf 'clear-selection+change-prompt[%s]+execute-silent[nohup %s --refresh </dev/null >/dev/null 2>&1 &]+reload-sync[%s --cached]' \
+        printf 'clear-selection+change-prompt[%s]+execute-silent[nohup %s --refresh auto </dev/null >/dev/null 2>&1 &]+reload-sync[%s --cached]' \
             "$(mode_prompt "$mode" loading)" "$BB_PRS_SELF" "$BB_PRS_SELF"
     fi
 }
@@ -466,10 +519,10 @@ preview_file() { # repo id updated view
     printf '%s/preview/%s-%s-%s-%s.txt' "$CACHE_DIR" "${1//\//_}" "$2" "${3//[^0-9A-Za-z]/}" "$4"
 }
 
-preview_fresh() { # repo id updated view
+preview_fresh() { # repo id updated view [ttl in minutes]
     local f
-    f=$(preview_file "$@")
-    [[ -s "$f" && -z "$(find "$f" -mmin +"$PREVIEW_TTL_MIN" 2>/dev/null)" ]]
+    f=$(preview_file "$1" "$2" "$3" "$4")
+    [[ -s "$f" && -z "$(find "$f" -mmin +"${5:-$PREVIEW_TTL_MIN}" 2>/dev/null)" ]]
 }
 
 # Remove each cached preview of a PR, for example after an approval.
@@ -577,7 +630,7 @@ bb_prefetch() { # list file
 
 # --preview <repo> <id> <role> <updated> <src> <dst>
 bb_preview() {
-    local repo="$1" id="$2" role="$3" updated="$4" src="$5" dst="$6" view behind
+    local repo="$1" id="$2" role="$3" updated="$4" src="$5" dst="$6" view behind ttl
     [[ -n "$id" ]] || return 0
     view=$(get_view)
     if [[ "$view" == details && -n "${BB_PRS_DIR:-}" && "$repo" == "${BB_PRS_REPO:-}" ]] \
@@ -590,7 +643,10 @@ bb_preview() {
             printf 'Up to date with %s.\n' "$dst"
         fi
     fi
-    preview_fresh "$repo" "$id" "$updated" "$view" || preview_save "$repo" "$id" "$updated" "$view" \
+    # A closed PR does not change, so its preview stays valid for longer.
+    ttl=$PREVIEW_TTL_MIN
+    actionable "$role" || ttl=$CLOSED_PREVIEW_TTL_MIN
+    preview_fresh "$repo" "$id" "$updated" "$view" "$ttl" || preview_save "$repo" "$id" "$updated" "$view" \
         || { echo "Could not load the $view of PR $id of $repo."; return 0; }
     cat "$(preview_file "$repo" "$id" "$updated" "$view")"
 }
@@ -835,10 +891,13 @@ bb_pick() {
 
     # nohup: the refresh must finish and write the cache also when you close
     # the popup first. Start it before reload-sync in each chain: fzf drops an
-    # action that comes after reload-sync (see bb_show_cached).
-    local self=$BB_PRS_SELF show refresh after
+    # action that comes after reload-sync (see bb_show_cached). ctrl-r and the
+    # actions refresh always. Opening the picker or a review refresh only
+    # when the list is old (see bb_refresh).
+    local self=$BB_PRS_SELF show refresh auto after
     show="reload-sync($self --cached)"
     refresh="execute-silent[nohup $self --refresh </dev/null >/dev/null 2>&1 &]"
+    auto="execute-silent[nohup $self --refresh auto </dev/null >/dev/null 2>&1 &]"
     after="clear-selection+$refresh+$show"
 
     fzf --listen="$BB_PRS_SOCK" --ansi --multi --track --id-nth 1,2 \
@@ -847,11 +906,11 @@ bb_pick() {
         --header $'enter review · ctrl-s sync · ctrl-a approve · ctrl-y approve+merge · ctrl-o browser\nctrl-t open/closed/log · ctrl-v details/activity/commits · ctrl-r reload · tab select' \
         --preview "$self --preview {1} {2} {3} {5} {6} {7}" --preview-window 'right,50%,wrap' \
         --preview-label ' details · ctrl-v ' \
-        --bind "start:$refresh+$show" \
+        --bind "start:$auto+$show" \
         --bind "ctrl-r:$refresh" \
         --bind "ctrl-t:transform($self --next-mode)" \
         --bind "ctrl-v:transform($self --next-view)" \
-        --bind "enter:execute($self --review {f})+$refresh" \
+        --bind "enter:execute($self --review {f})+$auto" \
         --bind "ctrl-s:execute($self --sync {+f})+$after" \
         --bind "ctrl-a:execute($self --approve {+f})+$after" \
         --bind "ctrl-y:execute($self --merge {+f})+$after" \
@@ -864,7 +923,7 @@ main() {
     case "${1:-}" in
         "")          bb_pick ;;
         --cached)    bb_cached ;;
-        --refresh)   bb_refresh ;;
+        --refresh)   bb_refresh "${2:-}" ;;
         --next-mode) bb_next_mode ;;
         --next-view) bb_next_view ;;
         --preview)   bb_preview "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${6:-}" "${7:-}" ;;

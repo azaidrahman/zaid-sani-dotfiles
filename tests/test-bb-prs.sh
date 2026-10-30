@@ -85,6 +85,27 @@ check "merge: actions in the log" "merge ok 11|approve ok 12|merge ok 12" \
     "$(awk -F'\t' '{print $2, $3, $5}' "$tmp/state/bb-prs/actions.tsv" | paste -sd'|' -)"
 check "merge: n merges nothing" "" "$(merge_log n)"
 
+# --- bb_refresh -----------------------------------------------------------------
+# A refresh that fails keeps the last good list and tells why. An automatic
+# refresh of a new list calls nothing.
+mkdir "$tmp/bin429"
+printf '#!/bin/sh\necho "$*" >>"%s/twg.log"\nprintf %s\nexit 1\n' "$tmp" \
+    "'ok: false\nerror:\n  message: \"Bitbucket API error: 429\"\n'" >"$tmp/bin429/twg"
+chmod +x "$tmp/bin429/twg"
+export BB_PRS_LIST_BASE="$tmp/cache/list" BB_PRS_WS=ws BB_PRS_PROMPT=ws BB_PRS_SELF=x
+mkdir -p "$tmp/cache"
+printf 'ws/cur\t10\topen\tu\td\ts\tm\tshown\tt\n' >"$tmp/cache/list-open.tsv"
+touch -t 202601010000 "$tmp/cache/list-open.tsv"
+(PATH="$tmp/bin429:$PATH" bb_refresh >/dev/null 2>&1)
+check "refresh: failure keeps the list" "10" "$(cut -f2 "$tmp/cache/list-open.tsv")"
+check "refresh: failure tells why" "rate limit|showing the list from" \
+    "$(grep -o -e 'rate limit' -e 'showing the list from' "$tmp/cache/list-open.tsv.err" | sort -u | paste -sd'|' -)"
+rm -f "$tmp/cache/list-open.tsv.err"
+touch "$tmp/cache/list-open.tsv"
+: >"$tmp/twg.log"
+(PATH="$tmp/bin429:$PATH" bb_refresh auto >/dev/null 2>&1)
+check "refresh: auto skips a new list" "0" "$(wc -l <"$tmp/twg.log" | tr -d ' ')"
+
 # --- sync_one -------------------------------------------------------------------
 # feat is one commit behind main and rebases clean. clash changes the same
 # line as main, so its rebase stops. Either way no worktree stays behind.
