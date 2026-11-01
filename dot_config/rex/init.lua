@@ -10,6 +10,12 @@
 -- key no longer reaches the terminal. Press it two times to send it.
 rex.bind("ctrl+space>ctrl+space", "pane.send_key", { key = "ctrl+space" })
 
+-- ctrl+] and ctrl+[ show the next tab and the previous tab. These keys do not
+-- use the prefix. They no longer reach the terminal, so ctrl+[ does not send
+-- Escape to a program.
+rex.bind("ctrl+]", "client.tab.next")
+rex.bind("ctrl+[", "client.tab.previous")
+
 -- prefix+u: the status center (usage.lua).
 require("usage")
 rex.bind("ctrl+space>u", "status_center")
