@@ -18,6 +18,19 @@ if [ -z "$SSH_CONNECTION" ]; then
     export SSH_AUTH_SOCK="$HOME/.cache/ssh/agent.sock"
 fi
 
+# --- TMPDIR (when the caller did not set it) ---------------------------------
+# launchd gives each GUI app a TMPDIR. Some programs start zsh with an empty
+# environment, for example Claude Desktop when it reads the shell environment.
+# If TMPDIR is not set, use the same per-user directory that launchd uses.
+# Atuin puts the socket of its daemon in $TMPDIR. If the daemon starts without
+# TMPDIR, the other shells cannot find the socket. Then each command waits
+# for a timeout of some seconds.
+if [ -z "$TMPDIR" ]; then
+    _tmpdir=$(/usr/bin/getconf DARWIN_USER_TEMP_DIR 2>/dev/null)
+    [ -n "$_tmpdir" ] && export TMPDIR="$_tmpdir"
+    unset _tmpdir
+fi
+
 # --- PATH-dependency vars -------------------------------------------------
 export XDG_CONFIG_HOME="$HOME/.config"
 export PYENV_ROOT="$HOME/.pyenv"
