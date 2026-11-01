@@ -159,6 +159,23 @@ check "the cache holds an epoch, not a countdown" "1" \
   "$(cut -f4 "$tmp/claude-usage.fake.cache" | grep -cE '^[0-9]{10}$')"
 rm -rf "$tmp"
 
+# USAGE_MAX_AGE decides if view_main fetches over a cache. A poller keeps the
+# cache fresh, and then the popup must draw it with no fetch.
+# view_over_cache <max_age> : "<fetches> <age notes>" for a cache written now.
+view_over_cache() {
+  local tmp out; tmp=$(mktemp -d)
+  printf 'QUOTA\tcached row\t40\t-\t-\n' > "$tmp/claude-usage.fake.cache"
+  out=$(TMPDIR="$tmp" USAGE_MAX_AGE=$1 bash -c "source '$SCRIPT'
+    $(declare -f p_fake_view p_fake_title p_fake_tag p_fake_normalize)
+    p_fake_fetch() { echo x >> '$tmp/fetched'; printf 'weekly quota: 90 pct, resets 23:45\n'; }
+    PROVIDER=fake view_main </dev/null" 2>/dev/null | strip)
+  printf '%s %s' "$(cat "$tmp/fetched" 2>/dev/null | grep -c x)" \
+    "$(printf '%s\n' "$out" | grep -cE 'updated [0-9]+s ago')"
+  rm -rf "$tmp"
+}
+check "view_main draws a fresh cache with its age and no fetch" "0 1" "$(view_over_cache 90)"
+check "view_main fetches over a cache that is not fresh"        "1 0" "$(view_over_cache 0)"
+
 # --- provider resolution ---------------------------------------------------
 # The provider comes from the process the pane runs now, so every case below
 # feeds a fake process line to the classifier.

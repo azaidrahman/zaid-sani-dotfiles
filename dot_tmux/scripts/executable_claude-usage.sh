@@ -52,6 +52,12 @@ PROVIDERS='claude litellm codex agents'
 #   CODEX_IN_AGENTS=0 ~/.tmux/scripts/claude-usage.sh
 CODEX_IN_AGENTS=${CODEX_IN_AGENTS:-1}
 
+# USAGE_MAX_AGE : a cached blob younger than this many seconds is fresh.
+# view_main draws a fresh blob and does not fetch. The default, 0, fetches
+# each time. Set it only where a poller keeps the cache fresh, as the Rex
+# configuration does (~/.config/rex/scripts/usage.sh).
+USAGE_MAX_AGE=${USAGE_MAX_AGE:-0}
+
 TAB=$'\t'
 c_reset=$'\033[0m'; c_dim=$'\033[2m'; c_bold=$'\033[1m'; c_cyan=$'\033[36m'
 
@@ -802,6 +808,27 @@ provider_hook() {
 
 cache_path() { printf '%s/claude-usage.%s.cache' "${TMPDIR:-/tmp}" "$1"; }
 
+# cache_age <file> : the age of the file in seconds, by the real clock. It
+# prints nothing when the file is missing.
+cache_age() {
+  local mtime
+  mtime=$(stat -f %m "$1" 2>/dev/null) || return 0
+  printf '%s' "$(( $(date +%s) - mtime ))"
+}
+
+# refresh_cache : fetch the blob of the provider, store it in the cache and
+# print it. The blob goes to a temporary file that then replaces the cache,
+# so a reader never sees half a blob. An empty fetch keeps the old cache.
+refresh_cache() {
+  local cache fresh tmp
+  cache=$(cache_path "$PROVIDER")
+  fresh=$(provider_hook blob)
+  [ -n "$fresh" ] || return 0
+  tmp=$(mktemp "$cache.XXXXXX") || return 0
+  if printf '%s\n' "$fresh" > "$tmp"; then mv -f "$tmp" "$cache"; else rm -f "$tmp"; fi
+  printf '%s\n' "$fresh"
+}
+
 # render_view <blob> <note> : hand the blob to the view of the provider.
 render_view() {
   case "$(provider_hook view)" in
@@ -811,24 +838,27 @@ render_view() {
   esac
 }
 
-# view_main : draw the cache, fetch, then draw again. It knows nothing about
-# any single provider.
+# view_main : draw the cache, fetch, then draw again. A fresh cache (see
+# USAGE_MAX_AGE) is drawn with no fetch. It knows nothing about any single
+# provider.
 view_main() {
-  local cache; cache=$(cache_path "$PROVIDER")
-  if [[ -s $cache ]]; then
-    render_view "$(cat "$cache")" "(cached — refreshing…)"
+  local cache age fresh
+  cache=$(cache_path "$PROVIDER")
+  age=$(cache_age "$cache")
+  if [[ -s $cache && -n $age ]] && (( age < USAGE_MAX_AGE )); then
+    render_view "$(cat "$cache")" "(updated ${age}s ago)"
   else
-    clear 2>/dev/null
-    echo
-    render_context
-    printf '  %s%s%s\n\n  %sLoading…%s\n' \
-      "$c_bold" "$(provider_hook title)" "$c_reset" "$c_dim" "$c_reset"
-  fi
-
-  local fresh; fresh=$(provider_hook blob)
-  if [ -n "$fresh" ]; then
-    printf '%s\n' "$fresh" > "$cache"
-    render_view "$fresh" ""
+    if [[ -s $cache ]]; then
+      render_view "$(cat "$cache")" "(cached — refreshing…)"
+    else
+      clear 2>/dev/null
+      echo
+      render_context
+      printf '  %s%s%s\n\n  %sLoading…%s\n' \
+        "$c_bold" "$(provider_hook title)" "$c_reset" "$c_dim" "$c_reset"
+    fi
+    fresh=$(refresh_cache)
+    if [ -n "$fresh" ]; then render_view "$fresh" ""; fi
   fi
 
   echo

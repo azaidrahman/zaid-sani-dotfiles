@@ -6,10 +6,14 @@
 -- of the AI subscription that the focused pane runs. Any key closes the float.
 --
 -- To run the action without the key, use `rex do status_center`.
+--
+-- A poller (scripts/usage-poller.lua) fetches the Claude usage each minute
+-- while a Rex app shows a session. Thus the float draws the usage at once.
 
 local TERMINAL = "com.superlogical.terminal"
 local CONFIG_HOME = os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")
 local SCRIPT = CONFIG_HOME .. "/rex/scripts/usage.sh"
+local POLLER = CONFIG_HOME .. "/rex/scripts/usage-poller.lua"
 
 -- The size that the script gives includes the border of a tmux popup: 2
 -- columns and 2 rows. The frame of a Rex float takes 2 columns and 4 rows.
@@ -106,6 +110,24 @@ local function open(ctx)
     },
   }
 end
+
+-- start_poller starts the poller each time the server loads this file. If a
+-- poller runs already, the new one exits.
+--
+-- The poller needs the rex binary of the server. A command that this file
+-- runs is a child of the process that loads the file, so the parent of the
+-- command is the server. `rex config check` loads the file in the CLI, and
+-- the parent of the command is not a server. Thus a check starts no poller.
+local function start_poller()
+  local ps = rex.exec({ "/bin/sh", "-c", 'ps -o args= -p "$PPID"' }, { timeout = 5 })
+  local rex_bin = ps and ps.ok and ps.stdout:match("^(.-/rex) server run")
+  if not rex_bin then return end
+  rex.exec.start(
+    { rex_bin, "--autostart=false", "do", POLLER, "script=" .. SCRIPT },
+    { detach = true, stdout = false, stderr = false })
+end
+
+start_poller()
 
 rex.action{
   name = "status_center",
