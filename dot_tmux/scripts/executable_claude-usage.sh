@@ -841,15 +841,23 @@ render_view() {
 # view_main : draw the cache, fetch, then draw again. A fresh cache (see
 # USAGE_MAX_AGE) is drawn with no fetch. It knows nothing about any single
 # provider.
+#
+# A resize draws the view again. Rex starts the terminal of a float at 80x24
+# and gives it its real size a moment later, often after the first draw.
+# Without the second draw, the bars keep the width of the first draw.
 view_main() {
-  local cache age fresh
+  local cache age fresh shown='' note=''
+  RESIZED=0
+  trap 'RESIZED=1' WINCH
   cache=$(cache_path "$PROVIDER")
   age=$(cache_age "$cache")
   if [[ -s $cache && -n $age ]] && (( age < USAGE_MAX_AGE )); then
-    render_view "$(cat "$cache")" "(updated ${age}s ago)"
+    shown=$(cat "$cache"); note="(updated ${age}s ago)"
+    render_view "$shown" "$note"
   else
     if [[ -s $cache ]]; then
-      render_view "$(cat "$cache")" "(cached — refreshing…)"
+      shown=$(cat "$cache"); note="(cached — refreshing…)"
+      render_view "$shown" "$note"
     else
       clear 2>/dev/null
       echo
@@ -858,16 +866,30 @@ view_main() {
         "$c_bold" "$(provider_hook title)" "$c_reset" "$c_dim" "$c_reset"
     fi
     fresh=$(refresh_cache)
-    if [ -n "$fresh" ]; then render_view "$fresh" ""; fi
+    if [ -n "$fresh" ]; then shown=$fresh; note=''; render_view "$shown" ""; fi
   fi
+  close_hint
 
-  echo
-  printf '  %s[any key to close]%s' "$c_dim" "$c_reset"
-  local old_stty; old_stty=$(stty -g 2>/dev/null)
+  # Wait for any key. dd reads the key in the background, because `wait`
+  # returns at once when a trapped signal comes. In bash 3.2, a SIGWINCH
+  # does not stop `read` or a dd in the foreground.
+  local old_stty key_pid
+  old_stty=$(stty -g 2>/dev/null)
   stty -echo -icanon min 1 time 0 2>/dev/null
-  dd bs=1 count=1 >/dev/null 2>&1
+  dd bs=1 count=1 <&0 >/dev/null 2>&1 &
+  key_pid=$!
+  while kill -0 "$key_pid" 2>/dev/null; do
+    if (( RESIZED )); then
+      RESIZED=0
+      if [ -n "$shown" ]; then render_view "$shown" "$note"; close_hint; fi
+    fi
+    wait "$key_pid"
+  done
+  trap - WINCH
   if [ -n "$old_stty" ]; then stty "$old_stty" 2>/dev/null; fi
 }
+
+close_hint() { echo; printf '  %s[any key to close]%s' "$c_dim" "$c_reset"; }
 
 # --- popup sizing --------------------------------------------------------
 # `prefix+u` opens a popup with fixed content (a few bars), but the -w/-h of

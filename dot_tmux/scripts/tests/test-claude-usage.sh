@@ -176,6 +176,23 @@ view_over_cache() {
 check "view_main draws a fresh cache with its age and no fetch" "0 1" "$(view_over_cache 90)"
 check "view_main fetches over a cache that is not fresh"        "1 0" "$(view_over_cache 0)"
 
+# Rex starts the terminal of a float at 80x24 and gives it its real size a
+# moment later. view_main must draw again on SIGWINCH, or the bars keep the
+# width of the first draw.
+tmp=$(mktemp -d)
+printf 'QUOTA\tcached row\t40\t-\t-\n' > "$tmp/claude-usage.fake.cache"
+mkfifo "$tmp/keys"
+TMPDIR="$tmp" USAGE_MAX_AGE=90 bash -c "source '$SCRIPT'
+  $(declare -f p_fake_view p_fake_title p_fake_tag p_fake_fetch p_fake_normalize)
+  PROVIDER=fake view_main" < "$tmp/keys" > "$tmp/out" 2>/dev/null &
+view=$!
+exec 3> "$tmp/keys"
+sleep 0.5; kill -WINCH "$view"; sleep 1.5
+printf 'x' >&3; exec 3>&-
+wait "$view"
+check "view_main draws again after a resize" "2" "$(strip < "$tmp/out" | grep -c 'Fake usage')"
+rm -rf "$tmp"
+
 # --- provider resolution ---------------------------------------------------
 # The provider comes from the process the pane runs now, so every case below
 # feeds a fake process line to the classifier.
