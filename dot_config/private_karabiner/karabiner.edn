@@ -45,7 +45,7 @@
 
 ;; BEGIN HELP-TEXT (auto-generated from config/help-text.yaml)
  :tos {:show-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
-                              :text "w:WA, W:messages, e:obsidian, t:ghostty, i:IINA, I:ino, o:todoist(app), p:gchat, \\:switch, s:slack, f:cal, F:alfred, g:iPhone, G:safari, j:jira, k:KM, l:gmail(gmd), x:mixlet, v:chrome, b:telegram, n:todoist, 0:claude, 1:arc(work), 2:arc(zaid), 3:arc(research)"}}
+                              :text "w:WA, W:messages, e:obsidian, r:rex, t:ghostty, i:IINA, I:ino, o:todoist(app), p:gchat, \\:switch, s:slack, f:cal, F:alfred, g:iPhone, G:safari, j:jira, k:KM, l:gmail(gmd), x:mixlet, v:chrome, b:telegram, n:todoist, 0:claude, 1:arc(work), 2:arc(zaid), 3:arc(research)"}}
        :clear-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
                                :text ""}}
        :show-ws-help {:noti {:id "org.pqrs.notificaion_message_workspace"
@@ -119,6 +119,7 @@
     ;; Unshifted shortcuts
     [:w [:open "Whatsapp"]                :app-launch]
     [:e [:open "Obsidian"]                :app-launch]
+    [:r [:open "Rex Beta"]                :app-launch]
     [:t "$HOME/.config/karabiner/scripts/ghostty-window.sh":app-launch]
     [:i [:open "IINA"]                    :app-launch]
     [:o [:open "Todoist"]                 :app-launch]
@@ -138,7 +139,6 @@
     [:1 "$HOME/.config/karabiner/scripts/arc-space.sh Work":app-launch]
     [:2 "$HOME/.config/karabiner/scripts/arc-space.sh Zaid":app-launch]
     [:3 "$HOME/.config/karabiner/scripts/arc-space.sh Research":app-launch]
-    ; [:r [:open "Arc"]                     :app-launch]
     ; [:y [:open "Sioyek"]                  :app-launch]
     ; [:u [:open "Conductor"]               :app-launch]
     ; [:d [:open "T3 Code (Alpha)"]         :app-launch]
