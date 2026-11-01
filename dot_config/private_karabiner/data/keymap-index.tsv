@@ -107,7 +107,8 @@ hyper	⇪	-	alfred arc bookmarks	!CTOShyphen
 hyper	⇪	=	alfred arc opentabs	!CTOSequal_sign
 hyper	⇪	\	alfred pin bookmarks	!CTOSbackslash
 hyper	⇪	e	alfred open windows	!CTOSe
-hyper	⇪	r	alfred bitbucket repos	!CTOSr
+hyper	⇪	r	alfred rex tabs	!CTOSt
+hyper	⇪	⇧r	alfred bitbucket repos	!CTOSr
 hyper	⇪	i	mouseless overlay	!CTOSi
 hyper	⇪	g	alfredo new task	!CTOSg
 hyper	⇪	⌃g	alfredo all tasks	!CSf13

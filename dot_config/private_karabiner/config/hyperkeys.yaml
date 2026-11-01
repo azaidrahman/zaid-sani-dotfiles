@@ -99,7 +99,8 @@ hyper:
     -: "!CTOSe" # alfred open windows
 
   r:
-    -: "!CTOSr" # alfred bitbucket repos
+    -: "!CTOSt" # alfred rex tabs
+    shift: "!CTOSr" # alfred bitbucket repos
 
   i:
     -: "!CTOSi" # mouseless overlay

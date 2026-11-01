@@ -65,7 +65,7 @@
        :clear-l3-help {:noti {:id "org.pqrs.notificaion_message_layer3"
                               :text ""}}
        :show-hyper-help {:noti {:id "org.pqrs.notificaion_message_hyper"
-                                :text "h:← ⇧prevTab ⌘sel ⌥word ⌥⌘selWord\nj:↓ ⇧nextApp ⌘sel ⌥⌘sel3 ⌃expose\nk:↑ ⇧prevApp ⌘sel ⌥⌘sel3\nl:→ ⇧nextTab ⌘sel ⌥word ⌥⌘selWord\nu:home ⌘sel\np:end ⌘sel\nx:⌫ ⇧⌦\nf:expose\nc:alfred clip\ns:alfred snippet\nz:alfred zuno search\n-:alfred arc bookmarks\n=:alfred arc opentabs\n\\:alfred pin bookmarks\ne:alfred open windows\nr:alfred bitbucket repos\ni:mouseless overlay\ng:alfredo new task ⌃alfredo all tasks\n2:alfred jira ⇧alfred bitbucket prs\n8:alfred menu bar search\n0:ice bar\nq:mouseless freekey (hold)\no:⌃alfred audio out\n⌘spa:emoji  esc:caps"}}
+                                :text "h:← ⇧prevTab ⌘sel ⌥word ⌥⌘selWord\nj:↓ ⇧nextApp ⌘sel ⌥⌘sel3 ⌃expose\nk:↑ ⇧prevApp ⌘sel ⌥⌘sel3\nl:→ ⇧nextTab ⌘sel ⌥word ⌥⌘selWord\nu:home ⌘sel\np:end ⌘sel\nx:⌫ ⇧⌦\nf:expose\nc:alfred clip\ns:alfred snippet\nz:alfred zuno search\n-:alfred arc bookmarks\n=:alfred arc opentabs\n\\:alfred pin bookmarks\ne:alfred open windows\nr:alfred rex tabs ⇧alfred bitbucket repos\ni:mouseless overlay\ng:alfredo new task ⌃alfredo all tasks\n2:alfred jira ⇧alfred bitbucket prs\n8:alfred menu bar search\n0:ice bar\nq:mouseless freekey (hold)\no:⌃alfred audio out\n⌘spa:emoji  esc:caps"}}
        :clear-hyper-help {:noti {:id "org.pqrs.notificaion_message_hyper"
                                  :text ""}}
 }
@@ -214,7 +214,8 @@
     [:!QWERe           :!CTOSe]  ;; alfred open windows
 
     ;; r
-    [:!QWERr           :!CTOSr]  ;; alfred bitbucket repos
+    [:!QWERr           :!CTOSt]  ;; alfred rex tabs
+    [:!SQWERr          :!CTOSr]  ;; alfred bitbucket repos
 
     ;; i
     [:!QWERi           :!CTOSi]  ;; mouseless overlay
