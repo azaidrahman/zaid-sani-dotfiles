@@ -111,23 +111,9 @@ local function open(ctx)
   }
 end
 
--- start_poller starts the poller each time the server loads this file. If a
--- poller runs already, the new one exits.
---
--- The poller needs the rex binary of the server. A command that this file
--- runs is a child of the process that loads the file, so the parent of the
--- command is the server. `rex config check` loads the file in the CLI, and
--- the parent of the command is not a server. Thus a check starts no poller.
-local function start_poller()
-  local ps = rex.exec({ "/bin/sh", "-c", 'ps -o args= -p "$PPID"' }, { timeout = 5 })
-  local rex_bin = ps and ps.ok and ps.stdout:match("^(.-/rex) server run")
-  if not rex_bin then return end
-  rex.exec.start(
-    { rex_bin, "--autostart=false", "do", POLLER, "script=" .. SCRIPT },
-    { detach = true, stdout = false, stderr = false })
-end
-
-start_poller()
+-- Start the poller each time the server loads this file. If a poller runs
+-- already, the new one exits.
+require("background").start({ POLLER, "script=" .. SCRIPT })
 
 rex.action{
   name = "status_center",

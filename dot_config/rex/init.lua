@@ -42,3 +42,7 @@ rex.bind("ctrl+space>=", "client.font.reset")
 -- prefix+u: the status center (usage.lua).
 require("usage")
 rex.bind("ctrl+space>u", "status_center")
+
+-- prefix+X: open a tab or a session that closed (closed_tabs.lua).
+require("closed_tabs")
+rex.bind("ctrl+space>shift+x", "closed_tabs")
