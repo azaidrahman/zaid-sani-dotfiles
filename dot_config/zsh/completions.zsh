@@ -14,7 +14,7 @@
 # Lazy-load pattern:
 #   `_lazy_completion <cmd> '<code>'` defines a thin wrapper for <cmd>. The first
 #   time you RUN <cmd>, the wrapper removes itself, runs <code> to load the real
-#   completion, then execs <cmd>. Tradeoff: `<cmd> <TAB>` does nothing until
+#   completion, then runs <cmd>. If <code> fails, <cmd> still runs. Tradeoff: `<cmd> <TAB>` does nothing until
 #   you've invoked <cmd> once this session. Worth it — these loaders are slow
 #   (they shell out to the tool) and most shells never touch most of them.
 #
@@ -28,7 +28,14 @@
 
 # Lazy-load a command's completion on first invocation.
 #   $1 = command name, $2 = code that loads its completion.
-_lazy_completion() { eval "$1() { unfunction $1; $2; $1 \"\$@\"; }"; }
+#
+# If the completion code fails, the wrapper still runs the real command.
+# Claude Code copies this wrapper into its agent shell. That shell does not
+# get the `_` helpers, and its completion system is not set up. There, a
+# failed load stopped the function before the command ran, so `terraform`
+# and `helm` did nothing. The `always` block clears the error. `command`
+# runs the binary, not a function with the same name.
+_lazy_completion() { eval "$1() { unfunction $1; { { $2 } 2>/dev/null } always { TRY_BLOCK_ERROR=0 }; command $1 \"\$@\"; }"; }
 
 # Run bashcompinit at most once (needed by `complete -C` style completions).
 _ensure_bashcompinit() {
