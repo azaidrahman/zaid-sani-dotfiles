@@ -22,9 +22,10 @@ arc_windows() {
 
 windows_before=$(arc_windows | tr '\n' ' ')
 
-# The AppleScript prints the name of the window to focus. If it opens a new
-# window, it prints nothing.
-wName=$(osascript - "$target" <<'EOF'
+# The AppleScript prints the Arc id of the window to focus. If it opens a new
+# window, it prints nothing. Do not use the name of the window. Two windows
+# can have the same name, and then the wrong window can get the focus.
+wId=$(osascript - "$target" <<'EOF'
 on run argv
   set spaceName to item 1 of argv
   -- Arc reports some windows that are not on screen. Count only the windows
@@ -34,7 +35,7 @@ on run argv
     set axNames to name of every window
   end tell
   tell application "Arc"
-    -- Collect the names of the windows that show the space, front window
+    -- Collect the ids of the windows that show the space, front window
     -- first. Index references such as window 1 fail in Arc, so iterate.
     set matches to {}
     set frontShows to false
@@ -45,7 +46,7 @@ on run argv
         -- Skip hidden windows. They cannot get the focus, so they stop the
         -- cycle.
         if (visible of w) and (title of active space of w is spaceName) and (axNames contains (name of w)) then
-          set end of matches to (name of w)
+          set end of matches to (id of w)
           if k is 1 then set frontShows to true
         end if
       end try
@@ -77,8 +78,8 @@ end run
 EOF
 )
 
-if [ -n "$wName" ]; then
-  exec "$scripts/arc-focus-window.sh" "$wName"
+if [ -n "$wId" ]; then
+  exec "$scripts/arc-focus-window.sh" "$wId"
 fi
 
 # The AppleScript opened a new window. Arc does not report a new window to

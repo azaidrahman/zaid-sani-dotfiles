@@ -14,8 +14,10 @@ set -eu
 space_name="${1:?usage: arc-tab.sh <space name> <tab title>}"
 tab_title="${2:?usage: arc-tab.sh <space name> <tab title>}"
 
-# Choose the window and print its name. This step changes nothing.
-window_name=$(osascript - "$space_name" "$tab_title" <<'EOF'
+# Choose the window and print its Arc id. This step changes nothing. Do not
+# use the name of the window. Two windows can have the same name, and the
+# name changes when the tab changes.
+window_id=$(osascript - "$space_name" "$tab_title" <<'EOF'
 on run argv
   set spaceName to item 1 of argv
   set tabTitle to item 2 of argv
@@ -26,43 +28,43 @@ on run argv
     set axNames to name of every window
   end tell
   tell application "Arc"
-    set wName to ""
-    set frontName to ""
+    set wId to ""
+    set frontId to ""
     -- Iterate, because index references such as window 1 fail in Arc.
     repeat with w in windows
       try
         if (visible of w) and (axNames contains (name of w)) then
-          if frontName is "" then set frontName to name of w
+          if frontId is "" then set frontId to id of w
           if title of active space of w is spaceName then
-            set wName to name of w
+            set wId to id of w
             exit repeat
           end if
         end if
       end try
     end repeat
-    if wName is "" then set wName to frontName
-    if wName is "" then error "No Arc window can get the focus"
+    if wId is "" then set wId to frontId
+    if wId is "" then error "No Arc window can get the focus"
   end tell
-  return wName
+  return wId
 end run
 EOF
 )
 
-# Focus the window before the tab changes. The name of a window is the title
-# of its active tab, so a different tab gives the window a different name.
-"$(dirname "$0")/arc-focus-window.sh" "$window_name" || true
+# Focus the window before the tab changes. arc-focus-window.sh finds the
+# aerospace window by its title, and the title changes with the tab.
+"$(dirname "$0")/arc-focus-window.sh" "$window_id" || true
 
-# Select the tab in the window that has that name.
-osascript - "$window_name" "$space_name" "$tab_title" <<'EOF'
+# Select the tab in the window that has that id.
+osascript - "$window_id" "$space_name" "$tab_title" <<'EOF'
 on run argv
-  set wName to item 1 of argv
+  set wId to item 1 of argv
   set spaceName to item 2 of argv
   set tabTitle to item 3 of argv
   tell application "Arc"
     repeat with w in windows
       set isTarget to false
       try
-        set isTarget to (visible of w) and (name of w is wName)
+        set isTarget to (id of w is wId)
       end try
       if isTarget then
         repeat with s in spaces of w
