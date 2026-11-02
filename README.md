@@ -54,9 +54,10 @@ works locally, over SSH, and in non-login shells:
   `run_after_ensure-ssh-agent.sh` keeps `com.zaid.ssh-agent` loaded.
 - **`twg` Bitbucket token** — all machines use one token, the `TWG.BB.API_TOKEN`
   item in the work vault. On each apply, `run_after_sync-twg-bb-token.sh`
-  copies the token into `~/.config/twg/auth.conf`. To rotate the token, change
-  the item, then run `chezmoi apply` on each machine. Keep only one item with
-  this title, or the script cannot choose one and changes nothing.
+  copies the token into `~/.config/twg/auth.conf`. The script finds the item by
+  its ID, so a second item with the same title does not stop it. To rotate the
+  token, change the same item, then run `chezmoi apply` on each machine. If you
+  make a new item, change the ID in the script.
 
 The age key and the 1Password service-account tokens are the only things you
 must place on a new machine by hand; everything else bootstraps from them.
