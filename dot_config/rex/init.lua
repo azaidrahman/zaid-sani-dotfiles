@@ -16,6 +16,38 @@ rex.bind("ctrl+space>ctrl+space", "pane.send_key", { key = "ctrl+space" })
 rex.bind("ctrl+]", "client.tab.next")
 rex.bind("ctrl+[", "client.tab.previous")
 
+-- cmd+e shows or hides the sidebar, the same as in Obsidian. The app also
+-- binds cmd+/ to this action.
+rex.bind("cmd+e", "client.sidebar.toggle")
+
+-- ctrl+h, ctrl+j, ctrl+k, and ctrl+l focus the pane on the left, below, above,
+-- or on the right. This copies vim-tmux-navigator in tmux.
+--
+-- If the foreground program of the pane is in NAVIGATOR_PROGRAMS, the key goes
+-- to that program. nvim then moves between its own windows. At the edge, nvim
+-- runs `rex focus` (nvim/lua/zaid/plugins/vim-tmux-navigator.lua). tmux is in
+-- the list, so that tmux in a Rex pane still gets the keys.
+--
+-- A function binding that returns false sends the key to the terminal.
+local NAVIGATOR_PROGRAMS = { nvim = true, vim = true, view = true, fzf = true, tmux = true }
+
+local function navigate(direction)
+  return function(ctx)
+    local process = rex.block.call("com.superlogical.terminal", "process",
+      { block_id = ctx.block_id }) or {}
+    if NAVIGATOR_PROGRAMS[(process.foreground or {}).name] then
+      return false
+    end
+    rex.session.focus_direction{ session_id = ctx.session_id, direction = direction }
+    return true
+  end
+end
+
+rex.bind("ctrl+h", navigate("left"))
+rex.bind("ctrl+j", navigate("down"))
+rex.bind("ctrl+k", navigate("up"))
+rex.bind("ctrl+l", navigate("right"))
+
 -- The default text size is the zoomed-in size. Rex keeps it in Settings, as
 -- Terminal Font Size 20 (Workspace.terminalFontPointSize). This file cannot
 -- set it. prefix+- sets the text to the zoomed-out size. prefix+= sets the
