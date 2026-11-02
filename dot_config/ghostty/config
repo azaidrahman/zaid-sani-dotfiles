@@ -16,6 +16,16 @@ custom-shader = shaders/bloom025.glsl
 # quit after last window closed
 quit-after-last-window-closed = false
 
+# Ghostty runs in the background for the quick terminal (ctrl+`). A LaunchAgent
+# starts it at login (com.zaid.ghostty.plist). Do not open a window at launch.
+# To open a normal window, open Ghostty again (Spotlight or `open -a Ghostty`).
+initial-window = false
+
+# Hide Ghostty from the Dock and the app switcher (cmd+tab). Then you cannot
+# quit it by accident, which stops the quick terminal until the next login.
+# A change to this value applies only after a full restart of Ghostty.
+macos-hidden = always
+
 # single instance, true by default
 gtk-single-instance = false
 
