@@ -1,7 +1,7 @@
 {
     "env": {
         "CLAUDE_CODE_ENABLE_AUTO_MODE": "1",
-        "CLAUDE_CODE_PLUGIN_DIRS": "~/.claude/mods/workbench"
+        "CLAUDE_CODE_PLUGIN_DIRS": "~/.claude/mods/workbench:~/.claude/mods/chat-cards"
     },
     "permissions": {
         "allow": [
@@ -31,6 +31,15 @@
                     {
                         "type": "command",
                         "command": "bash ~/.claude/hooks/tag-pane-session.sh",
+                        "timeout": 5
+                    }
+                ]
+            },
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "/bin/sh -c 'rex __internal session-start --agent claude 2>/dev/null || true'",
                         "timeout": 5
                     }
                 ]
