@@ -10,9 +10,12 @@ return {
 		-- Custom formatter overrides
 		conform.formatters.prettier = {
 			args = {
-				"--stdin-filepath", "$FILENAME",
-				"--tab-width", "4",
-				"--use-tabs", "false",
+				"--stdin-filepath",
+				"$FILENAME",
+				"--tab-width",
+				"4",
+				"--use-tabs",
+				"false",
 				"--single-attribute-per-line",
 			},
 		}
@@ -20,9 +23,12 @@ return {
 			command = "prettier",
 			stdin = true,
 			args = {
-				"--stdin-filepath", "$FILENAME",
-				"--tab-width", "2",
-				"--use-tabs", "false",
+				"--stdin-filepath",
+				"$FILENAME",
+				"--tab-width",
+				"2",
+				"--use-tabs",
+				"false",
 			},
 		}
 		conform.formatters.shfmt = {
@@ -60,11 +66,17 @@ return {
 				lua = { "stylua" },
 			},
 			notify_on_error = true,
-			format_on_save = {
-				lsp_fallback = true,
-				async = false,
-				timeout_ms = 1000,
-			},
+			format_on_save = function(bufnr)
+				if vim.bo[bufnr].filetype == "yaml" then
+					return
+				end
+
+				return {
+					lsp_fallback = true,
+					async = false,
+					timeout_ms = 1000,
+				}
+			end,
 		})
 
 		vim.keymap.set({ "n", "v" }, "<leader>mp", function()
