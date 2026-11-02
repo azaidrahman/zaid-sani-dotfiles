@@ -46,3 +46,11 @@ rex.bind("ctrl+space>u", "status_center")
 -- prefix+X: open a tab or a session that closed (closed_tabs.lua).
 require("closed_tabs")
 rex.bind("ctrl+space>shift+x", "closed_tabs")
+
+-- Keep a copy of the tabs of each host for the Alfred workflow Rex Tabs
+-- (scripts/remote-tabs-watcher.lua). If a watcher runs already, the new one
+-- exits.
+require("background").start({
+  (os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config"))
+    .. "/rex/scripts/remote-tabs-watcher.lua",
+})
