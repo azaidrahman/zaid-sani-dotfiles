@@ -52,6 +52,16 @@ works locally, over SSH, and in non-login shells:
   — Claude Code injects exactly that via `GIT_CONFIG_*` — still hit the shim.
 - **SSH** — driven by the 1Password SSH agent (`private_Library/LaunchAgents`);
   `run_after_ensure-ssh-agent.sh` keeps `com.zaid.ssh-agent` loaded.
+- **`op-sa`** — runs `op` with the service-account token for the vault in the
+  arguments. A service account needs no Touch ID. Use `op-sa` in scripts and
+  agent tools, because an agent can run on a Mac where you are not. It cannot
+  read the Private vault.
+- **The `op` wrapper (`~/.local/shims/op`)** — 1Password shows the approval
+  prompt on the Mac where `op` runs. If an agent on one Mac calls `op` and you
+  sit at the other Mac, the wrapper runs the command on your Mac over SSH. The
+  prompt then opens where you can see it. The wrapper moves only commands that
+  print a secret, such as `op read` and `op item get`. All other calls run
+  with no change. `~/.local/shims` is first in `PATH`, before Homebrew.
 - **`twg` Bitbucket token** — all machines use one token, the `TWG.BB.API_TOKEN`
   item in the work vault. On each apply, `run_after_sync-twg-bb-token.sh`
   copies the token into `~/.config/twg/auth.conf`. The script finds the item by

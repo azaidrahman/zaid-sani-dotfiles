@@ -2,11 +2,21 @@
 # ssh-agent-seed — load this machine's SSH keys into the per-login session
 # ssh-agent from 1Password, once, with a 12h ttl. Idempotent and quiet.
 #
+#   ssh-agent-seed              service account first, then Touch ID
+#   ssh-agent-seed --headless   service account only, never a prompt
+#
 #   - Inbound SSH ($SSH_CONNECTION set): no-op — use the forwarded agent.
 #   - Agent already holds identities: no-op.
-#   - Otherwise: op read each key (ONE Touch ID, batched) | ssh-add -t 43200.
+#   - Otherwise: read each key with op-sa (service-account token, no Touch
+#     ID) | ssh-add -t 43200. If op-sa cannot read a key, read it with plain
+#     op, which asks for Touch ID. --headless skips that step.
 #
-# OP_SERVICE_ACCOUNT_TOKEN must NOT be set here, or op would skip biometric.
+# The op wrapper (~/.local/shims/op) runs `ssh-agent-seed --headless` when it
+# needs SSH to the peer Mac and the agent is empty. The service-account tokens
+# can read these keys already, so a load with no prompt adds no new access.
+
+headless=0
+[ "${1:-}" = "--headless" ] && headless=1
 
 [ -n "$SSH_CONNECTION" ] && exit 0          # inbound: ride the forwarded agent
 [ -z "$SSH_AUTH_SOCK" ] && exit 0           # no agent configured
@@ -16,7 +26,7 @@
 ssh-add -l >/dev/null 2>&1
 case $? in
   0) exit 0 ;;                              # already seeded
-  2) [ -e /dev/tty ] && echo "ssh-agent-seed: agent unreachable at $SSH_AUTH_SOCK" >/dev/tty
+  2) [ "$headless" -eq 0 ] && [ -e /dev/tty ] && echo "ssh-agent-seed: agent unreachable at $SSH_AUTH_SOCK" >/dev/tty
      exit 1 ;;
 esac
 
@@ -29,7 +39,14 @@ op://Personal Development/Auth.aqua/private key" ;;
   *)    keys="op://{{ .workVaultName }}/Signing.BB.GD/private key" ;;
 esac
 
-[ -e /dev/tty ] && printf 'ssh-agent-seed: loading SSH keys from 1Password (approve once)…\n' >/dev/tty
+[ "$headless" -eq 0 ] && [ -e /dev/tty ] && printf 'ssh-agent-seed: loading SSH keys from 1Password…\n' >/dev/tty 2>/dev/null
+
+# Read one key: service account first, then Touch ID unless --headless.
+read_key() {
+  op-sa read "$1" 2>/dev/null && return 0
+  [ "$headless" -eq 1 ] && return 1
+  op read "$1"
+}
 
 rc=0
 # Read each private key in openssh format and add with a 12h lifetime.
@@ -41,10 +58,10 @@ IFS='
 '
 _seed_tmp=$(mktemp /tmp/.ssh-agent-seed.XXXXXX)
 for ref in $keys; do
-  op read "${ref}?ssh-format=openssh" 2>"$_seed_tmp" | ssh-add -t 43200 - >/dev/null 2>&1
+  read_key "${ref}?ssh-format=openssh" 2>"$_seed_tmp" | ssh-add -t 43200 - >/dev/null 2>&1
   # shellcheck disable=SC2181  # pipeline exit status intentionally checked after
   if [ $? -ne 0 ]; then
-    if [ -e /dev/tty ]; then
+    if [ "$headless" -eq 0 ] && [ -e /dev/tty ]; then
       echo "ssh-agent-seed: failed to load ${ref}" >/dev/tty
       [ -s "$_seed_tmp" ] && cat "$_seed_tmp" >/dev/tty 2>/dev/null
     fi
