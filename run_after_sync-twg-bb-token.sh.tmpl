@@ -10,13 +10,16 @@
 #
 #   Vault:      the work vault (workVaultName)
 #   Title:      TWG.BB.API_TOKEN
+#   ID:         oteryhvh3l7fgf6vyeu5d5oyl4
 #   Category:   API Credential
 #   credential: an Atlassian API token for Bitbucket
 #
-# Keep only one item with this title. If two items have the title, `op read`
-# cannot choose one, and this script changes nothing.
+# The script finds the item by its ID, not by its title. If two items have
+# the same title, `op read` cannot find an item by the title. The ID points to
+# one item only. The ID is not secret. It gives no access without the vault.
 #
-# To rotate the token, put the new token in the item. Then run `chezmoi apply`
+# To rotate the token, put the new token in the same item. Do not make a new
+# item, because a new item has a different ID. Then run `chezmoi apply`
 # on each machine. The script runs on each apply. It reads 1Password one time,
 # and it writes the file only when the token is different.
 #
@@ -27,7 +30,7 @@ set -u
 
 CONF="$HOME/.config/twg/auth.conf"
 SA_ENTRY="op-service-account-token"
-REF="op://{{ .workVaultName }}/TWG.BB.API_TOKEN/credential"
+REF="op://{{ .workVaultName }}/oteryhvh3l7fgf6vyeu5d5oyl4/credential"
 
 note() { printf 'twg bitbucket token: %s\n' "$1" >&2; }
 
