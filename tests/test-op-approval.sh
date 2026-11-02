@@ -27,7 +27,7 @@ stub() {
 }
 
 LOG=$tmp/log
-SEEDED=$tmp/seeded
+
 mkdir -p "$tmp/home" "$tmp/shims"
 cp "$repo_root/dot_local/shims/executable_op" "$tmp/shims/op"
 chmod +x "$tmp/shims/op"
@@ -49,17 +49,16 @@ stub "$tmp/bin/scutil" <<'SH'
 echo "${FAKE_HOST:-aqua}"
 SH
 
+# Tripwires: the wrapper must never touch the ssh-agent or load keys. A call
+# adds a line to the log, so each case below fails.
 stub "$tmp/bin/ssh-add" <<'SH'
 #!/bin/sh
-[ -f "$SEEDED" ] && exit 0
-exit "${FAKE_AGENT_RC:-0}"
+echo "UNEXPECTED ssh-add $*" >>"$LOG"
 SH
 
 stub "$tmp/bin/ssh-agent-seed" <<'SH'
 #!/bin/sh
-echo "SEED $*" >>"$LOG"
-[ "${FAKE_SEED_OK:-1}" = 1 ] && : >"$SEEDED"
-exit 0
+echo "UNEXPECTED ssh-agent-seed $*" >>"$LOG"
 SH
 
 # The ssh stub answers the idle probe, or runs the command in zsh (the login
@@ -93,9 +92,6 @@ SH
 stub "$tmp/peerbin/op" <<'SH'
 #!/bin/sh
 { echo "PEER from=${OP_APPROVE_FROM:-}"; for a in "$@"; do echo "arg=$a"; done; } >>"$LOG"
-if [ "$1" = inject ]; then
-    { printf 'stdin='; cat; echo; } >>"$LOG"
-fi
 SH
 
 # Skip the -e script lines, and log the message and the title.
@@ -109,7 +105,7 @@ LOCAL_PATH="$tmp/shims:$tmp/bin:/usr/bin:/bin"
 PEER_PATH="$tmp/shims:$tmp/peerbin:/usr/bin:/bin"
 
 # check NAME WANT [VAR=value ...] -- [op args ...]
-# Defaults: this Mac is aqua, idle 600 s; the peer is idle 5 s; agent has keys.
+# Defaults: this Mac is aqua, idle 600 s; the peer is idle 5 s.
 check() {
     local name=$1 want=$2
     shift 2
@@ -120,11 +116,10 @@ check() {
     done
     shift
     : >"$LOG"
-    rm -f "$SEEDED"
-    env -i HOME="$tmp/home" PATH="$LOCAL_PATH" LOG="$LOG" SEEDED="$SEEDED" \
+    env -i HOME="$tmp/home" PATH="$LOCAL_PATH" LOG="$LOG" \
         PEER_PATH="$PEER_PATH" FAKE_LOCAL_IDLE=600 FAKE_PEER_IDLE=5 \
         ${envs[@]+"${envs[@]}"} \
-        "$tmp/shims/op" "$@" <"${STDIN_FILE:-/dev/null}" >/dev/null 2>&1 || true
+        "$tmp/shims/op" "$@" </dev/null >/dev/null 2>&1 || true
     local got
     got=$(cat "$LOG")
     [ "$got" = "$want" ] || fail "$name
@@ -144,12 +139,11 @@ check "you are at this Mac: run here" "$local_read" FAKE_LOCAL_IDLE=5 -- read "$
 check "you are at the peer: run there, with the same args" "$peer_read" -- read "$ref"
 check "the peer is idle longer: run here" "$local_read" FAKE_PEER_IDLE=9000 -- read "$ref"
 check "a forced peer skips the idle checks" "$peer_read" OP_APPROVE_HOST=onyx FAKE_LOCAL_IDLE=0 -- read "$ref"
+check "a forced host that is not aqua or onyx: run here" "$local_read" OP_APPROVE_HOST=evil.example -- read "$ref"
 check "a service-account token: run here" "$local_read" OP_SERVICE_ACCOUNT_TOKEN=t -- read "$ref"
 check "an inbound SSH call: run here" "$local_read" SSH_CONNECTION="1 2 3 4" -- read "$ref"
 check "the peer is down: run here" "$local_read" FAKE_SSH_DOWN=1 -- read "$ref"
 check "SSH fails for the command: run here" "$local_read" FAKE_SSH_CMD_DOWN=1 -- read "$ref"
-check "an empty agent is seeded with no prompt" $'SEED --headless\n'"$peer_read" FAKE_AGENT_RC=1 -- read "$ref"
-check "the seed fails: run here" $'SEED --headless\n'"$local_read" FAKE_AGENT_RC=1 FAKE_SEED_OK=0 -- read "$ref"
 check "op run stays here" $'LOCAL\narg=run\narg=--\narg=env' -- run -- env
 check "a file output stays here" $'LOCAL\narg=read\narg=--out-file=/tmp/x\narg=r' -- read --out-file=/tmp/x r
 check "a short -o in a group stays here" $'LOCAL\narg=read\narg=-no\narg=/tmp/x\narg=r' -- read -no /tmp/x r
@@ -158,10 +152,7 @@ check "global flags before item get" \
     $'SSH host=onyx stdin=no\nNOTIFY op --format json item get LiteLLM login | 1Password request from aqua\nPEER from=aqua\narg=--format\narg=json\narg=item\narg=get\narg=LiteLLM login' \
     -- --format json item get "LiteLLM login"
 
-printf 'KEY={{ op://V/i/f }}' >"$tmp/stdin"
-STDIN_FILE=$tmp/stdin check "inject sends stdin to the peer" \
-    $'SSH host=onyx stdin=yes\nNOTIFY op inject | 1Password request from aqua\nPEER from=aqua\narg=inject\nstdin=KEY={{ op://V/i/f }}' \
-    -- inject
+check "inject stays here: the notification cannot show its secrets" $'LOCAL\narg=inject' -- inject
 
 # --- op-sa ----------------------------------------------------------------------
 

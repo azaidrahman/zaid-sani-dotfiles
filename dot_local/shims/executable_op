@@ -28,27 +28,34 @@
 #   - You used the peer less recently than this Mac.
 #   - SSH to the peer fails.
 #
-# The wrapper moves only these commands, because they print a secret and do
-# not touch local files:
-#   read, inject (stdin to stdout), item get, item list, vault get,
-#   vault list, document get (to stdout).
-# For example, `op run` starts a child process with the secrets. That process
-# must run on this Mac, so `op run` stays here.
+# The wrapper moves only these commands, because they print a secret, do not
+# touch local files, and name the secret in their arguments:
+#   read, item get, item list, vault get, vault list, document get (to stdout).
+# The notification on the peer shows the arguments, so you can see which
+# secret you approve. For example, `op run` starts a child process with the
+# secrets. That process must run on this Mac, so `op run` stays here.
+# `op inject` also stays here: it reads its template from stdin, so the
+# notification cannot show which secrets it reads. One approval could then
+# give many secrets to a Mac that is compromised.
 #
 # Each call to the peer is a new SSH session, and 1Password asks for approval
 # again for each new session. Most agent tools use op-sa (service-account
 # tokens, no prompt), so these calls are rare.
 #
-# SSH to the peer needs the keys in the session ssh-agent. If the agent is
-# empty, the wrapper runs `ssh-agent-seed --headless` first. That command reads
-# the keys with the service-account tokens, with no prompt.
+# SSH to the peer uses Tailscale SSH, which allows the connection from the
+# Tailscale policy, not from SSH keys. So the wrapper does not need or load
+# keys in the session ssh-agent.
 #
 # Settings:
-#   OP_APPROVE_HOST=<peer>   Always send the prompt to <peer>.
+#   OP_APPROVE_HOST=<peer>   Always send the prompt to <peer>. The peer must
+#                            be aqua or onyx. For any other value, the command
+#                            runs here.
 #   OP_APPROVE_HOST=local    Never move a command.
-#   OP_APPROVE_PEERS="a b"   The peers to check. The default comes from the
-#                            host name: aqua checks onyx, and onyx checks aqua.
 #   OP_APPROVE_AWAY_SECS=60  This Mac is "not in use" after this idle time.
+#
+# The peer comes from the host name: aqua checks onyx, and onyx checks aqua.
+# The list is fixed in this file, so a variable cannot send a request (and
+# the output that comes back) to a different host.
 
 set -u
 
@@ -132,7 +139,7 @@ is_movable() {
         [ $# -gt 0 ] && shift
     done
     case $cmd:$action in
-        read:*|inject:*) return 0 ;;
+        read:*) return 0 ;;
         item:get|item:list|vault:get|vault:list|document:get) return 0 ;;
     esac
     return 1
@@ -159,10 +166,12 @@ if [ -z "$forced" ]; then
     [ "$local_idle" -ge "${OP_APPROVE_AWAY_SECS:-60}" ] || run_local "$@"
 fi
 
+# Only these two Macs can receive a request.
 if [ -n "$forced" ]; then
-    peers=$forced
-elif [ -n "${OP_APPROVE_PEERS:-}" ]; then
-    peers=$OP_APPROVE_PEERS
+    case $forced in
+        aqua|onyx) peers=$forced ;;
+        *) peers="" ;;
+    esac
 else
     case $(scutil --get LocalHostName 2>/dev/null | tr '[:upper:]' '[:lower:]') in
         aqua) peers=onyx ;;
@@ -171,17 +180,6 @@ else
     esac
 fi
 [ -n "$peers" ] || run_local "$@"
-
-# SSH to the peer needs keys in the agent. Load them with no prompt if the
-# agent is empty. Exit status of ssh-add -l: 0 = keys, 1 = empty, 2 = no agent.
-ssh-add -l >/dev/null 2>&1
-case $? in
-    0) ;;
-    1)
-        ssh-agent-seed --headless >/dev/null 2>&1
-        ssh-add -l >/dev/null 2>&1 || run_local "$@" ;;
-    *) run_local "$@" ;;
-esac
 
 target=""
 for peer in $peers; do
@@ -211,15 +209,11 @@ done
 
 note "approve this request in 1Password on $target"
 
-# Only inject reads stdin. For the other commands, -n keeps ssh from taking
-# the stdin of the caller (for example, inside a `while read` loop). is_movable
-# set $cmd.
-stdin_opt=-n
-[ "$cmd" = inject ] && stdin_opt=""
-
+# No moved command reads stdin. -n keeps ssh from taking the stdin of the
+# caller (for example, inside a `while read` loop).
 # SC2029: $remote expands here on purpose. quote() made it safe for the peer.
-# shellcheck disable=SC2086,SC2029  # ssh_opts and stdin_opt are lists of words
-ssh $stdin_opt $ssh_opts "$target" "$remote"
+# shellcheck disable=SC2086,SC2029  # ssh_opts is a list of words
+ssh -n $ssh_opts "$target" "$remote"
 rc=$?
 
 # Exit status 255 is an SSH failure, not an op failure. Try here instead.
