@@ -79,6 +79,14 @@ rex.bind("ctrl+space>u", "status_center")
 require("closed_tabs")
 rex.bind("ctrl+space>shift+x", "closed_tabs")
 
+-- prefix+b: hold or release the session (hold.lua).
+require("hold")
+rex.bind("ctrl+space>b", "toggle_hold")
+
+-- prefix+f: pick a tab from all sessions (tab_picker.lua).
+require("tab_picker")
+rex.bind("ctrl+space>f", "tab_picker")
+
 -- Keep a copy of the tabs of each host for the Alfred workflow Rex Tabs
 -- (scripts/remote-tabs-watcher.lua). If a watcher runs already, the new one
 -- exits.
