@@ -86,9 +86,14 @@ sel=$(printf '%s\n' "$rows" \
 
 # Only type `cd` into the triggering pane when a real shell owns it — sending
 # keystrokes to a running Claude or vim pastes literal text instead of executing.
-case "$(tmux display-message -p -t "$pane_id" '#{pane_current_command}')" in
-  sh | bash | zsh | fish) tmux send-keys -t "$pane_id" "cd -- '$sel'" C-m ;;
-esac
+# The path goes in single quotes. If the path has a quote or a new line, the
+# shell can run part of it as a command, so do not type the cd.
+unsafe=$'\'\n'
+if [[ "$sel" != *["$unsafe"]* ]]; then
+  case "$(tmux display-message -p -t "$pane_id" '#{pane_current_command}')" in
+    sh | bash | zsh | fish) tmux send-keys -t "$pane_id" "cd -- '$sel'" C-m ;;
+  esac
+fi
 
 cd "$sel"
 # A deliberately-chosen worktree may still be clean, and tuicr exits 1 with
