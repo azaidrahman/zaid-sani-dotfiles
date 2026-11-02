@@ -1,15 +1,17 @@
 #!/bin/sh
 # ssh-agent-seed — load this machine's SSH keys into the per-login session
-# ssh-agent from 1Password, once, with a 12h ttl. Idempotent and quiet.
+# ssh-agent from 1Password, once, with a time limit. Idempotent and quiet.
 #
 #   ssh-agent-seed              service account first, then Touch ID
 #   ssh-agent-seed --headless   service account only, never a prompt
 #
 #   - Inbound SSH ($SSH_CONNECTION set): no-op — use the forwarded agent.
 #   - Agent already holds identities: no-op.
-#   - Otherwise: read each key with op-sa (service-account token, no Touch
-#     ID) | ssh-add -t 43200. If op-sa cannot read a key, read it with plain
-#     op, which asks for Touch ID. --headless skips that step.
+#   - Otherwise: if the op-sa window is open, read each key with op-sa
+#     (service-account token, no Touch ID). The key stays in the agent until
+#     the window closes (ssh-add -t <seconds left>). If op-sa cannot read a
+#     key, read it with plain op, which asks for Touch ID, and keep it for
+#     12h. --headless skips that step.
 #
 # Use --headless in scripts that must never wait for a prompt. Nothing runs
 # this script by itself: SSH between aqua and onyx uses Tailscale SSH, which
@@ -42,15 +44,21 @@ esac
 
 [ "$headless" -eq 0 ] && [ -e /dev/tty ] && printf 'ssh-agent-seed: loading SSH keys from 1Password…\n' >/dev/tty 2>/dev/null
 
-# Read one key: service account first, then Touch ID unless --headless.
-read_key() {
-  op-sa read "$1" 2>/dev/null && return 0
+# The seconds that are left in the op-sa window. Empty if it is closed.
+left=$(op-sa ttl 2>/dev/null) || left=""
+
+# Load one key: with the service account while the window is open, then with
+# Touch ID unless --headless.
+load_key() {
+  if [ -n "$left" ]; then
+    op-sa read "$1" | ssh-add -t "$left" - >/dev/null 2>&1 && return 0
+  fi
   [ "$headless" -eq 1 ] && return 1
-  op read "$1"
+  op read "$1" | ssh-add -t 43200 - >/dev/null 2>&1
 }
 
 rc=0
-# Read each private key in openssh format and add with a 12h lifetime.
+# Load each private key in openssh format.
 # IFS=newline so vault/item names with spaces survive.
 # op stderr is captured to a temp file so it can be shown on failure without
 # ever writing key material to disk (the key flows only through the pipe).
@@ -59,9 +67,7 @@ IFS='
 '
 _seed_tmp=$(mktemp /tmp/.ssh-agent-seed.XXXXXX)
 for ref in $keys; do
-  read_key "${ref}?ssh-format=openssh" 2>"$_seed_tmp" | ssh-add -t 43200 - >/dev/null 2>&1
-  # shellcheck disable=SC2181  # pipeline exit status intentionally checked after
-  if [ $? -ne 0 ]; then
+  if ! load_key "${ref}?ssh-format=openssh" 2>"$_seed_tmp"; then
     if [ "$headless" -eq 0 ] && [ -e /dev/tty ]; then
       echo "ssh-agent-seed: failed to load ${ref}" >/dev/tty
       [ -s "$_seed_tmp" ] && cat "$_seed_tmp" >/dev/tty 2>/dev/null

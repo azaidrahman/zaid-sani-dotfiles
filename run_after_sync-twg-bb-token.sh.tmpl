@@ -29,7 +29,6 @@
 set -u
 
 CONF="$HOME/.config/twg/auth.conf"
-SA_ENTRY="op-service-account-token"
 REF="op://{{ .workVaultName }}/oteryhvh3l7fgf6vyeu5d5oyl4/credential"
 
 note() { printf 'twg bitbucket token: %s\n' "$1" >&2; }
@@ -39,21 +38,21 @@ note() { printf 'twg bitbucket token: %s\n' "$1" >&2; }
 
 command -v op >/dev/null 2>&1 || { note "op is not installed, skipping"; exit 0; }
 
-# The service account reads the work vault without a Touch ID prompt.
-# git-credential-op uses the same keychain entry.
-OP_SERVICE_ACCOUNT_TOKEN=$(security find-generic-password -a "$USER" -s "$SA_ENTRY" -w 2>/dev/null)
-export OP_SERVICE_ACCOUNT_TOKEN
-if [ -z "$OP_SERVICE_ACCOUNT_TOKEN" ]; then
-    note "could not read $SA_ENTRY from the keychain, skipping"
-    exit 0
-fi
-
-# On success the output is the token. On failure it is the error of op.
-if ! out=$(op read --no-newline "$REF" 2>&1); then
-    note "could not read the item from 1Password, skipping"
-    note "op said: $(printf '%s' "$out" | head -n 1)"
-    exit 0
-fi
+# op-sa reads the work vault with the service account, with no prompt. It
+# works only while the op-sa window is open. If the window is closed, skip:
+# the next apply after `op-sa unlock` copies the token.
+# On success the output is the token. On failure it is the error of op-sa.
+out=$("$HOME/.local/bin/op-sa" read --no-newline "$REF" 2>&1)
+case $? in
+    0) ;;
+    3)
+        note "the op-sa window is closed, skipping (run op-sa unlock, then chezmoi apply)"
+        exit 0 ;;
+    *)
+        note "could not read the item from 1Password, skipping"
+        note "op said: $(printf '%s' "$out" | head -n 1)"
+        exit 0 ;;
+esac
 token=$out
 if [ -z "$token" ]; then
     note "the credential field of the item is empty, skipping"

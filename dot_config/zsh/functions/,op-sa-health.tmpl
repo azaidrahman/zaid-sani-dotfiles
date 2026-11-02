@@ -1,32 +1,61 @@
-# ,op-sa-health - Check that each 1Password service-account token in the keychain
-#                 still works. Run periodically; SA tokens have a configurable TTL
-#                 and the symptom of expiry is an opaque `git push` failure.
+# ,op-sa-health - Check the op-sa window on this Mac. It never asks for an
+#                 approval in 1Password.
+#
+#   - Shows if the window is open, and until when.
+#   - If the window is open, asks 1Password if it accepts each
+#     service-account token. A token has an expiry date, and an expired token
+#     shows only as a "git push" that fails.
+#   - Finds old copies of tokens in the login keychain. The tokens must be only
+#     in the window. Delete each copy that it finds.
 
-# (entry, vault) pairs — use a flat array to avoid hash-iteration quirks.
-local -a pairs=(
-    "op-service-account-token|{{ .workVaultName }}"
-    "op-service-account-token-personal|Personal Development"
-)
-
+local helper=$HOME/.config/op-sa-window/bin/op-sa-window
 local fail=0
-local pair entry vault token
-for pair in "${pairs[@]}"; do
-    entry="${pair%%|*}"
-    vault="${pair#*|}"
-    token=$(security find-generic-password -a "$USER" -s "$entry" -w 2>/dev/null)
-    if [ -z "$token" ]; then
-        print -u 2 "✗ $entry: missing from keychain"
+
+if ! op-sa status; then
+    print "  run \`op-sa unlock\` to check the tokens"
+else
+    # (key, vault) pairs. Use a flat array to avoid hash-iteration quirks.
+    local -a pairs=(
+        "sa.work|{{ .workVaultName }}"
+        "sa.personal|Personal Development"
+    )
+    local pair key vault token
+    for pair in "${pairs[@]}"; do
+        key="${pair%%|*}"
+        vault="${pair#*|}"
+        token=$("$helper" get "$key" 2>/dev/null)
+        if [ -z "$token" ]; then
+            print -u 2 "✗ $key: not in the window (run \`op-sa unlock\` again)"
+            fail=1
+        elif OP_SERVICE_ACCOUNT_TOKEN="$token" op whoami >/dev/null 2>&1; then
+            print "✓ $key → $vault vault"
+        else
+            print -u 2 "✗ $key: 1Password rejects the token (expired or revoked?)"
+            fail=1
+        fi
+    done
+    # Clear the secret before the function returns.
+    unset token
+fi
+
+# Old copies in the login keychain. Read the attributes only, never the value.
+local tag=${(U)$(scutil --get LocalHostName 2>/dev/null)}
+local entry
+for entry in op-service-account-token op-service-account-token-personal \
+    "$tag.PAT.GH" "Bitbucket.$tag.API_TOKEN" "Bitbucket.$tag.API_TOKEN.user"; do
+    if security find-generic-password -a "$USER" -s "$entry" >/dev/null 2>&1; then
+        print -u 2 "✗ keychain: '$entry' is an old copy. Delete it:"
+        print -u 2 "    security delete-generic-password -a \"\$USER\" -s '$entry'"
         fail=1
-        continue
     fi
-    if OP_SERVICE_ACCOUNT_TOKEN="$token" op whoami >/dev/null 2>&1; then
-        print "✓ $entry → $vault vault"
-    else
-        print -u 2 "✗ $entry: token rejected by 1Password (expired or revoked?)"
+done
+local site
+for site in github.com bitbucket.org; do
+    if security find-internet-password -s "$site" >/dev/null 2>&1; then
+        print -u 2 "✗ keychain: a password for $site (from git-credential-osxkeychain). Delete it:"
+        print -u 2 "    security delete-internet-password -s $site"
         fail=1
     fi
 done
 
-# Clear the sensitive local before the function returns.
-unset token
 return $fail

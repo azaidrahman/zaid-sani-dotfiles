@@ -1,27 +1,148 @@
 #!/bin/sh
 # op-sa — run the 1Password CLI with a service-account token. A service
-# account does not use the 1Password app, so there is no Touch ID prompt. Use
-# op-sa in scripts and agent tools that can run on a Mac where you are not.
+# account does not use the 1Password app, so there is no prompt. Use op-sa in
+# scripts and agent tools that can run on a Mac where you are not.
 #
 #   op-sa read "op://Personal Development/Todoist.API/credential"
 #   op-sa item get --vault "Personal Development" "LiteLLM login"
 #
-# op-sa finds the vault in the arguments. It uses the vault of the first
-# op:// reference, or the value of --vault. Then it reads the token for that
-# vault from the login keychain:
+# The tokens are not on disk. They are in the item "op-sa window" in your
+# Private vault. op-sa can use them only while the window is open:
 #
-#   {{ .workVaultName }}    → op-service-account-token
-#   Personal Development    → op-service-account-token-personal
+#   op-sa unlock [--for 12h]   Get the tokens from 1Password (one approval),
+#                              and open the window. The maximum is 12 hours.
+#   op-sa lock                 Close the window now.
+#   op-sa status               Show if the window is open, and until when.
+#   op-sa ttl                  Print the seconds that are left, for scripts.
+#
+# The window is on this Mac only. The helper op-sa-window keeps the tokens in
+# memory, and deletes them when the window closes. For more information, see
+# ~/.config/op-sa-window/src/op-sa-window.swift.
+#
+# op-sa finds the vault in the arguments. It uses the vault of the first
+# op:// reference, or the value of --vault. Then it uses the token for that
+# vault:
+#
+#   {{ .workVaultName }}    → sa.work
+#   Personal Development    → sa.personal
 #
 # A service account cannot read the Private vault. If no token covers the
-# vault, or the token is not in the keychain, op-sa exits with status 3 and
-# does not call op. The caller can then use plain `op`, which asks for Touch
-# ID. To check the tokens, run `,op-sa-health`.
+# vault, or if the window is closed, op-sa exits with status 3 and does not
+# call op. It never waits for a prompt. To check the tokens, run
+# `,op-sa-health`.
 #
 # All service-account reads share a budget of 1,000 reads in each hour (see
 # ~/.config/git/README.md). Do not call op-sa in a loop.
 
 set -u
+
+helper=$HOME/.config/op-sa-window/bin/op-sa-window
+token_item='op-sa window'
+token_vault='Private'
+max_seconds=43200
+
+here=$(scutil --get LocalHostName 2>/dev/null | tr '[:upper:]' '[:lower:]')
+here=${here:-this Mac}
+
+usage() {
+    echo "usage: op-sa unlock [--for 12h] | lock | status | ttl | <op command>" >&2
+    exit 2
+}
+
+closed() {
+    echo "op-sa: the 1Password window is closed on $here. Run \`op-sa unlock\`." >&2
+    exit 3
+}
+
+# Print the seconds in a duration such as 90, 90s, 30m, or 12h.
+to_seconds() {
+    number=${1%[smh]}
+    case $number in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    case $1 in
+        *h) echo $((number * 3600)) ;;
+        *m) echo $((number * 60)) ;;
+        *) echo $((number)) ;;
+    esac
+}
+
+unlock() {
+    seconds=$max_seconds
+    while [ $# -gt 0 ]; do
+        case $1 in
+            --for)
+                [ $# -ge 2 ] || usage
+                seconds=$(to_seconds "$2") || usage
+                shift 2 ;;
+            --for=*)
+                seconds=$(to_seconds "${1#--for=}") || usage
+                shift ;;
+            *) usage ;;
+        esac
+    done
+    if [ "$seconds" -lt 1 ] || [ "$seconds" -gt "$max_seconds" ]; then
+        echo "op-sa: the window can be open for 12 hours or less" >&2
+        exit 2
+    fi
+    if [ ! -x "$helper" ]; then
+        echo "op-sa: $helper is not installed. Run chezmoi apply." >&2
+        exit 1
+    fi
+
+    # One call, so one approval. The op wrapper sends the prompt to the Mac
+    # where you are. A service account cannot read the Private vault, so
+    # remove a token that the caller set.
+    if ! tokens=$(env -u OP_SERVICE_ACCOUNT_TOKEN op item get "$token_item" \
+        --vault "$token_vault" --fields label=work,label=personal --reveal); then
+        echo "op-sa: 1Password did not give the tokens" >&2
+        exit 1
+    fi
+    # The output is "WORK,PERSONAL". A token has no comma.
+    work=${tokens%%,*}
+    personal=${tokens#*,}
+    case $tokens/$personal in
+        ops_*,ops_*/*,*) valid=no ;;
+        ops_*,ops_*/*) valid=yes ;;
+        *) valid=no ;;
+    esac
+    if [ "$valid" = no ]; then
+        echo "op-sa: the item '$token_item' must have two fields, work and personal, with a service-account token in each" >&2
+        exit 1
+    fi
+
+    # printf is a shell builtin, so the tokens are not in the arguments of a
+    # process.
+    if ! printf 'sa.work=%s\nsa.personal=%s\n' "$work" "$personal" | "$helper" open "$seconds"; then
+        echo "op-sa: the helper did not open the window" >&2
+        exit 1
+    fi
+    unset tokens work personal
+    echo "op-sa: the window is open on $here until $(date -r $(($(date +%s) + seconds)) '+%H:%M')"
+}
+
+case ${1:-} in
+    unlock)
+        shift
+        unlock "$@"
+        exit 0 ;;
+    lock)
+        "$helper" lock 2>/dev/null
+        echo "op-sa: the window is closed on $here"
+        exit 0 ;;
+    status)
+        if ! left=$("$helper" ttl 2>/dev/null); then
+            echo "op-sa: the window is closed on $here"
+            exit 3
+        fi
+        echo "op-sa: the window is open on $here until $(date -r $(($(date +%s) + left)) '+%H:%M')" \
+            "($((left / 3600))h $((left % 3600 / 60))m left)"
+        exit 0 ;;
+    ttl)
+        "$helper" ttl 2>/dev/null || exit 3
+        echo
+        exit 0 ;;
+esac
 
 vault=""
 prev=""
@@ -45,18 +166,21 @@ if [ -z "$vault" ]; then
 fi
 
 case $vault in
-    '{{ .workVaultName }}') entry=op-service-account-token ;;
-    'Personal Development') entry=op-service-account-token-personal ;;
+    '{{ .workVaultName }}') key=sa.work ;;
+    'Personal Development') key=sa.personal ;;
     *)
         echo "op-sa: no service account can read the vault '$vault'" >&2
         exit 3 ;;
 esac
 
-token=$(security find-generic-password -a "${USER:-$(id -un)}" -s "$entry" -w 2>/dev/null)
-if [ -z "$token" ]; then
-    echo "op-sa: '$entry' is not in the login keychain (run ,op-sa-health)" >&2
-    exit 3
-fi
+token=$("$helper" get "$key" 2>/dev/null)
+case $? in
+    0) ;;
+    4)
+        echo "op-sa: the window on $here has no $key. Run \`op-sa unlock\`." >&2
+        exit 3 ;;
+    *) closed ;;
+esac
 
 OP_SERVICE_ACCOUNT_TOKEN=$token
 export OP_SERVICE_ACCOUNT_TOKEN

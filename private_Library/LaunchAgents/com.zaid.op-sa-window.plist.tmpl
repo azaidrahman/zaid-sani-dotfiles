@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  op-sa-window keeps the 1Password service-account tokens in memory while the
+  op-sa window is open. When the window closes, the helper stops, and launchd
+  starts a new, empty helper. KeepAlive applies only while the binary exists,
+  so a Mac that did not build it does not start the helper again and again.
+  run_onchange_after_build-op-sa-window.sh builds the binary and loads this
+  agent.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.zaid.op-sa-window</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{ .chezmoi.homeDir }}/.config/op-sa-window/bin/op-sa-window</string>
+    <string>serve</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>PathState</key>
+    <dict>
+      <key>{{ .chezmoi.homeDir }}/.config/op-sa-window/bin/op-sa-window</key>
+      <true/>
+    </dict>
+  </dict>
+  <key>ThrottleInterval</key>
+  <integer>2</integer>
+  <key>StandardErrorPath</key>
+  <string>{{ .chezmoi.homeDir }}/Library/Logs/op-sa-window.log</string>
+</dict>
+</plist>
