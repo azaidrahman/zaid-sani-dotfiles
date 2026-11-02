@@ -1,0 +1,63 @@
+#!/bin/sh
+# op-sa — run the 1Password CLI with a service-account token. A service
+# account does not use the 1Password app, so there is no Touch ID prompt. Use
+# op-sa in scripts and agent tools that can run on a Mac where you are not.
+#
+#   op-sa read "op://Personal Development/Todoist.API/credential"
+#   op-sa item get --vault "Personal Development" "LiteLLM login"
+#
+# op-sa finds the vault in the arguments. It uses the vault of the first
+# op:// reference, or the value of --vault. Then it reads the token for that
+# vault from the login keychain:
+#
+#   {{ .workVaultName }}    → op-service-account-token
+#   Personal Development    → op-service-account-token-personal
+#
+# A service account cannot read the Private vault. If no token covers the
+# vault, or the token is not in the keychain, op-sa exits with status 3 and
+# does not call op. The caller can then use plain `op`, which asks for Touch
+# ID. To check the tokens, run `,op-sa-health`.
+#
+# All service-account reads share a budget of 1,000 reads in each hour (see
+# ~/.config/git/README.md). Do not call op-sa in a loop.
+
+set -u
+
+vault=""
+prev=""
+for arg in "$@"; do
+    case $prev in
+        --vault) vault=$arg; break ;;
+    esac
+    case $arg in
+        --vault=*) vault=${arg#--vault=}; break ;;
+        op://*/*)
+            rest=${arg#op://}
+            vault=${rest%%/*}
+            break ;;
+    esac
+    prev=$arg
+done
+
+if [ -z "$vault" ]; then
+    echo "op-sa: give an op:// reference or --vault, so op-sa can find the token" >&2
+    exit 3
+fi
+
+case $vault in
+    '{{ .workVaultName }}') entry=op-service-account-token ;;
+    'Personal Development') entry=op-service-account-token-personal ;;
+    *)
+        echo "op-sa: no service account can read the vault '$vault'" >&2
+        exit 3 ;;
+esac
+
+token=$(security find-generic-password -a "${USER:-$(id -un)}" -s "$entry" -w 2>/dev/null)
+if [ -z "$token" ]; then
+    echo "op-sa: '$entry' is not in the login keychain (run ,op-sa-health)" >&2
+    exit 3
+fi
+
+OP_SERVICE_ACCOUNT_TOKEN=$token
+export OP_SERVICE_ACCOUNT_TOKEN
+exec op "$@"

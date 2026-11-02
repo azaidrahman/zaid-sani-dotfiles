@@ -36,8 +36,9 @@ if [[ -z "${(P)cache_var}" && -n "${(P)env_var}" ]]; then
 fi
 if [[ -z "${(P)cache_var}" ]]; then
   print -u2 "_litellm_proxy: fetching '${op_field}' key from 1Password…"
-  local _key
-  _key="$(op read "op://Personal Development/LiteLLM login/${op_field}")" || {
+  # The service account needs no Touch ID. If it fails, plain op asks.
+  local _key _ref="op://Personal Development/LiteLLM login/${op_field}"
+  _key="$(op-sa read "$_ref" 2>/dev/null)" || _key="$(op read "$_ref")" || {
     print -u2 "_litellm_proxy: op read failed — is 1Password unlocked?"
     return 1
   }

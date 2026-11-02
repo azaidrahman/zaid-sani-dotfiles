@@ -47,8 +47,12 @@ elif [ -f "$HOME/Downloads/google-cloud-sdk/path.zsh.inc" ]; then
 fi
 
 # --- PATH (declarative; typeset -U auto-dedupes, keeps first occurrence) ---
+# ~/.local/shims is first: it holds wrappers that must run before the
+# Homebrew binary of the same name. Now it holds only `op`, which sends a
+# 1Password prompt to the Mac where you are (see ~/.local/shims/op).
 typeset -U path
 path=(
+  $HOME/.local/shims
   $PYENV_ROOT/shims
   $PYENV_ROOT/bin
   $HOME/.local/share/mise/shims

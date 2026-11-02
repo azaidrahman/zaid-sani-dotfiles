@@ -1,10 +1,12 @@
 # omp model config — chezmoi-managed template.
 # baseUrl is host-aware (onyx=local, anywhere else=tailscale).
-# apiKey uses omp's !cmd prefix to fetch from 1Password at startup.
+# apiKey uses omp's !cmd prefix: omp runs the command in /bin/sh at startup.
+# It uses LITELLM_KEY_OMP from secrets.zsh if it is set. Otherwise op-sa reads
+# the key with the service account, so no Touch ID prompt opens on a remote Mac.
 providers:
   litellm:
     baseUrl: {{ if hasPrefix "onyx" .chezmoi.hostname }}http://localhost:4000/v1{{ else }}http://onyx:4000/v1{{ end }}
-    apiKey: "!op read 'op://Personal Development/LiteLLM login/omp'"
+    apiKey: '![ -n "$LITELLM_KEY_OMP" ] && printf %s "$LITELLM_KEY_OMP" || "$HOME/.local/bin/op-sa" read "op://Personal Development/LiteLLM login/omp"'
     api: openai-completions
     discovery:
       type: litellm

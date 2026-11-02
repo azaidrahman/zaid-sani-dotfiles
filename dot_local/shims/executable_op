@@ -1,0 +1,230 @@
+#!/bin/sh
+# op — a wrapper for the 1Password CLI. When an agent calls op on one Mac and
+# you sit at the other Mac, the wrapper sends the approval prompt to the Mac
+# where you are.
+#
+# The problem: the 1Password app asks for approval on the Mac where op runs.
+# If you sit at onyx and an agent on aqua calls `op read`, the prompt opens on
+# aqua, and you cannot see it. 1Password cannot send that prompt to a
+# different Mac.
+#
+# The fix: the wrapper finds the Mac that you used last, from the idle time of
+# the keyboard and mouse (HIDIdleTime). If that Mac is the peer, the wrapper
+# runs the same op command on the peer over SSH. The prompt opens on the peer,
+# and the output comes back to the caller. The peer also shows a notification
+# with the command, so that you know what you approve.
+#
+# The wrapper is in ~/.local/shims, which is first in PATH (see .zshenv and
+# .zshrc). The real op is the next `op` in PATH, usually /opt/homebrew/bin/op.
+#
+# The wrapper runs the real op on this Mac, with no change, when one of these
+# conditions is true:
+#   - OP_SERVICE_ACCOUNT_TOKEN, OP_CONNECT_TOKEN, or an OP_SESSION_* variable
+#     is set. These do not use the app, so there is no prompt.
+#   - The call came in over SSH ($SSH_CONNECTION is set).
+#   - The command can change or read local files, or must run here (see the
+#     list below).
+#   - You used this Mac in the last OP_APPROVE_AWAY_SECS seconds (default 60).
+#   - You used the peer less recently than this Mac.
+#   - SSH to the peer fails.
+#
+# The wrapper moves only these commands, because they print a secret and do
+# not touch local files:
+#   read, inject (stdin to stdout), item get, item list, vault get,
+#   vault list, document get (to stdout).
+# For example, `op run` starts a child process with the secrets. That process
+# must run on this Mac, so `op run` stays here.
+#
+# Each call to the peer is a new SSH session, and 1Password asks for approval
+# again for each new session. Most agent tools use op-sa (service-account
+# tokens, no prompt), so these calls are rare.
+#
+# SSH to the peer needs the keys in the session ssh-agent. If the agent is
+# empty, the wrapper runs `ssh-agent-seed --headless` first. That command reads
+# the keys with the service-account tokens, with no prompt.
+#
+# Settings:
+#   OP_APPROVE_HOST=<peer>   Always send the prompt to <peer>.
+#   OP_APPROVE_HOST=local    Never move a command.
+#   OP_APPROVE_PEERS="a b"   The peers to check. The default comes from the
+#                            host name: aqua checks onyx, and onyx checks aqua.
+#   OP_APPROVE_AWAY_SECS=60  This Mac is "not in use" after this idle time.
+
+set -u
+
+self=$0
+
+find_real_op() {
+    old_ifs=$IFS
+    IFS=:
+    for dir in $PATH; do
+        [ -n "$dir" ] && [ -x "$dir/op" ] || continue
+        [ "$dir/op" -ef "$self" ] && continue
+        IFS=$old_ifs
+        printf '%s\n' "$dir/op"
+        return 0
+    done
+    IFS=$old_ifs
+    for candidate in /opt/homebrew/bin/op /usr/local/bin/op; do
+        if [ -x "$candidate" ] && ! [ "$candidate" -ef "$self" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+if ! real_op=$(find_real_op); then
+    echo "op: the real op is not in PATH" >&2
+    exit 127
+fi
+
+run_local() {
+    exec "$real_op" "$@"
+}
+
+# Print a note to the terminal of the user, if there is one. Never print to
+# stdout or stderr, because callers often capture them with the secret.
+note() {
+    { printf 'op: %s\n' "$1" >/dev/tty; } 2>/dev/null
+}
+
+# Peer side: a request came from another Mac. Show what the request is, then
+# run the real op here, where the user sees the prompt.
+if [ -n "${OP_APPROVE_FROM:-}" ]; then
+    osascript -e 'on run argv' \
+        -e 'display notification (item 1 of argv) with title (item 2 of argv)' \
+        -e 'end run' \
+        "op $*" "1Password request from $OP_APPROVE_FROM" </dev/null >/dev/null 2>&1
+    run_local "$@"
+fi
+
+[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && run_local "$@"
+[ -n "${OP_CONNECT_TOKEN:-}" ] && run_local "$@"
+[ -n "${SSH_CONNECTION:-}" ] && run_local "$@"
+[ "${OP_APPROVE_HOST:-}" = local ] && run_local "$@"
+env | grep -q '^OP_SESSION_' && run_local "$@"
+
+# Return 0 if the command only prints a secret and can run on the peer.
+is_movable() {
+    cmd=""
+    action=""
+    while [ $# -gt 0 ]; do
+        case $1 in
+            --) break ;;
+            # Global flags that take a value.
+            --account|--encoding|--format) shift ;;
+            # Local state, or files on this Mac: the command must stay here.
+            --config|--config=*|--session|--session=*) return 1 ;;
+            --out-file|--out-file=*|--in-file|--in-file=*) return 1 ;;
+            --output|--output=*|--force) return 1 ;;
+            --*) ;;
+            # Short flags, also in groups such as -no: -o, -i, and -f use files.
+            -*o*|-*i*|-*f*) return 1 ;;
+            -*) ;;
+            *)
+                if [ -z "$cmd" ]; then
+                    cmd=$1
+                elif [ -z "$action" ]; then
+                    action=$1
+                fi ;;
+        esac
+        [ $# -gt 0 ] && shift
+    done
+    case $cmd:$action in
+        read:*|inject:*) return 0 ;;
+        item:get|item:list|vault:get|vault:list|document:get) return 0 ;;
+    esac
+    return 1
+}
+
+is_movable "$@" || run_local "$@"
+
+# Print the idle time of the keyboard and mouse, in seconds.
+idle_cmd="ioreg -c IOHIDSystem -d 4 | awk '/HIDIdleTime/ {print int(\$NF/1000000000); exit}'"
+
+is_number() {
+    case $1 in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    return 0
+}
+
+ssh_opts="-o BatchMode=yes -o ConnectTimeout=4 -a -x -T"
+
+forced=${OP_APPROVE_HOST:-}
+if [ -z "$forced" ]; then
+    local_idle=$(sh -c "$idle_cmd" 2>/dev/null)
+    is_number "$local_idle" || run_local "$@"
+    [ "$local_idle" -ge "${OP_APPROVE_AWAY_SECS:-60}" ] || run_local "$@"
+fi
+
+if [ -n "$forced" ]; then
+    peers=$forced
+elif [ -n "${OP_APPROVE_PEERS:-}" ]; then
+    peers=$OP_APPROVE_PEERS
+else
+    case $(scutil --get LocalHostName 2>/dev/null | tr '[:upper:]' '[:lower:]') in
+        aqua) peers=onyx ;;
+        onyx) peers=aqua ;;
+        *) peers="" ;;
+    esac
+fi
+[ -n "$peers" ] || run_local "$@"
+
+# SSH to the peer needs keys in the agent. Load them with no prompt if the
+# agent is empty. Exit status of ssh-add -l: 0 = keys, 1 = empty, 2 = no agent.
+ssh-add -l >/dev/null 2>&1
+case $? in
+    0) ;;
+    1)
+        ssh-agent-seed --headless >/dev/null 2>&1
+        ssh-add -l >/dev/null 2>&1 || run_local "$@" ;;
+    *) run_local "$@" ;;
+esac
+
+target=""
+for peer in $peers; do
+    if [ -n "$forced" ]; then
+        target=$peer
+        break
+    fi
+    # shellcheck disable=SC2086  # ssh_opts is a list of words
+    peer_idle=$(ssh -n $ssh_opts "$peer" "$idle_cmd" 2>/dev/null)
+    if is_number "$peer_idle" && [ "$peer_idle" -lt "$local_idle" ]; then
+        target=$peer
+        break
+    fi
+done
+[ -n "$target" ] || run_local "$@"
+
+# Quote one word for the shell on the peer.
+quote() {
+    printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+from=$(scutil --get LocalHostName 2>/dev/null | tr '[:upper:]' '[:lower:]')
+remote="exec env OP_APPROVE_FROM=$(quote "${from:-another Mac}") op"
+for arg in "$@"; do
+    remote="$remote $(quote "$arg")"
+done
+
+note "approve this request in 1Password on $target"
+
+# Only inject reads stdin. For the other commands, -n keeps ssh from taking
+# the stdin of the caller (for example, inside a `while read` loop). is_movable
+# set $cmd.
+stdin_opt=-n
+[ "$cmd" = inject ] && stdin_opt=""
+
+# SC2029: $remote expands here on purpose. quote() made it safe for the peer.
+# shellcheck disable=SC2086,SC2029  # ssh_opts and stdin_opt are lists of words
+ssh $stdin_opt $ssh_opts "$target" "$remote"
+rc=$?
+
+# Exit status 255 is an SSH failure, not an op failure. Try here instead.
+if [ "$rc" -eq 255 ]; then
+    note "SSH to $target failed; asking on this Mac"
+    run_local "$@"
+fi
+exit "$rc"
