@@ -54,6 +54,24 @@ vim.opt.updatetime = 50
 
 -- clipboard
 vim.opt.clipboard:append("unnamedplus") --use system clipboard as default
+
+-- A Rex pane can show in the Rex app of a different Mac. pbcopy writes only to
+-- the clipboard of the Mac that runs nvim. OSC 52 sends the copy to the Rex app
+-- that shows the pane. Do both. Then the copy gets to the Mac that you use, and
+-- "p" in nvim can read it back with pbpaste.
+if vim.env.TERM_PROGRAM == "rex" then
+	local send_osc52 = require("vim.ui.clipboard.osc52").copy("+")
+	local function copy(lines, regtype)
+		send_osc52(lines, regtype)
+		vim.system({ "pbcopy" }, { stdin = table.concat(lines, "\n") })
+	end
+	vim.g.clipboard = {
+		name = "rex",
+		copy = { ["+"] = copy, ["*"] = copy },
+		paste = { ["+"] = "pbpaste", ["*"] = "pbpaste" },
+	}
+end
+
 vim.opt.hlsearch = true
 
 -- for easy mouse resizing, just incase
