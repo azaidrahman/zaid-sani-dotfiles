@@ -2,13 +2,21 @@
 --
 -- The status_center action opens a float in the center of the window. The
 -- float runs scripts/usage.sh, which draws the same view as
--- ~/.tmux/scripts/claude-usage.sh: the gcloud and kube context, and the usage
--- of the AI subscription that the focused pane runs. Any key closes the float.
+-- ~/.tmux/scripts/claude-usage.sh: the host, the gcloud and kube context, and
+-- the usage of the AI subscription that the focused pane runs. Any key closes
+-- the float.
 --
 -- To run the action without the key, use `rex do status_center`.
 --
 -- A poller (scripts/usage-poller.lua) fetches the Claude usage each minute
 -- while a Rex app shows a session. Thus the float draws the usage at once.
+--
+-- A pane on another host, for example onyx in the Rex app of aqua, gets the
+-- status of that host. The app sends the key to the Rex of aqua, with
+-- ctx.server set to the label of onyx. This file then asks the Rex of onyx to
+-- run its own status_center (see on_host). Thus onyx finds the agent, sizes
+-- the float, and draws the view. The view shows the name of the host on its
+-- first row.
 
 local TERMINAL = "com.superlogical.terminal"
 local CONFIG_HOME = os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")
@@ -19,6 +27,10 @@ local POLLER = CONFIG_HOME .. "/rex/scripts/usage-poller.lua"
 -- directory is not the same on each Mac. Thus a shell finds the script on the
 -- host that runs the float. Use SCRIPT only for the commands that run on this
 -- host: the poller and rex.exec. See tab_picker.lua.
+--
+-- Usually a pane on another host goes to on_host, and that host opens the
+-- float. The float comes from open on this Mac only if the host cannot run
+-- the action.
 local FLOAT_SCRIPT = 'exec "${XDG_CONFIG_HOME:-$HOME/.config}/rex/scripts/usage.sh" "$@"'
 
 -- The size that the script gives includes the border of a tmux popup: 2
@@ -117,6 +129,36 @@ local function open(ctx)
   }
 end
 
+-- on_host asks the host that holds the session of ctx to run its own
+-- status_center. rex.exec runs on this Mac, so wanted_size cannot find the
+-- agent of a pane on another host. It returns true and the result of the
+-- host, or false if the host cannot run the action. For example, the
+-- configuration of the host can be older than this file. Any other error
+-- stops the action, so that a slow host does not get a second float.
+local function on_host(ctx)
+  local ok, host = pcall(rex.server, ctx.server)
+  if not ok then return false end
+  local result, err = host.call("client.action", {
+    action = "status_center",
+    session_id = ctx.session_id,
+    block_id = ctx.block_id,
+  })
+  if err == nil then return true, result end
+  if tostring(err):find("code=not_found", 1, true) then
+    rex.log("warn", "status_center: " .. ctx.server .. " has no status_center")
+    return false
+  end
+  error(err, 0)
+end
+
+local function status_center(ctx)
+  if ctx.server then
+    local done, result = on_host(ctx)
+    if done then return result end
+  end
+  return open(ctx)
+end
+
 -- Start the poller each time the server loads this file. If a poller runs
 -- already, the new one exits.
 require("background").start({ POLLER, "script=" .. SCRIPT })
@@ -124,7 +166,7 @@ require("background").start({ POLLER, "script=" .. SCRIPT })
 rex.action{
   name = "status_center",
   title = "Show Usage and Status",
-  description = "Show the gcloud and kube context, and the usage of the AI subscription that the focused pane runs.",
-  keywords = "claude codex litellm usage quota gcloud kube",
-  run = function(ctx) return open(ctx) end,
+  description = "Show the host, the gcloud and kube context, and the usage of the AI subscription that the focused pane runs.",
+  keywords = "claude codex litellm usage quota gcloud kube host",
+  run = function(ctx) return status_center(ctx) end,
 }

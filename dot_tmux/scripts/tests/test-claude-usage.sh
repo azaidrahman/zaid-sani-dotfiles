@@ -345,6 +345,10 @@ check "the header draws the context section above the view" "1" \
   "$(CONTEXT_TEXT='  gcloud   ctx-marker' PROVIDER=claude render_quota "$QUOTA_BLOB" "" \
      | strip | grep -c 'ctx-marker')"
 
+check "the header names the host that draws the view" "1" \
+  "$(host_name() { printf test-host; }; PROVIDER=claude render_quota "$QUOTA_BLOB" "" \
+     | strip | grep -c '^  host     test-host$')"
+
 # --- popup sizing ----------------------------------------------------------
 
 tmp=$(mktemp -d)
@@ -358,12 +362,13 @@ rm -rf "$tmp"
 check "the quota popup fits a full-cap row" "149" "$USAGE_POPUP_W"
 check "the popup width is derived, not fixed" "149" "$(( ROW_FIXED_W + BAR_CAP + 2 ))"
 
-# The combined popup is as wide as a quota row and as tall as both sections
-# and the context section: 2 quota rows * 2 + 3 models + 17 + 10.
+# The combined popup is as wide as a quota row and as tall as both sections,
+# the host row and the context section: 2 quota rows * 2 + 3 models + 17 + 4
+# for the host row and its rule + 8 for the context section.
 tmp=$(mktemp -d)
 printf 'QUOTA\ta\t1\t-\t-\nQUOTA\tb\t2\t-\t-\nMODEL\t1\tm1\nMODEL\t2\tm2\nMODEL\t3\tm3\n' \
   > "$tmp/claude-usage.agents.cache"
-check "the combined popup sizes from both record kinds" "149x34" \
+check "the combined popup sizes from both record kinds" "149x36" \
   "$(resolve_provider() { printf agents; }; TMPDIR="$tmp" size_for '%0')"
 rm -rf "$tmp"
 
