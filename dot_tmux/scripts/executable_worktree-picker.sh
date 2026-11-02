@@ -86,10 +86,10 @@ sel=$(printf '%s\n' "$rows" \
 
 # Only type `cd` into the triggering pane when a real shell owns it — sending
 # keystrokes to a running Claude or vim pastes literal text instead of executing.
-# The path goes in single quotes. If the path has a quote or a new line, the
-# shell can run part of it as a command, so do not type the cd.
-unsafe=$'\'\n'
-if [[ "$sel" != *["$unsafe"]* ]]; then
+# The path goes in single quotes. The line editor of the shell reads a control
+# character as a key: a carriage return runs the line, and ctrl+u erases it.
+# Thus, if the path has a quote or a control character, do not type the cd.
+if [[ "$sel" != *[[:cntrl:]\']* ]]; then
   case "$(tmux display-message -p -t "$pane_id" '#{pane_current_command}')" in
     sh | bash | zsh | fish) tmux send-keys -t "$pane_id" "cd -- '$sel'" C-m ;;
   esac
