@@ -76,9 +76,14 @@ rex.bind("ctrl+space>y", "commit_draft")
 -- (dock.lua). tmux has no floats, so this key has no tmux copy.
 rex.bind("ctrl+space>shift+d", "dock_float")
 
--- prefix+z: zen mode. The pane floats in the middle of its tab, over a dark
--- backdrop, with smaller text (zen.lua). prefix+Z only zooms the pane, the
--- same as in tmux.
+-- cmd+z or prefix+z: zen mode. The pane floats in the middle of its tab, over
+-- a dark backdrop, with smaller text (zen.lua). prefix+Z only zooms the pane,
+-- the same as in tmux.
+--
+-- In the app, cmd+z is Edit > Undo. Undo is off in a terminal pane, and a
+-- terminal does not send cmd keys to its program. Thus zen mode can use the
+-- key. shift+cmd+z (Redo) stays as it is.
+rex.bind("cmd+z", "zen")
 rex.bind("ctrl+space>z", "zen")
 rex.bind("ctrl+space>shift+z", "zoom_pane")
 
