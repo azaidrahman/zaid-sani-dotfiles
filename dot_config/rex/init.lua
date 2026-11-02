@@ -5,33 +5,125 @@
 --
 -- Rex does not watch this file. After you change it, run `rex config reload`.
 -- To find errors before a reload, run `rex config check`.
+--
+-- To see all keys, open the Command Palette. It shows the key of each
+-- action. Type "custom" to see only the keys of this file (custom.lua).
 
+-- custom.lua must load before the keys and the actions.
+require("custom")
+
+-- Keys -----------------------------------------------------------------------
+--
+-- Bind each key to a named action, not to a function, so that the Command
+-- Palette shows it. Bind all keys here, before the actions below. Then the
+-- palette search finds each action by its key (custom.lua).
+--
 -- The tmux prefix is ctrl+space. When a sequence starts with ctrl+space, the
 -- key no longer reaches the terminal. Press it two times to send it.
-rex.bind("ctrl+space>ctrl+space", "pane.send_key", { key = "ctrl+space" })
+
+rex.bind("ctrl+space>ctrl+space", "send_prefix")
 
 -- ctrl+] and ctrl+[ show the next tab and the previous tab. These keys do not
 -- use the prefix. They no longer reach the terminal, so ctrl+[ does not send
 -- Escape to a program.
-rex.bind("ctrl+]", "client.tab.next")
-rex.bind("ctrl+[", "client.tab.previous")
+rex.bind("ctrl+]", "next_tab")
+rex.bind("ctrl+[", "previous_tab")
 
 -- cmd+e shows or hides the sidebar, the same as in Obsidian. The app also
 -- binds cmd+/ to this action.
-rex.bind("cmd+e", "client.sidebar.toggle")
+rex.bind("cmd+e", "toggle_sidebar")
 
 -- ctrl+h/j/k/l: focus the pane on that side. In nvim, go to the nvim window
 -- on that side first (navigator.lua).
-local navigate = require("navigator")
-rex.bind("ctrl+h", navigate("left"))
-rex.bind("ctrl+j", navigate("down"))
-rex.bind("ctrl+k", navigate("up"))
-rex.bind("ctrl+l", navigate("right"))
+rex.bind("ctrl+h", "navigate_left")
+rex.bind("ctrl+j", "navigate_down")
+rex.bind("ctrl+k", "navigate_up")
+rex.bind("ctrl+l", "navigate_right")
+
+-- prefix+- sets the text to the zoomed-out size. prefix+= sets the text back
+-- to the default size.
+rex.bind("ctrl+space>-", "font_zoom_out")
+rex.bind("ctrl+space>=", "font_reset")
+
+-- prefix+u: the status center (usage.lua).
+rex.bind("ctrl+space>u", "status_center")
+
+-- prefix+X: open a tab or a session that closed (closed_tabs.lua).
+rex.bind("ctrl+space>shift+x", "closed_tabs")
+
+-- prefix+A: restart the Claude session in the pane and resume the same
+-- conversation, for example after a Claude Code update (restart_claude.lua).
+rex.bind("ctrl+space>shift+a", "restart_claude")
+
+-- prefix+b: hold or release the session (hold.lua).
+rex.bind("ctrl+space>b", "toggle_hold")
+
+-- prefix+e: review the changes of a git worktree in tuicr (diff_review.lua).
+rex.bind("ctrl+space>e", "diff_review")
+
+-- prefix+f: pick a tab from all sessions (tab_picker.lua).
+rex.bind("ctrl+space>f", "tab_picker")
+
+-- prefix+o: show the tab that had focus before the current tab
+-- (last_tab.lua).
+rex.bind("ctrl+space>o", "last_tab")
+
+-- prefix+y: edit the commit message or the pull request draft that Claude
+-- proposed, in a float (commit_draft.lua).
+rex.bind("ctrl+space>y", "commit_draft")
+
+-- prefix+D: move the focused float into the layout, as a regular pane
+-- (dock.lua). tmux has no floats, so this key has no tmux copy.
+rex.bind("ctrl+space>shift+d", "dock_float")
+
+-- Actions --------------------------------------------------------------------
+
+-- client_action defines an action that asks the app to run one of its own
+-- actions. A key bound to the new action shows in the Custom group of the
+-- palette. The action of the app keeps its own entry and its own keys.
+local function client_action(spec, action, args)
+  spec.run = function() rex.client.queue(action, args) end
+  rex.action(spec)
+end
+
+client_action({
+  name = "send_prefix",
+  title = "Send Prefix to Terminal",
+  description = "Send ctrl+space to the program in the pane.",
+  keywords = "prefix ctrl+space send key terminal",
+}, "pane.send_key", { key = "ctrl+space" })
+
+client_action({
+  name = "next_tab",
+  title = "Show Next Tab",
+  description = "Show the next tab in the session.",
+  keywords = "tab window next",
+}, "client.tab.next")
+
+client_action({
+  name = "previous_tab",
+  title = "Show Previous Tab",
+  description = "Show the previous tab in the session.",
+  keywords = "tab window previous",
+}, "client.tab.previous")
+
+client_action({
+  name = "toggle_sidebar",
+  title = "Show or Hide Sidebar",
+  description = "Show or hide the sidebar, the same as cmd+e in Obsidian.",
+  keywords = "sidebar toggle hide show",
+}, "client.sidebar.toggle")
+
+client_action({
+  name = "font_reset",
+  title = "Reset Text Size",
+  description = "Set the text back to the default size.",
+  keywords = "font size zoom text reset default",
+}, "client.font.reset")
 
 -- The default text size is the zoomed-in size. Rex keeps it in Settings, as
 -- Terminal Font Size 20 (Workspace.terminalFontPointSize). This file cannot
--- set it. prefix+- sets the text to the zoomed-out size. prefix+= sets the
--- text back to the default size.
+-- set it.
 --
 -- Rex cannot set a font size directly. Thus the zoomed-out size is the
 -- default size minus ZOOM_STEPS times "Decrease Font Size". One step is 1
@@ -48,48 +140,17 @@ rex.action{
     for _ = 1, ZOOM_STEPS do rex.client.queue("client.font.decrease") end
   end,
 }
-rex.bind("ctrl+space>-", "font_zoom_out")
-rex.bind("ctrl+space>=", "client.font.reset")
 
--- prefix+u: the status center (usage.lua).
+require("navigator")
 require("usage")
-rex.bind("ctrl+space>u", "status_center")
-
--- prefix+X: open a tab or a session that closed (closed_tabs.lua).
 require("closed_tabs")
-rex.bind("ctrl+space>shift+x", "closed_tabs")
-
--- prefix+A: restart the Claude session in the pane and resume the same
--- conversation, for example after a Claude Code update (restart_claude.lua).
 require("restart_claude")
-rex.bind("ctrl+space>shift+a", "restart_claude")
-
--- prefix+b: hold or release the session (hold.lua).
 require("hold")
-rex.bind("ctrl+space>b", "toggle_hold")
-
--- prefix+e: review the changes of a git worktree in tuicr (diff_review.lua).
 require("diff_review")
-rex.bind("ctrl+space>e", "diff_review")
-
--- prefix+f: pick a tab from all sessions (tab_picker.lua).
 require("tab_picker")
-rex.bind("ctrl+space>f", "tab_picker")
-
--- prefix+o: show the tab that had focus before the current tab
--- (last_tab.lua).
 require("last_tab")
-rex.bind("ctrl+space>o", "last_tab")
-
--- prefix+y: edit the commit message or the pull request draft that Claude
--- proposed, in a float (commit_draft.lua).
 require("commit_draft")
-rex.bind("ctrl+space>y", "commit_draft")
-
--- prefix+D: move the focused float into the layout, as a regular pane
--- (dock.lua). tmux has no floats, so this key has no tmux copy.
 require("dock")
-rex.bind("ctrl+space>shift+d", "dock_float")
 
 -- Keep a copy of the tabs of each host for the Alfred workflow Rex Tabs
 -- (scripts/remote-tabs-watcher.lua). If a watcher runs already, the new one
