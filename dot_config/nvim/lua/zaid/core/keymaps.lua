@@ -91,6 +91,14 @@ local buffer_mru = require("zaid.core.buffer_mru")
 vim.keymap.set("n", "<S-h>", buffer_mru.jump_recent, { desc = "Go to last-opened buffer" })
 vim.keymap.set("n", "<S-l>", buffer_mru.jump_oldest, { desc = "Go to furthest-back buffer" })
 
+-- window stuff: past the edge of nvim, the keys go to tmux or Rex panes
+local navigator = require("zaid.core.navigator")
+vim.keymap.set("n", "<C-h>", function() navigator.move("h") end, { desc = "Go to left window or pane" })
+vim.keymap.set("n", "<C-j>", function() navigator.move("j") end, { desc = "Go to lower window or pane" })
+vim.keymap.set("n", "<C-k>", function() navigator.move("k") end, { desc = "Go to upper window or pane" })
+vim.keymap.set("n", "<C-l>", function() navigator.move("l") end, { desc = "Go to right window or pane" })
+vim.keymap.set("n", "<C-\\>", function() navigator.move("p") end, { desc = "Go to last window or pane" })
+
 -- get current buffers directory
 vim.keymap.set("n", "<leader>hd", function()
     print(vim.fn.expand("%:p:h"))

@@ -1,3 +1,8 @@
+-- Archived: zaid/core/navigator.lua replaces this spec. When the plugin
+-- loaded, its own mappings replaced the mappings below, so the jump into a
+-- Rex pane never worked. plugins/init.lua also had a bare spec for the
+-- plugin: { "christoomey/vim-tmux-navigator" }.
+--
 -- ctrl+h/j/k/l move between nvim windows and the panes around nvim.
 --
 -- In tmux, the plugin does the work. In Rex, nvim moves between its own

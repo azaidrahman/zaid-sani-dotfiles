@@ -5,6 +5,9 @@ local M = {}
 
 M.in_tmux = vim.env.TMUX ~= nil and vim.env.TMUX ~= ""
 
+-- Rex sets REX_SESSION in each pane. Inside tmux in a Rex pane, both are true.
+M.in_rex = vim.env.REX_SESSION ~= nil and vim.env.REX_SESSION ~= ""
+
 -- Run fn only when nvim is standalone (outside tmux).
 function M.when_standalone(fn)
 	if not M.in_tmux then
