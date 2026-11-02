@@ -88,6 +88,10 @@ rex.bind("ctrl+space>shift+a", "restart_claude")
 require("hold")
 rex.bind("ctrl+space>b", "toggle_hold")
 
+-- prefix+e: review the changes of a git worktree in tuicr (diff_review.lua).
+require("diff_review")
+rex.bind("ctrl+space>e", "diff_review")
+
 -- prefix+f: pick a tab from all sessions (tab_picker.lua).
 require("tab_picker")
 rex.bind("ctrl+space>f", "tab_picker")
