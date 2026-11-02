@@ -1,5 +1,5 @@
 {
   "name": "chat-cards",
-  "version": "0.2.1",
-  "description": "Draws Claude's replies as clear cards with a round edge and puts a box around the prompts you send."
+  "version": "0.3.0",
+  "description": "Draws Claude's replies as filled cards with no edge and puts a box around the prompts you send."
 }

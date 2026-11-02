@@ -1,6 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 
-test('a reply is a card with its text and a copy label', async $ => {
+// A reply card has a fill and no border, so a mouse selection of its text
+// takes no border characters.
+test('a reply is a filled card with its text and a copy label', async $ => {
   const ui = await $.ui.mount({
     plugin: 'chat-cards',
     component: 'AssistantMessage',
@@ -9,6 +11,9 @@ test('a reply is a card with its text and a copy label', async $ => {
     props: { text: 'Hello **there**', isFirstOfReply: true },
   })
 
+  const card = await ui.drawn()
+  expect(card).toMatchObject({ type: 'Box', props: { backgroundColor: 'userMessageBackground' } })
+  expect(JSON.stringify(card)).not.toContain('borderStyle')
   expect((await ui.find({ type: 'Text', text: /⏺/ }))?.text).toBe('⏺')
   expect((await ui.find({ type: 'Text', text: /copy/ }))?.text).toBe('copy')
   await ui.unmount()
