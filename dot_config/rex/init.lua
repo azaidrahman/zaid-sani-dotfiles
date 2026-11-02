@@ -79,6 +79,11 @@ rex.bind("ctrl+space>u", "status_center")
 require("closed_tabs")
 rex.bind("ctrl+space>shift+x", "closed_tabs")
 
+-- prefix+A: restart the Claude session in the pane and resume the same
+-- conversation, for example after a Claude Code update (restart_claude.lua).
+require("restart_claude")
+rex.bind("ctrl+space>shift+a", "restart_claude")
+
 -- prefix+b: hold or release the session (hold.lua).
 require("hold")
 rex.bind("ctrl+space>b", "toggle_hold")
