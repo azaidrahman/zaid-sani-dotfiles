@@ -52,6 +52,11 @@ works locally, over SSH, and in non-login shells:
   — Claude Code injects exactly that via `GIT_CONFIG_*` — still hit the shim.
 - **SSH** — driven by the 1Password SSH agent (`private_Library/LaunchAgents`);
   `run_after_ensure-ssh-agent.sh` keeps `com.zaid.ssh-agent` loaded.
+- **`twg` Bitbucket token** — all machines use one token, the `TWG.BB.API_TOKEN`
+  item in the work vault. On each apply, `run_after_sync-twg-bb-token.sh`
+  copies the token into `~/.config/twg/auth.conf`. To rotate the token, change
+  the item, then run `chezmoi apply` on each machine. Keep only one item with
+  this title, or the script cannot choose one and changes nothing.
 
 The age key and the 1Password service-account tokens are the only things you
 must place on a new machine by hand; everything else bootstraps from them.

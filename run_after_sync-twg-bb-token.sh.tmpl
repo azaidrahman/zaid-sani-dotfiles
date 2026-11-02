@@ -1,0 +1,87 @@
+#!/bin/bash
+# Copy the shared Bitbucket token of twg from 1Password into the twg config.
+#
+# `twg bb` reads its Bitbucket token from the bbc-token line of
+# ~/.config/twg/auth.conf. `twg setup bitbucket` stores a token on one machine
+# only, so the machines drift apart. This script makes each machine use the one
+# token in 1Password.
+#
+# The item:
+#
+#   Vault:      the work vault (workVaultName)
+#   Title:      TWG.BB.API_TOKEN
+#   Category:   API Credential
+#   credential: an Atlassian API token for Bitbucket
+#
+# Keep only one item with this title. If two items have the title, `op read`
+# cannot choose one, and this script changes nothing.
+#
+# To rotate the token, put the new token in the item. Then run `chezmoi apply`
+# on each machine. The script runs on each apply. It reads 1Password one time,
+# and it writes the file only when the token is different.
+#
+# This script NEVER fails the apply, and it never prints the token.
+#
+{{ if eq .chezmoi.os "darwin" -}}
+set -u
+
+CONF="$HOME/.config/twg/auth.conf"
+SA_ENTRY="op-service-account-token"
+REF="op://{{ .workVaultName }}/TWG.BB.API_TOKEN/credential"
+
+note() { printf 'twg bitbucket token: %s\n' "$1" >&2; }
+
+# twg is not logged in on this machine. `twg login` makes the file.
+[ -f "$CONF" ] || exit 0
+
+command -v op >/dev/null 2>&1 || { note "op is not installed, skipping"; exit 0; }
+
+# The service account reads the work vault without a Touch ID prompt.
+# git-credential-op uses the same keychain entry.
+OP_SERVICE_ACCOUNT_TOKEN=$(security find-generic-password -a "$USER" -s "$SA_ENTRY" -w 2>/dev/null)
+export OP_SERVICE_ACCOUNT_TOKEN
+if [ -z "$OP_SERVICE_ACCOUNT_TOKEN" ]; then
+    note "could not read $SA_ENTRY from the keychain, skipping"
+    exit 0
+fi
+
+# On success the output is the token. On failure it is the error of op.
+if ! out=$(op read --no-newline "$REF" 2>&1); then
+    note "could not read the item from 1Password, skipping"
+    note "op said: $(printf '%s' "$out" | head -n 1)"
+    exit 0
+fi
+token=$out
+if [ -z "$token" ]; then
+    note "the credential field of the item is empty, skipping"
+    exit 0
+fi
+
+current=$(sed -n 's/^bbc-token=//p' "$CONF" | head -n 1)
+[ "$current" = "$token" ] && exit 0
+
+# Write a copy, then move it into place, so twg never reads half a file.
+tmp=$(mktemp "$CONF.XXXXXX") || { note "could not make a temporary file"; exit 0; }
+chmod 600 "$tmp"
+if grep -q '^bbc-token=' "$CONF"; then
+    # Pass the token in the environment, not in the arguments of awk.
+    TOKEN="$token" awk '/^bbc-token=/ { print "bbc-token=" ENVIRON["TOKEN"]; next } { print }' \
+        "$CONF" >"$tmp"
+else
+    {
+        cat "$CONF"
+        # Start a new line if the file does not end with one.
+        [ -n "$(tail -c 1 "$CONF")" ] && echo
+        printf 'bbc-token=%s\n' "$token"
+        grep -q '^bbc-user=' "$CONF" || printf 'bbc-user=%s\n' {{ .workEmail | quote }}
+    } >"$tmp"
+fi
+
+if mv "$tmp" "$CONF"; then
+    note "updated on {{ .chezmoi.hostname }} from 1Password"
+else
+    rm -f "$tmp"
+    note "could not write $CONF"
+fi
+exit 0
+{{ end -}}
