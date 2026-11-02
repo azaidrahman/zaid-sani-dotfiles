@@ -63,15 +63,14 @@ unset TMUX TMUX_PANE REX_SESSION REX_BLOCK REX_CLIENT
 export REX_SERVER="unix://$TMP/rex.sock"
 
 # --- Rex ----------------------------------------------------------------------
-# The configuration binds the keys with navigator.lua from this checkout.
+# The configuration defines the actions with navigator.lua from this checkout.
+# The keys are bound to these actions, and the app runs the action of a key.
+# The CLI cannot press a key in the app, so the tests run the actions with
+# `rex do`. tests/test-rex-keys.sh checks the keys of init.lua.
 cat >"$TMP/init.lua" <<EOF
 package.path = "$ROOT/dot_config/rex/?.lua;" .. package.path
-local navigate = require("navigator")
-rex.bind("ctrl+h", navigate("left"))
-rex.bind("ctrl+l", navigate("right"))
+require("navigator")
 EOF
-check "rex: init.lua loads navigator.lua and binds the keys" "2 0" \
-	"$(rex config check "$TMP/init.lua" --json | jq -r '"\(.bindings) \(.diagnostics | length)"')"
 
 rex server run --listen "$REX_SERVER" --state-dir "$TMP/rex" --restore=false \
 	--config "$TMP/init.lua" >"$TMP/rex.log" 2>&1 &
@@ -98,11 +97,18 @@ rex_focused() { rex session inspect "$S" --json | jq -r '.windows[0].focused_blo
 rex send -s "$S" -b "$LEFT" "$(nvim_cmd "$TMP/rex-nvim.sock")"
 rex send-key -s "$S" -b "$LEFT" enter
 nvim_wait "$TMP/rex-nvim.sock" || echo "FAIL - nvim in Rex did not start"
-check "rex: the binding sees nvim as the foreground program" nvim \
+check "rex: the action sees nvim as the foreground program" nvim \
 	"$(rex block call -s "$S" -b "$LEFT" process | jq -r '.foreground.name')"
-# send-key goes through the bindings, as a key from the app does.
 rex focus -s "$S" "$LEFT" >/dev/null
-rex send-key -s "$S" -b "$LEFT" ctrl+l
+
+# The action sends ctrl+l to nvim itself.
+nvim_expr "$TMP/rex-nvim.sock" 'execute("vsplit | wincmd h")' >/dev/null
+rex do -s "$S" -b "$LEFT" navigate_right >/dev/null
+check "rex: ctrl+l in an nvim split goes to the nvim window on the right" \
+	2 "$(until_eq 2 nvim_expr "$TMP/rex-nvim.sock" 'winnr()')"
+check "rex: ctrl+l in an nvim split does not leave nvim" "$LEFT" "$(rex_focused)"
+
+rex do -s "$S" -b "$LEFT" navigate_right >/dev/null
 check "rex: ctrl+l at the right edge of nvim focuses the pane on the right" \
 	"$RIGHT" "$(until_eq "$RIGHT" rex_focused)"
 
