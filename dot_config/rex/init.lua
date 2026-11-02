@@ -97,6 +97,16 @@ rex.bind("ctrl+space>f", "tab_picker")
 require("last_tab")
 rex.bind("ctrl+space>o", "last_tab")
 
+-- prefix+y: edit the commit message or the pull request draft that Claude
+-- proposed, in a float (commit_draft.lua).
+require("commit_draft")
+rex.bind("ctrl+space>y", "commit_draft")
+
+-- prefix+D: move the focused float into the layout, as a regular pane
+-- (dock.lua). tmux has no floats, so this key has no tmux copy.
+require("dock")
+rex.bind("ctrl+space>shift+d", "dock_float")
+
 -- Keep a copy of the tabs of each host for the Alfred workflow Rex Tabs
 -- (scripts/remote-tabs-watcher.lua). If a watcher runs already, the new one
 -- exits.
