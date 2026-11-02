@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Start Ghostty in the background at login. Ghostty must run for its global
+  quick terminal keybind (ctrl+`) to work. The Ghostty config sets
+  initial-window = false, so no window opens.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.zaid.ghostty</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/open</string>
+    <string>-g</string>
+    <string>-a</string>
+    <string>Ghostty</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>
