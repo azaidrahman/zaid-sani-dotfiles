@@ -86,12 +86,21 @@ sel=$(printf '%s\n' "$rows" \
 
 # Only type `cd` into the triggering pane when a real shell owns it — sending
 # keystrokes to a running Claude or vim pastes literal text instead of executing.
-# The path goes in single quotes. The line editor of the shell reads a control
-# character as a key: a carriage return runs the line, and ctrl+u erases it.
-# Thus, if the path has a quote or a control character, do not type the cd.
-if [[ "$sel" != *[[:cntrl:]\']* ]]; then
+# The path goes in single quotes. The line editor of the shell can read some
+# characters as keys, for example a carriage return or a byte above 0x7f.
+# Thus type the cd only if the path has plain ASCII characters from a short
+# list. -l sends the text as literal characters, never as tmux key names.
+#
+# safe_path PATH — true if PATH has only letters, digits, space and ._/@+~-.
+# The C locale makes the ranges plain ASCII in each locale.
+safe_path() { local LC_ALL=C; [[ "$1" != *[!A-Za-z0-9._/@+~\ -]* ]]; }
+
+if safe_path "$sel"; then
   case "$(tmux display-message -p -t "$pane_id" '#{pane_current_command}')" in
-    sh | bash | zsh | fish) tmux send-keys -t "$pane_id" "cd -- '$sel'" C-m ;;
+    sh | bash | zsh | fish)
+      tmux send-keys -t "$pane_id" -l "cd -- '$sel'"
+      tmux send-keys -t "$pane_id" C-m
+      ;;
   esac
 fi
 
