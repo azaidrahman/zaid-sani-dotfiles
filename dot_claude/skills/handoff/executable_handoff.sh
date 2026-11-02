@@ -63,6 +63,8 @@ QUOTED=$(printf '%s' "$PROMPT" | sed "s/'/'\\\\''/g")
 WIN=$(tmux new-window -P -F '#{window_id}' -c "$DIR" -n "$LABEL")
 tmux set-option -w -t "$WIN" @handoff_key "$KEY"
 tmux select-pane -t "$WIN" -T "$LABEL"
-tmux send-keys -t "$WIN" -l "claude '$QUOTED'"
+# HANDOFF_CLAUDE_FLAGS lets the caller pick the model and effort of the new
+# session, for example "--model opus --effort high".
+tmux send-keys -t "$WIN" -l "claude ${HANDOFF_CLAUDE_FLAGS:-} '$QUOTED'"
 tmux send-keys -t "$WIN" Enter
 echo "window: created $LABEL"
