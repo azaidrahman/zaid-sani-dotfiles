@@ -76,6 +76,16 @@ rex.bind("ctrl+space>y", "commit_draft")
 -- (dock.lua). tmux has no floats, so this key has no tmux copy.
 rex.bind("ctrl+space>shift+d", "dock_float")
 
+-- prefix+z: zen mode. The pane floats in the middle of its tab, over a dark
+-- backdrop, with smaller text (zen.lua). prefix+Z only zooms the pane, the
+-- same as in tmux.
+rex.bind("ctrl+space>z", "zen")
+rex.bind("ctrl+space>shift+z", "zoom_pane")
+
+-- cmd+w does File > Close, as in the app. In zen mode, it leaves zen mode and
+-- puts the pane back, so that the pane does not close by mistake (zen.lua).
+rex.bind("cmd+w", "close_or_leave_zen")
+
 -- Actions --------------------------------------------------------------------
 
 -- client_action defines an action that asks the app to run one of its own
@@ -115,6 +125,13 @@ client_action({
 }, "client.sidebar.toggle")
 
 client_action({
+  name = "zoom_pane",
+  title = "Zoom Pane",
+  description = "Make the focused pane fill the tab, or restore the layout.",
+  keywords = "zoom pane maximize fill restore",
+}, "pane.zoom")
+
+client_action({
   name = "font_reset",
   title = "Reset Text Size",
   description = "Set the text back to the default size.",
@@ -151,6 +168,7 @@ require("tab_picker")
 require("last_tab")
 require("commit_draft")
 require("dock")
+require("zen")
 
 -- Keep a copy of the tabs of each host for the Alfred workflow Rex Tabs
 -- (scripts/remote-tabs-watcher.lua). If a watcher runs already, the new one
