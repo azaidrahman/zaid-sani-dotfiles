@@ -1,16 +1,17 @@
 import type { ElementTable, Register } from 'claude-code'
 
-// Each reply of Claude is a clear card with a round edge. Each prompt you
-// send gets a square box in the color of the lines of the input field. The
-// input field itself is the engine's own, and a mod cannot draw around it.
+// Each reply of Claude is a card with a fill and no edge, so a selection
+// with the mouse takes no border characters. Each prompt you send gets a
+// square box in the color of the lines of the input field. The input field
+// itself is the engine's own, and a mod cannot draw around it.
 //
-// The cards have no fill. The terminal background shows through, so a card
-// fits a light theme and a dark theme of the terminal. The edges use colors
-// of the Claude Code theme, not fixed values.
+// The fill is userMessageBackground, the color that Claude Code gives to a
+// prompt. It is a color of the Claude Code theme, not a fixed value, so it
+// changes when the theme changes.
 //
-// Each card has a "copy" label on its top edge. A click copies the text as
-// Claude wrote it: no card edge, no gutter, and no line breaks from the
-// width of the terminal. A selection with the mouse would take all three.
+// Each reply card has a "copy" label at the right of its first line. A click
+// copies the text as Claude wrote it: no gutter, and no line breaks from the
+// width of the terminal. A selection with the mouse would take both.
 //
 // The engine's Markdown draws a table to the width of the terminal, not to
 // the width of the box that holds it. A table in a card is thus too wide,
@@ -22,10 +23,10 @@ type Align = 'left' | 'center' | 'right'
 type Table = { header: string[]; align: Align[]; rows: string[][] }
 type Part = { text: string } | { table: Table }
 
-// The columns of a card that the text cannot use: the two edges, the
-// padding in the edges, the gutter of the bullet, and the margin of the
-// label at the right. The label itself is added for each card.
-const CARD_COLUMNS = 8
+// The columns of a card that the text cannot use: the padding at the two
+// sides, the gutter of the bullet, and the margin of the label at the right.
+// The label itself is added for each card.
+const CARD_COLUMNS = 6
 const GAP = 3
 const MIN_COLUMN = 3
 const MAX_LINES = 4
@@ -218,9 +219,7 @@ export const register: Register = on => {
     const { Box, Text, Markdown, Button } = elements
     const text = e.props.text
 
-    // The column at the right of the first line holds the copy label. The
-    // terminal does not draw a Box placed over the card's edge, so the label
-    // takes a few columns of the text instead.
+    // The column at the right of the first line holds the copy label.
     //
     // A summary row shows a short summary of what Claude wrote between two
     // tool calls. The column says "summary" there, as the engine marks the
@@ -259,7 +258,7 @@ export const register: Register = on => {
     )
 
     return (
-      <Box marginTop={1} borderStyle="round" borderColor="inactive" paddingX={1}>
+      <Box marginTop={1} backgroundColor="userMessageBackground" paddingX={1} paddingY={1}>
         <Box width={2} flexShrink={0}>
           <Text>{e.props.isFirstOfReply ? '⏺' : ' '}</Text>
         </Box>
