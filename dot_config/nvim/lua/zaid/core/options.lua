@@ -1,7 +1,9 @@
 vim.g.netrw_banner = 0
 vim.opt.iskeyword:remove("_")
 
-vim.opt.guicursor = ""
+-- nvim sets the cursor shape. An empty value gives the shape of the terminal,
+-- and Rex uses a bar.
+vim.opt.guicursor = "n-v-c-sm:block,i-ci-ve:ver25,r-cr-o:hor20"
 vim.opt.nu = true
 vim.opt.relativenumber = true
 
