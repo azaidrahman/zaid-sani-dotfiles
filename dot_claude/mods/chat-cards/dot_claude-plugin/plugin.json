@@ -1,0 +1,6 @@
+{
+  "name": "chat-cards",
+  "version": "0.1.0",
+  "description": "Draws Claude's replies as tinted cards and puts a box around the prompts you send, in light or dark colors to match macOS.",
+  "types": "./types/index.d.ts"
+}
