@@ -1,8 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-test('a reply is a card with its text and a copy label', async ($, on) => {
-  on('state.get', () => ({ value: { value: 'light', version: 1 } }))
-
+test('a reply is a card with its text and a copy label', async $ => {
   const ui = await $.ui.mount({
     plugin: 'chat-cards',
     component: 'AssistantMessage',
@@ -16,9 +14,7 @@ test('a reply is a card with its text and a copy label', async ($, on) => {
   await ui.unmount()
 })
 
-test('a summary card is marked and has no copy label', async ($, on) => {
-  on('state.get', () => ({ value: { value: 'dark', version: 1 } }))
-
+test('a summary card is marked and has no copy label', async $ => {
   const ui = await $.ui.mount({
     plugin: 'chat-cards',
     component: 'AssistantMessage',
@@ -32,7 +28,7 @@ test('a summary card is marked and has no copy label', async ($, on) => {
   await ui.unmount()
 })
 
-test('a prompt you send is in a box', async ($, on) => {
+test('a prompt you send is in a box', async $ => {
   const ui = await $.ui.mount({
     plugin: 'chat-cards',
     component: 'UserMessage',

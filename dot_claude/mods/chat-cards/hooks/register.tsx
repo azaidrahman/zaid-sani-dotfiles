@@ -1,64 +1,23 @@
-import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { Register } from 'claude-code'
 
-import type { Appearance } from '../types'
-
-// Each reply of Claude is a tinted card with a round edge. Each prompt you
+// Each reply of Claude is a clear card with a round edge. Each prompt you
 // send gets a square box in the color of the lines of the input field. The
 // input field itself is the engine's own, and a mod cannot draw around it.
+//
+// The cards have no fill. The terminal background shows through, so a card
+// fits a light theme and a dark theme of the terminal. The edges use colors
+// of the Claude Code theme, not fixed values.
 //
 // Each card has a "copy" label on its top edge. A click copies the text as
 // Claude wrote it: no card edge, no gutter, and no line breaks from the
 // width of the terminal. A selection with the mouse would take all three.
 
-const appearance = atom({ plugin: 'chat-cards', key: 'appearance' } as const, 'light' as Appearance)
-
-// One shade off the backgrounds of the Rex themes: sunlit-parchment
-// (#f7f2e3) in light mode and merino-dark (#0e1117) in dark mode.
-const CARD: Record<Appearance, { fill: string; edge: string }> = {
-  light: { fill: '#ede6d1', edge: '#d9cfb4' },
-  dark: { fill: '#181c24', edge: '#2a303b' },
-}
-
-// macOS writes AppleInterfaceStyle only in dark mode, so a failed read is
-// light mode.
-async function readAppearance($: EngineInterface): Promise<Appearance> {
-  try {
-    const { exitCode, stdout } = await $.process.run(
-      ['defaults', 'read', '-g', 'AppleInterfaceStyle'],
-      { timeoutMs: 2000 },
-    )
-    return exitCode === 0 && stdout.trim() === 'Dark' ? 'dark' : 'light'
-  } catch {
-    return 'light'
-  }
-}
-
-async function refresh($: EngineInterface): Promise<void> {
-  const value = await readAppearance($)
-  await update($, appearance, () => value)
-}
-
 export const register: Register = on => {
-  on('session.start', async ($, e, next) => {
-    const started = await next(e)
-    await refresh($)
-    return started
-  })
-
-  // Read the appearance again at each prompt, so the cards follow a switch
-  // to dark mode at sunset. The prompt does not wait for it.
-  on('prompt.submit', ($, e, next) => {
-    void refresh($)
-    return next(e)
-  })
-
   // The mod draws the rows itself, not around the engine's own rows: an
   // engine row brings its top margin, which would be an empty line inside
   // the frame. Markdown draws the text as the engine draws a reply.
-  on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
+  on('ui.render', { component: 'AssistantMessage' }, ($, e, next) => {
     if (e.surface !== 'terminal') return next(e)
-    const { fill, edge } = CARD[await read($, appearance)]
     const { Box, Text, Markdown, Button } = $.ui.resolve(e)
     const text = e.props.text
 
@@ -86,7 +45,7 @@ export const register: Register = on => {
     )
 
     return (
-      <Box marginTop={1} borderStyle="round" borderColor={edge} backgroundColor={fill} paddingX={1}>
+      <Box marginTop={1} borderStyle="round" borderColor="inactive" paddingX={1}>
         <Box width={2} flexShrink={0}>
           <Text>{e.props.isFirstOfReply ? '⏺' : ' '}</Text>
         </Box>
