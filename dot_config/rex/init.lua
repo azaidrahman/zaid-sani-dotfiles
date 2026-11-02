@@ -87,6 +87,11 @@ rex.bind("ctrl+space>b", "toggle_hold")
 require("tab_picker")
 rex.bind("ctrl+space>f", "tab_picker")
 
+-- prefix+o: show the tab that had focus before the current tab
+-- (last_tab.lua).
+require("last_tab")
+rex.bind("ctrl+space>o", "last_tab")
+
 -- Keep a copy of the tabs of each host for the Alfred workflow Rex Tabs
 -- (scripts/remote-tabs-watcher.lua). If a watcher runs already, the new one
 -- exits.
