@@ -11,9 +11,10 @@
 #     ID) | ssh-add -t 43200. If op-sa cannot read a key, read it with plain
 #     op, which asks for Touch ID. --headless skips that step.
 #
-# The op wrapper (~/.local/shims/op) runs `ssh-agent-seed --headless` when it
-# needs SSH to the peer Mac and the agent is empty. The service-account tokens
-# can read these keys already, so a load with no prompt adds no new access.
+# Use --headless in scripts that must never wait for a prompt. Nothing runs
+# this script by itself: SSH between aqua and onyx uses Tailscale SSH, which
+# needs no keys. The service-account tokens can read these keys already, so a
+# load with no prompt adds no new access.
 
 headless=0
 [ "${1:-}" = "--headless" ] && headless=1
