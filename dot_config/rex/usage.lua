@@ -15,6 +15,12 @@ local CONFIG_HOME = os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.con
 local SCRIPT = CONFIG_HOME .. "/rex/scripts/usage.sh"
 local POLLER = CONFIG_HOME .. "/rex/scripts/usage-poller.lua"
 
+-- The float can run on a host that did not load this file. The home
+-- directory is not the same on each Mac. Thus a shell finds the script on the
+-- host that runs the float. Use SCRIPT only for the commands that run on this
+-- host: the poller and rex.exec. See tab_picker.lua.
+local FLOAT_SCRIPT = 'exec "${XDG_CONFIG_HOME:-$HOME/.config}/rex/scripts/usage.sh" "$@"'
+
 -- The size that the script gives includes the border of a tmux popup: 2
 -- columns and 2 rows. The frame of a Rex float takes 2 columns and 4 rows.
 local EXTRA_ROWS = 2
@@ -104,7 +110,7 @@ local function open(ctx)
       options = {
         -- Do not set shell = "none". The login shell gives the PATH that
         -- finds claude, codex and jq.
-        command = { SCRIPT, pid, cwd or "" },
+        command = { "sh", "-c", FLOAT_SCRIPT, "usage.sh", pid, cwd or "" },
         cwd = cwd,
       },
     },

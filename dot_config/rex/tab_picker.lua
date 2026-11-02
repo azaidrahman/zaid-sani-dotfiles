@@ -10,8 +10,12 @@
 -- To run the action without the key, use `rex do tab_picker`.
 
 local SHELL = "com.superlogical.terminal.shell"
-local CONFIG_HOME = os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")
-local PICKER = CONFIG_HOME .. "/rex/scripts/tab-picker.sh"
+
+-- The float can run on a host that did not load this file. For example, the
+-- Rex of aqua can open the float in a session of onyx. The home directory is
+-- not the same on each Mac. Thus a shell finds the script on the host that
+-- runs the float. Do not make the path here.
+local PICKER = 'exec "${XDG_CONFIG_HOME:-$HOME/.config}/rex/scripts/tab-picker.sh" open'
 
 -- The float fills this fraction of the window.
 local WIDTH, HEIGHT = 0.9, 0.85
@@ -30,7 +34,7 @@ local function open(ctx)
         -- The login shell gives the PATH that finds tv, jq and rex.
         -- tab-picker.sh makes the font of the float smaller, then starts tv.
         -- It asks this client to show the tab that you pick.
-        command = { "env", "REX_TABS_CLIENT=" .. (ctx.client_id or ""), PICKER, "open" },
+        command = { "env", "REX_TABS_CLIENT=" .. (ctx.client_id or ""), "sh", "-c", PICKER },
       },
     },
   }
