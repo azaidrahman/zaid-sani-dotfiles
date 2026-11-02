@@ -71,8 +71,11 @@ sel=$(printf '%s\n' "$rows" |
 [[ -n "$sel" ]] || exit 0
 [[ -d "$sel" ]] || say "The worktree is gone. Run: git worktree prune"
 
-# Type `cd` only into a shell. In Claude or nvim, the keys become text.
-if [[ -n "$block" ]]; then
+# Type `cd` only into a shell. In Claude or nvim, the keys become text. The
+# path goes in single quotes. If the path has a quote or a new line, the shell
+# can run part of it as a command, so do not type the cd.
+unsafe=$'\'\n'
+if [[ -n "$block" && "$sel" != *["$unsafe"]* ]]; then
   foreground=$(rex block call ${session:+-s "$session"} -b "$block" process 2>/dev/null |
     jq -r '.foreground.name // empty' 2>/dev/null || true)
   case "$foreground" in
