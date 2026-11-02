@@ -1,0 +1,43 @@
+#!/bin/bash
+# source hash: {{ include "dot_config/op-sa-window/src/op-sa-window.swift" | sha256sum }}
+# plist hash: {{ include "private_Library/LaunchAgents/com.zaid.op-sa-window.plist.tmpl" | sha256sum }}
+#
+# Build the op-sa-window helper, then load its LaunchAgent again. The helper
+# keeps the 1Password service-account tokens in memory while the op-sa window
+# is open (see dot_local/bin/executable_op-sa.tmpl).
+#
+# A compiled binary is specific to one machine, so each Mac builds its own.
+# See docs/adr/0002-compile-swift-huds-on-each-machine.md.
+#
+# A new helper starts empty, so this script closes the op-sa window. Run
+# `op-sa unlock` after it.
+{{ if eq .chezmoi.os "darwin" -}}
+set -euo pipefail
+
+if ! command -v swiftc >/dev/null 2>&1; then
+  echo "build-op-sa-window: swiftc not found. op-sa cannot open a window on this Mac." >&2
+  exit 0
+fi
+
+SRC="$HOME/.config/op-sa-window/src/op-sa-window.swift"
+OUT="$HOME/.config/op-sa-window/bin"
+LABEL=com.zaid.op-sa-window
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+DOMAIN="gui/$(id -u)"
+
+mkdir -p "$OUT"
+echo "build-op-sa-window: compiling op-sa-window"
+# Build a new file, then move it into place in one step.
+swiftc -O -swift-version 5 "$SRC" -o "$OUT/op-sa-window.new"
+mv -f "$OUT/op-sa-window.new" "$OUT/op-sa-window"
+
+# A bootout returns before the helper stops. Wait until launchd forgets the
+# label, or the bootstrap fails with "Input/output error".
+launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+for _ in $(seq 1 50); do
+  launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1 || break
+  sleep 0.1
+done
+launchctl bootstrap "$DOMAIN" "$PLIST"
+echo "build-op-sa-window: the helper runs. The window is closed until you run op-sa unlock."
+{{ end -}}

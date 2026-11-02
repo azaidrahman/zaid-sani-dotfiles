@@ -6,50 +6,44 @@ Chezmoi-managed files that live alongside `~/.gitconfig`. Current contents:
 |---|---|
 | `allowed-signers` | whitelist consumed by `gpg.ssh.allowedSignersFile` so `git log --show-signature` verifies commits locally |
 
-## Credential helper chain — what to know
+## The credential helpers
 
-`~/.gitconfig` wires up the helper chain per-URL for `github.com` and
-`bitbucket.org`:
+`~/.gitconfig` sets the helpers for `github.com` and `bitbucket.org`:
 
 ```
-helper = ""                         # reset inherited osxkeychain
-helper = cache --timeout 1800       # 30-min in-memory cache
-helper = <home>/.local/bin/git-credential-op   # falls through on cache miss
+helper =                                       # remove osxkeychain (Homebrew git)
+helper = <home>/.local/bin/git-credential-op
 ```
 
-`git-credential-op` reads a PAT/App-Password from 1Password via a service-account
-token stored in the macOS keychain. One read per (host, user) per 30-min window;
-after that the cache serves subsequent operations locally.
+`git-credential-op` reads the token from 1Password with `op-sa`. `op-sa` uses
+a service-account token, and it works only while the op-sa window is open
+(`op-sa unlock`). The helper keeps each token in the window, so each host
+needs one read of 1Password in each window. When the window closes, the
+tokens go away. Nothing goes in the keychain.
+
+If the window is closed, the helper tells git to stop (`quit=1`). Then git
+does not ask for a password, and it does not wait. Run `op-sa unlock`, and
+push again.
 
 ### Worth knowing
 
-- **Rate-limit window is rolling, not calendar-bound.** 1Password's 60-minute
-  per-SA-token limit starts at the *first* request, not at the top of the hour.
-  If you burn budget at 2:00 pm, the window that matters is 2:00–3:00, not
-  "until 3:00."
+- **Do not add a `cache` or `osxkeychain` helper.** Each one keeps the token
+  after the window closes. Without the empty `helper =` line, osxkeychain
+  answers first.
+- **The rate limit is a rolling hour.** 1Password allows 1,000 reads in each
+  hour for each service-account token. The hour starts at the first read, not
+  at the top of the hour.
+- **To get a rotated token,** do nothing. When a token fails, git calls
+  `erase`, and the next push reads 1Password again. To start again from
+  1Password at once, run `op-sa lock`, then `op-sa unlock`.
 
-- **Cache is per-user, per-session, at `~/.cache/git/credential/socket`.**
-  A reboot wipes it, which just means the next push does one more `op read` —
-  harmless (2 reads vs. the 1,000/hr budget). The daemon terminates itself
-  after the configured timeout.
-
-- **Force a fresh read** (e.g. right after rotating a PAT in 1Password) with:
-
-  ```sh
-  git credential-cache exit
-  ```
-
-  Next git push refills the cache with the new credential.
-
-### Normal-usage read budget
+### The read budget
 
 ```
-2 reads per cache fill (username + credential fields)
-× 2 cache fills per hour per host (30-min timeout, worst case)
-× 2 hosts (github.com + bitbucket.org)
-= 8 reads/hr ceiling vs. 1,000/hr SA budget → ~0.8% utilization
+GitHub:     1 read in each window (credential)
+Bitbucket:  2 reads in each window (credential + username)
++ the same again after each erase
 ```
 
-Scripted `op` activity outside `git-credential-op` (loops of `op read`,
-`op item list`, bulk `,op-sa-health` calls) consumes the same budget, so keep
-those deliberate.
+Scripts that use `op-sa` (for example loops of `op-sa read`) use the same
+budget, so keep them deliberate.

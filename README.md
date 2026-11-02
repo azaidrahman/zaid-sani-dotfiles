@@ -38,24 +38,32 @@ Config files that *reference* secrets never embed them — they use indirection:
 
 ## Credentials at runtime
 
-Git and SSH auth resolve through a layered 1Password → Keychain strategy so it
-works locally, over SSH, and in non-login shells:
+Git and SSH auth resolve through 1Password. The 1Password service-account
+tokens are not on disk. They are in the item `op-sa window` in the Private
+vault. `op-sa unlock` puts them in memory for 12 hours or less. This time is
+"the op-sa window".
 
-- **`git-credential-op`** — git credential helper. Tries the local Keychain
-  cache first (fast, offline, survives 1Password rate limits), then falls back
-  to 1Password via a service-account token, refilling the cache. Handles
-  `github.com` and `bitbucket.org`, with per-device item names.
+- **`op-sa`** — runs `op` with the service-account token for the vault in the
+  arguments. A service account needs no Touch ID, so use `op-sa` in scripts
+  and agent tools. It cannot read the Private vault.
+  - `op-sa unlock` gets both tokens with one approval in 1Password. The
+    LaunchAgent `com.zaid.op-sa-window` keeps them in memory, and deletes them
+    when the window closes. Each Mac has its own window.
+  - If the window is closed, `op-sa` and the tools below stop at once with a
+    message. They never wait for a prompt.
+  - `op-sa lock` closes the window. `op-sa status` shows it. `,op-sa-health`
+    checks the tokens, and finds old copies in the keychain.
+- **`git-credential-op`** — git credential helper for `github.com` and
+  `bitbucket.org`, with per-device item names. It reads with `op-sa`, and it
+  keeps each token in the op-sa window, not in the keychain.
 - **`git-sign`** — loads the SSH signing key from 1Password into the agent on
-  demand, standing up a throwaway agent if the session one is unreachable.
-  `~/.local/bin/ssh-keygen` symlinks to it (and `~/.local/bin` is kept ahead of
-  `/usr/bin` in `.zshrc`) so harnesses that force `gpg.ssh.program=ssh-keygen`
-  — Claude Code injects exactly that via `GIT_CONFIG_*` — still hit the shim.
+  demand, until the op-sa window closes. It starts a throwaway agent if the
+  session one is unreachable. `~/.local/bin/ssh-keygen` symlinks to it (and
+  `~/.local/bin` is kept ahead of `/usr/bin` in `.zshrc`) so harnesses that
+  force `gpg.ssh.program=ssh-keygen` — Claude Code injects exactly that via
+  `GIT_CONFIG_*` — still hit the shim.
 - **SSH** — driven by the 1Password SSH agent (`private_Library/LaunchAgents`);
   `run_after_ensure-ssh-agent.sh` keeps `com.zaid.ssh-agent` loaded.
-- **`op-sa`** — runs `op` with the service-account token for the vault in the
-  arguments. A service account needs no Touch ID. Use `op-sa` in scripts and
-  agent tools, because an agent can run on a Mac where you are not. It cannot
-  read the Private vault.
 - **The `op` wrapper (`~/.local/shims/op`)** — 1Password shows the approval
   prompt on the Mac where `op` runs. If an agent on one Mac calls `op` and you
   sit at the other Mac, the wrapper runs the command on your Mac over SSH. The
@@ -69,8 +77,9 @@ works locally, over SSH, and in non-login shells:
   token, change the same item, then run `chezmoi apply` on each machine. If you
   make a new item, change the ID in the script.
 
-The age key and the 1Password service-account tokens are the only things you
-must place on a new machine by hand; everything else bootstraps from them.
+The age key is the only thing that you must put on a new machine by hand.
+Sign in to the 1Password app, then run `op-sa unlock`. Everything else
+bootstraps from them.
 
 ## `ctx` — active work context
 

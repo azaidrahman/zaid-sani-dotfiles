@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Tests for the tools that keep 1Password prompts off a Mac where you are not:
 #   dot_local/shims/executable_op                    the op wrapper
-#   dot_local/bin/executable_op-sa.tmpl              service-account runner
 #   dot_local/bin/executable_ssh-agent-seed.tmpl     agent seed
+#   dot_local/bin/executable_git-sign.tmpl           commit signing
+#
+# The op-sa window itself has its own tests: tests/test-op-sa-window.sh.
 #
 # Each command that touches 1Password, SSH, the keychain, or the system is a
 # stub. The test never calls the real op, ssh, ssh-add, or security.
@@ -154,54 +156,6 @@ check "global flags before item get" \
 
 check "inject stays here: the notification cannot show its secrets" $'LOCAL\narg=inject' -- inject
 
-# --- op-sa ----------------------------------------------------------------------
-
-mkdir -p "$tmp/sa"
-sed 's/{{ .workVaultName }}/Work Vault/g' "$repo_root/dot_local/bin/executable_op-sa.tmpl" >"$tmp/sa/op-sa"
-chmod +x "$tmp/sa/op-sa"
-
-stub "$tmp/sa/security" <<'SH'
-#!/bin/sh
-[ "${FAKE_NO_TOKEN:-0}" = 1 ] && exit 44
-while [ $# -gt 0 ]; do
-    [ "$1" = -s ] && { echo "token-for-$2"; exit 0; }
-    shift
-done
-exit 1
-SH
-
-stub "$tmp/sa/op" <<'SH'
-#!/bin/sh
-echo "token=$OP_SERVICE_ACCOUNT_TOKEN args=$*"
-SH
-
-# check_sa NAME WANT_RC WANT_OUT [VAR=value ...] -- [args ...]
-check_sa() {
-    local name=$1 want_rc=$2 want=$3
-    shift 3
-    local -a envs=()
-    while [ "$1" != "--" ]; do
-        envs+=("$1")
-        shift
-    done
-    shift
-    local got rc=0
-    got=$(env -i HOME="$tmp/home" USER=tester PATH="$tmp/sa:/usr/bin:/bin" \
-        ${envs[@]+"${envs[@]}"} "$tmp/sa/op-sa" "$@" 2>/dev/null) || rc=$?
-    [ "$rc" = "$want_rc" ] || fail "op-sa: $name: want exit $want_rc, got $rc"
-    [ "$got" = "$want" ] || fail "op-sa: $name: want [$want] got [$got]"
-}
-
-work=token-for-op-service-account-token
-personal=token-for-op-service-account-token-personal
-check_sa "work vault ref" 0 "token=$work args=read op://Work Vault/i/f" -- read "op://Work Vault/i/f"
-check_sa "personal vault ref" 0 "token=$personal args=read op://Personal Development/i/f" -- read "op://Personal Development/i/f"
-check_sa "--vault value" 0 "token=$personal args=item get --vault Personal Development i" -- item get --vault "Personal Development" i
-check_sa "--vault=value" 0 "token=$work args=item get --vault=Work Vault i" -- item get "--vault=Work Vault" i
-check_sa "no account for Private" 3 "" -- read "op://Private/i/f"
-check_sa "no vault in the args" 3 "" -- item list
-check_sa "token not in the keychain" 3 "" FAKE_NO_TOKEN=1 -- read "op://Personal Development/i/f"
-
 # --- ssh-agent-seed -------------------------------------------------------------
 
 mkdir -p "$tmp/seed"
@@ -209,10 +163,14 @@ sed 's/{{ .workVaultName }}/Work Vault/g' "$repo_root/dot_local/bin/executable_s
 chmod +x "$tmp/seed/ssh-agent-seed"
 cp "$tmp/bin/scutil" "$tmp/seed/scutil"
 
+# FAKE_SA_OK=0 is a closed op-sa window: ttl and read fail with status 3.
 stub "$tmp/seed/op-sa" <<'SH'
 #!/bin/sh
 [ "${FAKE_SA_OK:-1}" = 1 ] || exit 3
-echo "sa-key"
+case $1 in
+    ttl) echo 600 ;;
+    read) [ "${FAKE_READ_OK:-1}" = 1 ] && echo "sa-key" ;;
+esac
 SH
 
 stub "$tmp/seed/op" <<'SH'
@@ -220,14 +178,20 @@ stub "$tmp/seed/op" <<'SH'
 echo "touch-id-key"
 SH
 
-# Like the real ssh-add, fail when no key comes in on stdin.
+# Like the real ssh-add, fail when no key comes in on stdin. An added key
+# goes in $AGENT, so `ssh-add -L` lists it.
 stub "$tmp/seed/ssh-add" <<'SH'
 #!/bin/sh
-[ "$1" = -l ] && exit 1
+case $1 in
+    -l) exit 1 ;;
+    -L) cat "$AGENT" 2>/dev/null; exit 0 ;;
+esac
 key=$(cat)
 [ -n "$key" ] || exit 1
-echo "ADD $key" >>"$LOG"
+echo "ADD t=$2 $key" >>"$LOG"
+echo "${FAKE_LOADED_KEY:-}" >>"$AGENT"
 SH
+AGENT=$tmp/agent-keys
 
 # check_seed NAME WANT_RC WANT_LOG [VAR=value ...] -- [args ...]
 check_seed() {
@@ -240,8 +204,9 @@ check_seed() {
     done
     shift
     : >"$LOG"
+    : >"$AGENT"
     local rc=0
-    env -i HOME="$tmp/home" PATH="$tmp/seed:/usr/bin:/bin" LOG="$LOG" \
+    env -i HOME="$tmp/home" PATH="$tmp/seed:/usr/bin:/bin" LOG="$LOG" AGENT="$AGENT" \
         SSH_AUTH_SOCK="$tmp/agent.sock" FAKE_HOST=aqua \
         ${envs[@]+"${envs[@]}"} "$tmp/seed/ssh-agent-seed" "$@" </dev/null >/dev/null 2>&1 || rc=$?
     [ "$rc" = "$want_rc" ] || fail "seed: $name: want exit $want_rc, got $rc"
@@ -250,8 +215,38 @@ check_seed() {
     [ "$got" = "$want" ] || fail "seed: $name: want [$want] got [$got]"
 }
 
-check_seed "service account first" 0 $'ADD sa-key\nADD sa-key' --
-check_seed "Touch ID when the service account fails" 0 $'ADD touch-id-key\nADD touch-id-key' FAKE_SA_OK=0 --
+# A key from the service account leaves the agent when the window closes.
+check_seed "service account first, until the window closes" 0 $'ADD t=600 sa-key\nADD t=600 sa-key' --
+check_seed "Touch ID when the window is closed" 0 $'ADD t=43200 touch-id-key\nADD t=43200 touch-id-key' FAKE_SA_OK=0 --
 check_seed "--headless never asks for Touch ID" 1 "" FAKE_SA_OK=0 -- --headless
+
+# --- git-sign -------------------------------------------------------------------
+
+# git-sign uses the same stubs as ssh-agent-seed. When the key loads, it runs
+# the real /usr/bin/ssh-keygen, which fails here because there is no agent.
+# The test checks only what went into the agent.
+sed 's/{{ .workVaultName }}/Work Vault/g' "$repo_root/dot_local/bin/executable_git-sign.tmpl" >"$tmp/seed/git-sign"
+chmod +x "$tmp/seed/git-sign"
+work_blob=AAAAC3NzaC1lZDI1NTE5AAAAIK+RKQKLiD4MzerLtLjTEST
+echo "ssh-ed25519 $work_blob test" >"$tmp/work.pub"
+
+# check_sign NAME WANT_RC WANT_LOG WANT_ERR [VAR=value ...]
+check_sign() {
+    local name=$1 want_rc=$2 want=$3 want_err=$4
+    shift 4
+    : >"$LOG"
+    : >"$AGENT"
+    local rc=0
+    env -i HOME="$tmp/home" PATH="$tmp/seed:/usr/bin:/bin" LOG="$LOG" AGENT="$AGENT" \
+        SSH_AUTH_SOCK="$tmp/no-agent.sock" FAKE_HOST=aqua FAKE_LOADED_KEY="ssh-ed25519 $work_blob" "$@" \
+        "$tmp/seed/git-sign" -Y sign -n git -f "$tmp/work.pub" </dev/null >/dev/null 2>"$tmp/err" || rc=$?
+    [ -z "$want_rc" ] || [ "$rc" = "$want_rc" ] || fail "git-sign: $name: want exit $want_rc, got $rc"
+    [ "$(cat "$LOG")" = "$want" ] || fail "git-sign: $name: want [$want] got [$(cat "$LOG")]"
+    grep -q -- "$want_err" "$tmp/err" || fail "git-sign: $name: stderr does not say [$want_err]: $(cat "$tmp/err")"
+}
+
+check_sign "closed: fail at once" 1 "" "op-sa unlock" FAKE_SA_OK=0
+check_sign "open: the key leaves the agent when the window closes" "" "ADD t=600 sa-key" ""
+check_sign "1Password fails: fail at once" 1 "" "cannot load the signing key" FAKE_READ_OK=0
 
 echo "PASS: test-op-approval"

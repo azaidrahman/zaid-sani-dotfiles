@@ -79,3 +79,6 @@ tests/test-omp.zsh
 # spec is in lua/zaid/plugins_archive/vim-tmux-navigator.lua.
 .config/nvim/lua/zaid/plugins/vim-tmux-navigator.lua
 .config/nvim/lua/zaid/plugins/init.lua
+# The op-sa window replaced the service-account tokens in the keychain. The
+# old seed function is in archive/zsh/functions/.
+.config/zsh/functions/,op-sa-seed
