@@ -142,7 +142,10 @@ return {
 		name = "folkeTokyonight",
 		priority = 1000,
 		config = function()
-			local transparent = true
+			-- nvim paints its own background. If transparent is true, the
+			-- terminal theme shows through, and nvim looks different in each
+			-- terminal (Ghostty #002b36, Rex abyssal-trench #06101a).
+			local transparent = false
 			local bg = "#011628"
 			local bg_dark = "#011423"
 			local bg_highlight = "#143652"

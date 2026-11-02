@@ -31,9 +31,21 @@ defaults write "$domain" Workspace.usesStandardInactiveWindowPaneStyles -bool tr
 defaults write "$domain" Workspace.terminalCursorStyle -string bar
 defaults write "$domain" Workspace.terminalFontPointSize -float 20
 
+# A pane is rarely an exact number of rows high, and Rex puts the extra pixels
+# below the last row. "extend" paints them with the colors of the last row, so
+# the nvim status line looks two rows high. "background" paints them with the
+# theme background.
+defaults write "$domain" Workspace.terminalPaddingColor -string background
+
 # Themes
+#
+# The appearance is always dark. If Rex follows macOS in light mode, it uses
+# the light theme, and the pale text of dark programs is hard to read on it.
+# nvim paints its own background (#011628). The dark theme is near that color,
+# so the Rex window and the padding are close to the nvim background.
+defaults write "$domain" Workspace.appearance -string dark
 defaults write "$domain" Workspace.lightThemeID -string sunlit-parchment
-defaults write "$domain" Workspace.darkThemeID -string merino-dark
+defaults write "$domain" Workspace.darkThemeID -string abyssal-trench
 
 # Agents name their sessions. Remote Control lets the rex CLI change the
 # session that the app shows (session.select).
