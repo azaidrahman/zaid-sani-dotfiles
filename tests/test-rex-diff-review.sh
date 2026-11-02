@@ -86,10 +86,12 @@ two worktrees, pick a clean one|$TMP/repo|$B|$TMP/repo|No changes in b.
 two worktrees, pick a dirty one|$B|$B|$TMP/repo|tuicr -w b
 EOF
 
-# A path with a quote is not typed into the shell. A stub rex says that zsh
-# owns the pane, and records each send.
+# A path with a quote or a control character is not typed into the shell. A
+# stub rex says that zsh owns the pane, and records each send.
 Q="$TMP/repo/.worktrees/it's"
+C="$TMP/repo/.worktrees/a"$'\r'"b"
 git -C "$TMP/repo" worktree add -q -b q "$Q"
+git -C "$TMP/repo" worktree add -q -b c "$C"
 mkdir -p "$TMP/fakerex"
 cat >"$TMP/fakerex/rex" <<EOF
 #!/bin/bash
@@ -99,9 +101,13 @@ case "\$*" in
 esac
 EOF
 chmod +x "$TMP/fakerex/rex"
-touch "$Q/new" "$TMP/send.log"
-PATH="$TMP/fakerex:$PATH" FZF_PICK=$Q bash "$GATE" "$TMP/repo" s1 b1 </dev/null >/dev/null 2>&1
-check "gate: no cd for a path with a quote" "" "$(cat "$TMP/send.log")"
+for label in "a quote:$Q" "a carriage return:$C"; do
+	path=${label#*:}
+	touch "$path/new"
+	: >"$TMP/send.log"
+	PATH="$TMP/fakerex:$PATH" FZF_PICK=$path bash "$GATE" "$TMP/repo" s1 b1 </dev/null >/dev/null 2>&1
+	check "gate: no cd for a path with ${label%%:*}" "" "$(cat "$TMP/send.log")"
+done
 
 # The float and the cd, on a separate Rex server.
 unset REX_SESSION REX_BLOCK REX_CLIENT

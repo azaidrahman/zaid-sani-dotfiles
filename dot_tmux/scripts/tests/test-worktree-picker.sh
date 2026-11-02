@@ -44,8 +44,10 @@ git init -q "$TMP/repo"
 git -C "$TMP/repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
 B="$TMP/repo/.worktrees/b"
 Q="$TMP/repo/.worktrees/it's"
+C="$TMP/repo/.worktrees/a"$'\r'"b"
 git -C "$TMP/repo" worktree add -q -b b "$B"
 git -C "$TMP/repo" worktree add -q -b q "$Q"
+git -C "$TMP/repo" worktree add -q -b c "$C"
 
 # The cd. Columns: label | fzf pick | expected send-keys.
 while IFS='|' read -r label pick want; do
@@ -55,6 +57,7 @@ while IFS='|' read -r label pick want; do
 done <<EOF
 a plain path|$B|send-keys -t %1 cd -- '$B' C-m
 a path with a quote|$Q|
+a path with a carriage return|$C|
 EOF
 
 exit $fail
