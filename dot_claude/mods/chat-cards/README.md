@@ -2,7 +2,8 @@
 
 A Claude Code mod that adds frames to the conversation in the terminal.
 
-- Each reply from Claude is a tinted card with a round edge.
+- Each reply from Claude is a clear card with a round edge. The card has
+  no fill, so the background of the terminal shows through it.
 - Each prompt that you send gets a square box. The box has the color of the
   lines of the input field.
 - Each reply card has a **copy** label at the right of its first line. Click
@@ -12,8 +13,8 @@ A Claude Code mod that adds frames to the conversation in the terminal.
   calls) also gets a card. The card shows "summary" and has no copy label,
   because a copy would take the summary and not the text that Claude wrote.
 
-The mod reads the macOS appearance when the session starts and at each
-prompt. It uses a light tint in light mode and a dark tint in dark mode.
+The edges use colors of the Claude Code theme. Thus the cards fit a light
+theme and a dark theme of the terminal.
 
 ## Limits
 
@@ -22,5 +23,5 @@ prompt. It uses a light tint in light mode and a dark tint in dark mode.
 - Tool rows, such as "Ran 3 shell commands", stay as they are.
 - The copy label needs a mouse click. Claude Code reports clicks in its
   full-screen mode.
-- The tints match the Rex themes sunlit-parchment and merino-dark. To use
-  other colors, change `CARD` in `hooks/register.tsx`.
+- To use other colors for the edges, change `borderColor` in
+  `hooks/register.tsx`.

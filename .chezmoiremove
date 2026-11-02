@@ -73,3 +73,5 @@ tests/test-omp.zsh
 # Upstream tuicr opens Bitbucket PRs now, and bb-prs (prefix+B) starts it.
 # The old script is in archive/tuicr/.
 .local/bin/tuicr-bb
+# The chat-cards mod keeps no state now, so it has no state contract.
+.claude/mods/chat-cards/types/index.d.ts
