@@ -1,7 +1,7 @@
 #!/bin/bash
-# prefix+u : the status center. A context section (the gcloud session and the
-# kube context) sits on top. Under it, bars show how much of an AI
-# subscription or budget is gone.
+# prefix+u : the status center. A host row (the Mac that draws the view) and a
+# context section (the gcloud session and the kube context) sit on top. Under
+# them, bars show how much of an AI subscription or budget is gone.
 #
 # The context section is not a provider. popups/context-status.sh draws it,
 # and main reads it one time, before the first draw.
@@ -306,11 +306,16 @@ render_header() {
 # section_rule : the divider between the two sections of the combined view.
 section_rule() { printf '\n  %s%s%s\n\n' "$c_dim" "$(repeat ─ 60)" "$c_reset"; }
 
-# render_context : the context section and a rule under it. Nothing if main
-# did not read the section.
+# host_name : the short name of the Mac that draws the view, such as aqua.
+# The view runs on the host of the pane. Thus a pane on another Mac shows the
+# name of that Mac. A test replaces this function.
+host_name() { hostname -s 2>/dev/null; }
+
+# render_context : the host row, the context section, and a rule under them.
+# The context section is absent if main did not read it.
 render_context() {
-  [ -n "$CONTEXT_TEXT" ] || return 0
-  printf '%s\n' "$CONTEXT_TEXT"
+  printf '  %s%-9s%s%s\n' "$c_bold" host "$c_reset" "$(host_name)"
+  if [ -n "$CONTEXT_TEXT" ]; then printf '%s\n' "$CONTEXT_TEXT"; fi
   section_rule
 }
 
@@ -900,8 +905,10 @@ close_hint() { echo; printf '  %s[any key to close]%s' "$c_dim" "$c_reset"; }
 # +2 for the popup border, which eats a column on each side.
 USAGE_POPUP_W=$(( ROW_FIXED_W + BAR_CAP + 2 ))   # fits a full-cap bar plus its row
 COST_POPUP_W=90      # fits a full-cap 45-char bar (see the -42 offset in render_cost)
-# The context section: 4 gcloud rows, 4 kube rows, and 3 rows for the rule.
-CONTEXT_POPUP_H=11
+# The host row and the 3 rows of the rule under it.
+HOST_POPUP_H=4
+# The context section: 4 gcloud rows and 4 kube rows.
+CONTEXT_POPUP_H=8
 
 # rows_in_cache <provider> <record> <fallback> : how many records of one kind
 # the cached blob holds.
@@ -923,14 +930,14 @@ size_for() {
   if [[ -s $cache ]] && grep -q "^SESSION$TAB" "$cache" 2>/dev/null; then
     has_sess=4
   fi
-  local ctx=0
-  if declare -F context_section >/dev/null; then ctx=$CONTEXT_POPUP_H; fi
+  local top=$HOST_POPUP_H
+  if declare -F context_section >/dev/null; then top=$(( top + CONTEXT_POPUP_H )); fi
   case "$(provider_hook view)" in
-    cost) printf '%dx%d' "$COST_POPUP_W" "$(( $(rows_in_cache "$PROVIDER" MODEL 6) + 14 + has_sess + ctx ))" ;;
+    cost) printf '%dx%d' "$COST_POPUP_W" "$(( $(rows_in_cache "$PROVIDER" MODEL 6) + 14 + has_sess + top ))" ;;
     both) printf '%dx%d' "$USAGE_POPUP_W" \
             "$(( $(rows_in_cache "$PROVIDER" QUOTA 2) * 2 \
-                 + $(rows_in_cache "$PROVIDER" MODEL 6) + 17 + has_sess + ctx ))" ;;
-    *)    printf '%dx%d' "$USAGE_POPUP_W" "$(( $(rows_in_cache "$PROVIDER" QUOTA 3) * 2 + 8 + ctx ))" ;;
+                 + $(rows_in_cache "$PROVIDER" MODEL 6) + 17 + has_sess + top ))" ;;
+    *)    printf '%dx%d' "$USAGE_POPUP_W" "$(( $(rows_in_cache "$PROVIDER" QUOTA 3) * 2 + 8 + top ))" ;;
   esac
 }
 
