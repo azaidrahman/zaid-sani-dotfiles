@@ -46,3 +46,11 @@ rex.bind("ctrl+space>u", "status_center")
 -- prefix+X: open a tab or a session that closed (closed_tabs.lua).
 require("closed_tabs")
 rex.bind("ctrl+space>shift+x", "closed_tabs")
+
+-- prefix+b: hold or release the session (hold.lua).
+require("hold")
+rex.bind("ctrl+space>b", "toggle_hold")
+
+-- prefix+f: pick a tab from all sessions (tab_picker.lua).
+require("tab_picker")
+rex.bind("ctrl+space>f", "tab_picker")

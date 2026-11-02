@@ -1,0 +1,40 @@
+[metadata]
+name = "rex-tabs"
+description = "List and switch between the tabs of all Rex sessions"
+requirements = ["rex", "jq"]
+
+[source]
+no_sort = true
+ansi = true
+# Three sources: active tabs first, tabs of held sessions second, tabs of
+# utility sessions last. ctrl-f cycles between them.
+command = [
+  "~/.config/rex/scripts/tab-picker.sh list active",
+  "~/.config/rex/scripts/tab-picker.sh list hold",
+  "~/.config/rex/scripts/tab-picker.sh list other",
+]
+# tv runs the source again at this interval while the picker is open. Each
+# reload can move the list while you type, so do not reload more often.
+watch = 1.0
+# The second column is the key of the tab: hex digits only, so the commands
+# below can use it without quotes.
+output = "{strip_ansi|split:│:1|trim}"
+
+[keybindings]
+enter = "actions:select"
+# ctrl-f moves to the next source. tv can only cycle forward. Do not bind a
+# key to two cycle_sources: tv then moves the indicator two steps but loads
+# the rows of one step, so the indicator and the rows do not agree.
+ctrl-f = "cycle_sources"
+
+[preview]
+command = "~/.config/rex/scripts/tab-picker.sh preview {strip_ansi|split:│:1|trim}"
+
+[ui.preview_panel]
+# The header shows the name of the tab (the third column).
+header = "{strip_ansi|split:│:2|trim}"
+
+[actions.select]
+description = "Show the selected tab"
+command = "~/.config/rex/scripts/tab-picker.sh select {strip_ansi|split:│:1|trim}"
+mode = "execute"
