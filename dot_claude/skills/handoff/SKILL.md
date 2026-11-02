@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Use when a session ends with trailing work — you just offered to dig into something ("want me to look at that?"), the user says "file that and keep going", "hand this off", "continue in a new window", "pick up where we left off", or names a leftover thread from the board. Turns one loose thread into a Jira ticket, a branch and worktree, and a fresh tmux window running Claude with a written brief of what this session already established.
+description: Use when a session ends with trailing work — you just offered to dig into something ("want me to look at that?"), the user says "file that and keep going", "hand this off", "continue in a new window", "pick up where we left off", or names a leftover thread from the board. Turns one loose thread into a Jira ticket, a branch and worktree, and a fresh tmux window or Rex tab running Claude with a written brief of what this session already established.
 ---
 
 # Hand off a trailing thread
@@ -11,7 +11,7 @@ You write the brief. The other skills do the rest:
 
 - [[writing-tickets]] — the ticket title and Why / What / Done-when body.
 - [[start-ticket-worktree]] — branch `<type>/<KEY>-<slug>` and worktree `.worktrees/<KEY>-<slug>`.
-- `handoff.sh` (next to this file) — the tmux window and the Claude boot.
+- `handoff.sh` (next to this file) — the tmux window or Rex tab, and the Claude boot.
 
 Not [[wrap-session]]. That one closes out *everything* the session touched. A handoff carries *one* thread forward and leaves the rest alone.
 
@@ -102,16 +102,21 @@ SH=~/.claude/skills/handoff/handoff.sh
 "$SH" "$KEY" "<worktree>" ~/.claude/handoffs/"$KEY".md "<KEY> <short label>"
 ```
 
-The script opens a tmux window rooted in the worktree and starts `claude` with a prompt that points at the brief. The window runs a shell under `claude`, so the window stays open in the worktree when the user leaves `claude`.
+The script opens a window rooted in the worktree and starts `claude` with a prompt that points at the brief. The window runs a shell under `claude`, so the window stays open in the worktree when the user leaves `claude`.
 
-The script tags each window with the key. If a window with that tag is open, the script selects it and opens no second window. The user can rename the window and the tag stays.
+The script picks the terminal from the environment:
+
+- If `$TMUX` is set, it opens a tmux window in the current tmux session. This also applies when tmux runs inside a Rex pane.
+- If `$TMUX` is not set and `$REX_SESSION` is set, it opens a Rex tab (a Rex window) in that Rex session.
+
+The script tags each window with the key. In tmux, the tag is the `@handoff_key` window option. In Rex, the tag is the label of the pane: `handoff:<KEY>`. If a window with that tag is open, the script selects it and opens no second window. The user can rename the window or the tab, and the tag stays.
 
 | stdout / exit | Means | Do |
 |---|---|---|
 | `window: created` | New window is running Claude on the brief. | Report it. |
 | `window: reused` | A window for this key was already open; it is now selected. | Say so — the brief is on disk either way. |
 | exit 2 | Bad input: a missing argument, a path that does not exist, or a control character in the key or in the path of the brief. | Read the message on stderr, correct the input, and run the script again. |
-| `no-tmux` (exit 3) | No tmux, or you are outside it. | Report the brief path and the `cd` command. The handoff still holds. |
+| `no-tmux-or-rex` (exit 3) | This shell is not in tmux and not in a Rex pane. | Report the brief path and the `cd` command. The handoff still holds. |
 
 **Done when:** the window is open, or you have told the user exactly how to resume by hand.
 
@@ -136,7 +141,7 @@ If other threads were on the board, name them in one line so they stay visible. 
 | Claims in **Established** with no evidence | Move them to **Theory**. The next window trusts this file and will not re-verify it. |
 | Rebuilding the harvest from the repo | The value is the reasoning, and that lives only in the transcript. Read the transcript. |
 | Writing the brief into the worktree | Repo files get committed. Briefs live in `~/.claude/handoffs/`. |
-| Hand-rolling `tmux new-window` + `send-keys` | Call `handoff.sh` — it roots the window with `-c`, sanitizes the label, and reuses an open window. |
+| Hand-rolling `tmux new-window` + `send-keys`, or `rex window new` + `rex send` | Call `handoff.sh` — it roots the window in the worktree, sanitizes the label, tags the window, and reuses an open window. |
 | Passing `--session` to start-ticket-worktree | That makes a detached session. This skill wants a window in the session the user is in. |
 | Handing off every open thread | One thread per run. Several threads at once is [[wrap-session]]. |
 | Switching the user to the new window | Open it and report. The user chooses when to move. |

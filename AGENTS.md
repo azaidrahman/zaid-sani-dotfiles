@@ -39,6 +39,19 @@ it.
 - In the code, run a destructive command only on an object that the code owns.
   For example, zen mode sets the `@zen_owned` option.
 
+## Tests for Rex
+
+The same rules apply to the live Rex server.
+
+- Test Rex code on a separate server. Start it with
+  `rex server run --listen unix://<socket> --restore=false`, and set
+  `REX_SERVER` to the socket. For an example, see
+  `dot_tmux/scripts/tests/test-handoff-rex.sh`.
+- Keep the socket path shorter than 104 bytes. If the path is too long, the
+  server cannot start, and `rex` can create objects on the live server.
+- Before the first check, make sure that `rex ls` shows no sessions. The live
+  server always has sessions.
+
 ## Retired configuration
 
 Do not delete old configuration. Move it to `archive/`, or to the archive

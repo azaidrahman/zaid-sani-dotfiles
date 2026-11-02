@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Tests for the handoff skill script (dot_claude/skills/handoff/handoff.sh).
+# This file tests the tmux path and the checks of the input.
+# test-handoff-rex.sh tests the Rex path.
 #
 # The tests use a separate tmux server (tmux -L) and a fake `claude` script
 # that exits at once, so they never touch the live server or a real Claude
@@ -32,6 +34,11 @@ cat >"$TMP/bin/claude" <<EOF
 echo "\$*" >>"$TMP/calls"
 EOF
 chmod +x "$TMP/bin/claude"
+# tmux can run inside a Rex pane. Then both $TMUX and $REX_SESSION are set,
+# and the script must use tmux. Each run sets $REX_SESSION, and this fake rex
+# fails, so a run that takes the Rex path fails its checks.
+printf '#!/bin/bash\nexit 1\n' >"$TMP/bin/rex"
+chmod +x "$TMP/bin/rex"
 
 # Each pane runs a plain bash with the fake claude first in PATH. The server
 # gets the same PATH, for a window command that the server starts itself.
@@ -48,7 +55,7 @@ case "$SOCK_PATH" in *"$SOCK"*) ;; *)
 	;;
 esac
 # The script calls plain `tmux`. $TMUX points it at the test server.
-run() { TMUX="$SOCK_PATH,0,0" TMUX_PANE='' bash "$SCRIPT" "$@"; }
+run() { TMUX="$SOCK_PATH,0,0" TMUX_PANE='' REX_SESSION=session:unused PATH="$TMP/bin:$PATH" bash "$SCRIPT" "$@"; }
 wait_for() { # file pattern
 	local _
 	for _ in $(seq 1 50); do
@@ -100,6 +107,9 @@ check "claude starts for GTI-4" "$((before + 1))" "$(calls)"
 T new-window -d -t t: -n "GTI-9 other"
 out=$(run 'GT.-9' "$TMP/wt" "$TMP/brief.md" "GT.-9 regex")
 check "a dot in the key does not match any character" "window: created GT.-9 regex" "$out"
+# Wait for each fake claude that a run starts. A late line in the log would
+# change the count that a later check reads.
+wait_for "$TMP/calls" "filed GT.-9." || echo "FAIL - fake claude did not start"
 
 # A window that carries only the key is the window of that key.
 T new-window -d -t t: -n "GTI-7"
@@ -127,6 +137,7 @@ LONG="LONGKEY-12345678901234567890"
 LONG_LABEL=$(printf '%s' "$LONG label" | cut -c1-25)
 out=$(run "$LONG" "$TMP/wt" "$TMP/brief.md" "$LONG label")
 check "a long key creates a window" "window: created $LONG_LABEL" "$out"
+wait_for "$TMP/calls" "filed $LONG." || echo "FAIL - fake claude did not start"
 out=$(run "$LONG" "$TMP/wt" "$TMP/brief.md" "$LONG label")
 check "a long key finds its window again" "window: reused $LONG_LABEL" "$out"
 check "a long key has one window" "1" "$(T list-windows -t t -F '#{@handoff_key}' | grep -cxF "$LONG")"
@@ -134,6 +145,7 @@ check "a long key has one window" "1" "$(T list-windows -t t -F '#{@handoff_key}
 # A character that the label does not keep is changed in the name only.
 out=$(run 'AB/1' "$TMP/wt" "$TMP/brief.md" "AB/1 slash")
 check "a slash in the key creates a window" "window: created AB-1 slash" "$out"
+wait_for "$TMP/calls" "filed AB/1." || echo "FAIL - fake claude did not start"
 out=$(run 'AB/1' "$TMP/wt" "$TMP/brief.md" "AB/1 slash")
 check "a slash in the key finds its window again" "window: reused AB-1 slash" "$out"
 check "a slash in the key has one window" "1" "$(T list-windows -t t -F '#{@handoff_key}' | grep -cxF 'AB/1')"
@@ -143,6 +155,7 @@ T new-window -d -t t: -n "GTI-8 weird"
 T set-option -w -t "$(window_by_name 'GTI-8 weird')" @handoff_key GTI-80
 out=$(run GTI-8 "$TMP/wt" "$TMP/brief.md" "GTI-8 mine")
 check "a tagged window of another key is not reused by its name" "window: created GTI-8 mine" "$out"
+wait_for "$TMP/calls" "filed GTI-8." || echo "FAIL - fake claude did not start"
 
 # --- a control character is refused --------------------------------------------
 # The key and the brief path are typed into a shell, so a control character in
