@@ -1,0 +1,46 @@
+#!/bin/bash
+# Write the preferences of the Rex app (com.superlogical.rex) on each Mac.
+#
+# The Rex app keeps these values in macOS defaults, not in ~/.config/rex/.
+# This script makes them the same on all Macs. Chezmoi runs it again when
+# the contents of this file change.
+#
+# If you change a value in Rex Settings, also change it here. If you do not,
+# the next change to this file sets the old value again.
+#
+# Values that belong to one machine stay out of this file. Examples are the
+# window frames, the last focused session, and the client label.
+set -euo pipefail
+{{ if ne .chezmoi.os "darwin" -}}
+exit 0
+{{ end -}}
+
+domain=com.superlogical.rex
+
+# Tabs
+defaults write "$domain" Workspace.tabStyle -string vertical
+defaults write "$domain" Workspace.sidebarPosition -string left
+defaults write "$domain" Workspace.sidebarWidth -float 167
+defaults write "$domain" Workspace.sidebarShowsActivity -bool false
+defaults write "$domain" Workspace.tabIconTintMode -string off
+
+# Panes and terminal
+defaults write "$domain" Workspace.paneDensity -string compact
+defaults write "$domain" Workspace.inactivePaneFadeMode -string both
+defaults write "$domain" Workspace.usesStandardInactiveWindowPaneStyles -bool true
+defaults write "$domain" Workspace.terminalCursorStyle -string bar
+defaults write "$domain" Workspace.terminalFontPointSize -float 20
+
+# Themes
+defaults write "$domain" Workspace.lightThemeID -string sunlit-parchment
+defaults write "$domain" Workspace.darkThemeID -string merino-dark
+
+# Agents name their sessions. Remote Control lets the rex CLI change the
+# session that the app shows (session.select).
+defaults write "$domain" rex.agents.names-sessions -bool true
+defaults write "$domain" rex.client.remoteControl -bool true
+
+# A running Rex app does not read new values. They apply at the next start.
+if pgrep -qx Rex; then
+  echo "rex-app-defaults: quit and open Rex to apply the new preferences"
+fi
