@@ -86,12 +86,14 @@ two worktrees, pick a clean one|$TMP/repo|$B|$TMP/repo|No changes in b.
 two worktrees, pick a dirty one|$B|$B|$TMP/repo|tuicr -w b
 EOF
 
-# A path with a quote or a control character is not typed into the shell. A
-# stub rex says that zsh owns the pane, and records each send.
+# A path with a character that is not on the allowlist is not typed into the
+# shell. The é path shows that the guard is an allowlist: the bytes of é are
+# not control characters. A stub rex says that zsh owns the pane, and records
+# each send.
 Q="$TMP/repo/.worktrees/it's"
-C="$TMP/repo/.worktrees/a"$'\r'"b"
+E="$TMP/repo/.worktrees/café"
 git -C "$TMP/repo" worktree add -q -b q "$Q"
-git -C "$TMP/repo" worktree add -q -b c "$C"
+git -C "$TMP/repo" worktree add -q -b e "$E"
 mkdir -p "$TMP/fakerex"
 cat >"$TMP/fakerex/rex" <<EOF
 #!/bin/bash
@@ -101,7 +103,7 @@ case "\$*" in
 esac
 EOF
 chmod +x "$TMP/fakerex/rex"
-for label in "a quote:$Q" "a carriage return:$C"; do
+for label in "a quote:$Q" "é:$E"; do
 	path=${label#*:}
 	touch "$path/new"
 	: >"$TMP/send.log"

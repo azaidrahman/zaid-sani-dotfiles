@@ -71,11 +71,15 @@ sel=$(printf '%s\n' "$rows" |
 [[ -n "$sel" ]] || exit 0
 [[ -d "$sel" ]] || say "The worktree is gone. Run: git worktree prune"
 
+# safe_path PATH — true if PATH has only letters, digits, space and ._/@+~-.
+# The C locale makes the ranges plain ASCII in each locale.
+safe_path() { local LC_ALL=C; [[ "$1" != *[!A-Za-z0-9._/@+~\ -]* ]]; }
+
 # Type `cd` only into a shell. In Claude or nvim, the keys become text. The
-# path goes in single quotes. The line editor of the shell reads a control
-# character as a key: a carriage return runs the line, and ctrl+u erases it.
-# Thus, if the path has a quote or a control character, do not type the cd.
-if [[ -n "$block" && "$sel" != *[[:cntrl:]\']* ]]; then
+# path goes in single quotes. The line editor of the shell can read some
+# characters as keys, for example a carriage return or a byte above 0x7f.
+# Thus type the cd only for a safe path. `rex send` types literal text.
+if [[ -n "$block" ]] && safe_path "$sel"; then
   foreground=$(rex block call ${session:+-s "$session"} -b "$block" process 2>/dev/null |
     jq -r '.foreground.name // empty' 2>/dev/null || true)
   case "$foreground" in

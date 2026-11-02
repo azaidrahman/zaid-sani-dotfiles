@@ -44,20 +44,22 @@ git init -q "$TMP/repo"
 git -C "$TMP/repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
 B="$TMP/repo/.worktrees/b"
 Q="$TMP/repo/.worktrees/it's"
-C="$TMP/repo/.worktrees/a"$'\r'"b"
+E="$TMP/repo/.worktrees/café"
 git -C "$TMP/repo" worktree add -q -b b "$B"
 git -C "$TMP/repo" worktree add -q -b q "$Q"
-git -C "$TMP/repo" worktree add -q -b c "$C"
+git -C "$TMP/repo" worktree add -q -b e "$E"
 
-# The cd. Columns: label | fzf pick | expected send-keys.
+# The cd. Columns: label | fzf pick | expected send-keys calls, joined by ";".
+# The é path shows that the guard is an allowlist: the bytes of é are not
+# control characters.
 while IFS='|' read -r label pick want; do
 	: >"$TMP/send.log"
 	(cd "$TMP/repo" && FZF_PICK=$pick bash "$PICKER" %1 </dev/null >/dev/null 2>&1)
-	check "cd: $label" "$want" "$(cat "$TMP/send.log")"
+	check "cd: $label" "$want" "$(paste -sd ';' "$TMP/send.log")"
 done <<EOF
-a plain path|$B|send-keys -t %1 cd -- '$B' C-m
+a plain path|$B|send-keys -t %1 -l cd -- '$B';send-keys -t %1 C-m
 a path with a quote|$Q|
-a path with a carriage return|$C|
+a path with é|$E|
 EOF
 
 exit $fail
