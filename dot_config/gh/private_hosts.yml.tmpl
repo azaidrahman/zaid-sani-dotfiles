@@ -1,0 +1,11 @@
+{{/*
+  Only aqua uses SSH for GitHub. The office network blocks SSH, so onyx uses
+  HTTPS. The GitHub key of aqua is in ~/.config/1Password/ssh/agent.toml.
+  The comment is in the template because gh writes this file again and
+  removes comments.
+*/ -}}
+github.com:
+    git_protocol: {{ if eq .chezmoi.hostname "aqua" }}ssh{{ else }}https{{ end }}
+    users:
+        azaidrahman:
+    user: azaidrahman
