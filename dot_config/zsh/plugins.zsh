@@ -58,10 +58,8 @@ _init_cached fzf fzf-init.zsh fzf --zsh
 _init_cached zoxide zoxide-init.zsh zoxide init zsh
 
 # Atuin keeps the shell history in a SQLite database, with search and sync.
-# run_once_after_install-atuin.sh installs the binary in ~/.atuin/bin. Atuin is
-# not in the Brewfile, because the project ships its own installer and updater.
-# Source the env file first, because it puts ~/.atuin/bin on PATH.
-[[ -r "$HOME/.atuin/bin/env" ]] && source "$HOME/.atuin/bin/env"
+# Homebrew installs atuin (see the Brewfile), and .zshenv puts /opt/homebrew/bin
+# on PATH for all shells.
 if (( $+commands[atuin] )); then
   # --disable-up-arrow keeps the Up key on the normal zsh history. Ctrl+R is
   # the only key that opens the atuin search.

@@ -111,6 +111,10 @@ brew "tuicr"
 brew "borders"
 brew "openclaw/tap/wacli"
 brew "codex"
+# Install atuin from Homebrew only. A second copy, for example from the atuin
+# installer, can start a daemon of a different version. Each client restarts a
+# daemon that has a different version, so the two copies stop each other.
+# run_once_after_remove-atuin-installer.sh removes the copy of the installer.
 brew "atuin"
 # tsshd is the server half of tssh (trzsz-ssh). rootshell on the phone connects
 # with tssh, which logs in over normal SSH and then starts a tsshd process for

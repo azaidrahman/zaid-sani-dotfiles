@@ -22,9 +22,9 @@ fi
 # launchd gives each GUI app a TMPDIR. Some programs start zsh with an empty
 # environment, for example Claude Desktop when it reads the shell environment.
 # If TMPDIR is not set, use the same per-user directory that launchd uses.
-# Atuin puts the socket of its daemon in $TMPDIR. If the daemon starts without
-# TMPDIR, the other shells cannot find the socket. Then each command waits
-# for a timeout of some seconds.
+# Then a program that keeps a file in $TMPDIR finds the same file in each
+# shell. Atuin had this problem with the socket of its daemon. The atuin config
+# now also sets a fixed socket path.
 if [ -z "$TMPDIR" ]; then
     _tmpdir=$(/usr/bin/getconf DARWIN_USER_TEMP_DIR 2>/dev/null)
     [ -n "$_tmpdir" ] && export TMPDIR="$_tmpdir"

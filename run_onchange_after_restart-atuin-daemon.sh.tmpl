@@ -1,0 +1,38 @@
+#!/bin/bash
+# atuin config hash: {{ include (joinPath .chezmoi.sourceDir "dot_config/atuin/private_config.toml") | sha256sum }}
+#
+# Stop the atuin daemon when its config changes. The daemon reads the config
+# only when it starts. The next shell command starts a new daemon, and the new
+# daemon reads the new config.
+#
+# Do not use `atuin daemon stop`. That command finds the daemon through the
+# socket path in the config. If the config moves the socket, the command looks
+# at the new path and does not find the old daemon. The old daemon then keeps
+# the lock on its pidfile, and each shell command waits for a timeout.
+# The pidfile does not move, so find the daemon through the pidfile.
+set -euo pipefail
+
+pidfile="${XDG_DATA_HOME:-$HOME/.local/share}/atuin/atuin-daemon.pid"
+[ -f "$pidfile" ] || exit 0
+
+# The first line of the pidfile is the PID. The second line is the version.
+pid=$(head -n 1 "$pidfile")
+case "$pid" in
+    '' | *[!0-9]*) exit 0 ;;
+esac
+
+# The pidfile stays after the daemon stops, and the system can give the same
+# PID to a different process. Send the signal only to an atuin daemon.
+if ! ps -o command= -p "$pid" 2>/dev/null | grep -q 'atuin daemon'; then
+    exit 0
+fi
+
+kill -TERM "$pid"
+
+# Wait for the daemon to stop, so that the next command does not wait for the
+# lock on the pidfile.
+for _ in $(seq 50); do
+    kill -0 "$pid" 2>/dev/null || exit 0
+    sleep 0.1
+done
+echo "atuin: the daemon (PID $pid) did not stop in 5 seconds." >&2

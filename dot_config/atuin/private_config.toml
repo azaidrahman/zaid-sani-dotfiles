@@ -275,6 +275,14 @@ search_mode = "daemon-fuzzy"
 [daemon]
 enabled = true
 autostart = true
+# Keep the socket in the data directory, next to the pidfile of the daemon.
+# The default socket is in $TMPDIR, and $TMPDIR changes with the caller. Some
+# programs start zsh with an empty environment, for example Claude Desktop. A
+# daemon that starts from such a shell puts its socket in /tmp. The other
+# shells look in /var/folders, and each command waits for a timeout.
+# run_onchange_after_restart-atuin-daemon.sh stops the daemon when this file
+# changes, so that the next command starts a daemon with the new socket.
+socket_path = "~/.local/share/atuin/atuin.sock"
 ## Enables using the daemon to sync.
 # enabled = false
 
