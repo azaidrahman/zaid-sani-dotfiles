@@ -26,7 +26,7 @@ vim.keymap.set("n", "<leader>qq", ":q<CR>", { noremap = true, silent = true })
 vim.keymap.set("n", "<leader>qc", ":q!<CR>", { noremap = true, silent = true })
 vim.keymap.set("n", "<leader>qw", ":w<CR>", { noremap = true, silent = true })
 
--- Window navigation (mirrors main config's vim-tmux-navigator Ctrl-hjkl;
+-- Window navigation (mirrors main config's Ctrl-hjkl in zaid/core/navigator.lua;
 -- no tmux-boundary crossing needed since this popup has no adjacent panes)
 vim.keymap.set("n", "<C-h>", "<C-w>h", { silent = true })
 vim.keymap.set("n", "<C-j>", "<C-w>j", { silent = true })

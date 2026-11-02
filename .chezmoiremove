@@ -75,3 +75,7 @@ tests/test-omp.zsh
 .local/bin/tuicr-bb
 # The chat-cards mod keeps no state now, so it has no state contract.
 .claude/mods/chat-cards/types/index.d.ts
+# zaid/core/navigator.lua replaces the vim-tmux-navigator nvim plugin. The old
+# spec is in lua/zaid/plugins_archive/vim-tmux-navigator.lua.
+.config/nvim/lua/zaid/plugins/vim-tmux-navigator.lua
+.config/nvim/lua/zaid/plugins/init.lua
