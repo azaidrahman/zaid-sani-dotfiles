@@ -2,6 +2,7 @@
 # Focus one Arc window through aerospace.
 # Usage: arc-focus-window.sh space <space name>
 #        arc-focus-window.sh tab <space name>
+#        arc-focus-window.sh id <Arc id>
 #
 # space: Focus a window that shows the space. If the front window shows the
 #        space and other windows also show it, focus the window that is
@@ -9,8 +10,11 @@
 #        no window shows the space, exit with status 3.
 # tab:   Focus the window that shows the space. If no window shows the space,
 #        focus the front Arc window.
+# id:    Focus the window that has the Arc id. If no window has the id, exit
+#        with status 1. A space without a name is in one window only, so the
+#        Alfred workflow for Arc tabs uses this mode for such a space.
 #
-# Both modes print the Arc id of the window. The Arc id is the "id" property
+# All modes print the Arc id of the window. The Arc id is the "id" property
 # of an Arc window in AppleScript.
 #
 # Aerospace focuses only that window. Do not make Arc active with AppleScript
@@ -28,8 +32,8 @@
 # 100 ms to the key press.
 set -eu
 
-mode="${1:?usage: arc-focus-window.sh space|tab <space name>}"
-space="${2:?usage: arc-focus-window.sh space|tab <space name>}"
+mode="${1:?usage: arc-focus-window.sh space|tab|id <space name or Arc id>}"
+space="${2:?usage: arc-focus-window.sh space|tab|id <space name or Arc id>}"
 aero=${AEROSPACE_BIN:-/opt/homebrew/bin/aerospace}
 arc_bundle=company.thebrowser.Browser
 tries=${ARC_FOCUS_TRIES:-10}
