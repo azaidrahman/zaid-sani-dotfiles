@@ -36,6 +36,9 @@ AGENTS.md
 # Test directories
 .tmux/scripts/tests
 tests/
+# The deployed build of bb-prs needs no Go tests or test data.
+.config/bb-prs/src/**/*_test.go
+.config/bb-prs/src/**/testdata
 .omp/agent/node_modules
 
 # omp runtime state (sessions, prompt history, model cache)

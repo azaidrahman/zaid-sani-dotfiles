@@ -72,6 +72,10 @@ rex.bind("ctrl+space>o", "last_tab")
 -- proposed, in a float (commit_draft.lua).
 rex.bind("ctrl+space>y", "commit_draft")
 
+-- prefix+p: pick a Bitbucket PR (bb_prs.lua). tmux keeps this on prefix+B,
+-- because tmux uses prefix+p for previous-window.
+rex.bind("ctrl+space>p", "bb_prs")
+
 -- prefix+D: move the focused float into the layout, as a regular pane
 -- (dock.lua). tmux has no floats, so this key has no tmux copy.
 rex.bind("ctrl+space>shift+d", "dock_float")
@@ -172,6 +176,7 @@ require("diff_review")
 require("tab_picker")
 require("last_tab")
 require("commit_draft")
+require("bb_prs")
 require("dock")
 require("zen")
 

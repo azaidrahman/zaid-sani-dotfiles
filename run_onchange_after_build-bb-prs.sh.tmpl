@@ -1,0 +1,24 @@
+#!/bin/bash
+# Sources hash: {{ range (glob (joinPath .chezmoi.sourceDir "dot_config/bb-prs/src/**/*.go")) }}{{ include . | sha256sum }}{{ end }}{{ include "dot_config/bb-prs/src/go.mod" | sha256sum }}{{ include "dot_config/bb-prs/src/go.sum" | sha256sum }}
+set -euo pipefail
+
+# A compiled binary is specific to one machine, so each Mac builds its own.
+# See docs/adr/0002-compile-swift-huds-on-each-machine.md. The same reason
+# applies to this Go program.
+if ! command -v go >/dev/null 2>&1; then
+  # A script that chezmoi runs can lack the mise shims in its PATH.
+  PATH="$HOME/.local/share/mise/shims:$PATH"
+fi
+if ! command -v go >/dev/null 2>&1; then
+  # Chezmoi records this script as done, also after a skip. So the bb-prs
+  # command builds the program itself on the first run, if go is available.
+  echo "build-bb-prs: go not found, skipping the build" >&2
+  echo "build-bb-prs: bb-prs builds itself on the first run when go is available" >&2
+  exit 0
+fi
+
+# The first build downloads the Go modules.
+cd "$HOME/.config/bb-prs/src"
+mkdir -p "$HOME/.local/share/bb-prs/bin"
+echo "build-bb-prs: compiling bb-prs"
+go build -trimpath -o "$HOME/.local/share/bb-prs/bin/bb-prs" .
