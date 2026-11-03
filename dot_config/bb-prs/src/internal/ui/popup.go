@@ -55,9 +55,9 @@ type menuItem struct {
 
 var menuItems = []menuItem{
 	{"⏎", "Review in tuicr; in [0] Changes, go one level in", "enter"},
-	{"space", "Select the PR", " "},
+	{"space", "Select the PR (or click its left edge)", " "},
 	{"s", "Sync: rebase or merge the destination in", "s"},
-	{"a", "Approve", "a"},
+	{"a", "Approve; with more than one PR selected, ask first", "a"},
 	{"m", "Approve and merge", "m"},
 	{"o", "Open in the browser: the PR, or the commit in [0] Changes", "o"},
 	{"c", "Check for conflicts, and open a worktree tab to fix them", "c"},
@@ -159,11 +159,43 @@ func choice(verb string) string {
 
 func idText(id int) string { return boldStyle.Render(fmt.Sprintf("#%d", id)) }
 
+// prLine returns the line of a PR in a confirm popup, wrapped to the width of
+// the popup. A note follows the title, in dim.
+func prLine(p bb.PR, note string) []string {
+	prefix := "  " + fg(cyan).Render(clean(shortRepo(p.Repo))) + idText(p.ID) + "  "
+	lines := wrap(prefix, clean(p.Title), plainStyle, popupText)
+	if note == "" {
+		return lines
+	}
+	// The note goes after the title. If it does not fit, it gets its own line.
+	last := len(lines) - 1
+	if ansi.StringWidth(lines[last])+1+ansi.StringWidth(note) <= popupText {
+		lines[last] += " " + dimStyle.Render(note)
+		return lines
+	}
+	return append(lines, strings.Repeat(" ", ansi.StringWidth(prefix))+dimStyle.Render(note))
+}
+
+// approveConfirm asks before the approval of more than one PR. The PRs of the
+// user show a note, because the approval skips them.
+func approveConfirm(prs []bb.PR) *popup {
+	lines := []string{"Approve these PRs?", ""}
+	for _, p := range prs {
+		note := ""
+		if p.Role == bb.Mine {
+			note = "(your own PR, no approval)"
+		}
+		lines = append(lines, prLine(p, note)...)
+	}
+	return &popup{kind: confirmKind, title: "Approve", lines: lines, verb: "Approve", yes: func(m *Model) tea.Cmd {
+		return m.runApprove(prs)
+	}}
+}
+
 func mergeConfirm(prs []bb.PR) *popup {
 	lines := []string{"Approve and merge these PRs?", dimStyle.Render("Merge commit. The source branch closes."), ""}
 	for _, p := range prs {
-		prefix := "  " + fg(cyan).Render(clean(shortRepo(p.Repo))) + idText(p.ID) + "  "
-		lines = append(lines, wrap(prefix, clean(p.Title), plainStyle, popupText)...)
+		lines = append(lines, prLine(p, "")...)
 	}
 	return &popup{kind: confirmKind, title: "Approve and merge", lines: lines, verb: "Merge", yes: func(m *Model) tea.Cmd {
 		m.startBusy("Merging…")

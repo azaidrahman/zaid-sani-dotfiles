@@ -49,12 +49,14 @@ Show the open Bitbucket PRs for you.
   enter    review in tuicr (:submit posts comments, or comments and approval)
            in the changes tab of the main panel: show the files of the
            commit, then zoom the diff of the file (esc goes back)
-  space    select a PR, to act on more than one
+  space    select a PR, to act on more than one (a click on the left edge of
+           a row does the same)
   s        sync the selected PRs with their destination. A popup asks first,
            and you choose the method: rebase the source branch onto the
            destination (force-push with lease), or merge the destination
            into the source branch (one merge commit, normal push)
-  a        approve the selected PRs
+  a        approve the selected PRs. If more than one PR is selected, a popup
+           asks first
   m        approve and merge the selected PRs (asks first)
   o        open the PR in the browser (in the changes tab of the main panel:
            the selected commit)
@@ -71,7 +73,8 @@ Show the open Bitbucket PRs for you.
 
 Mouse:
   click    focus a panel, choose a row, a file, or a tab, or run a key of
-           the bar or of a popup. In the changes tab, click the selected
+           the bar or of a popup. A click on the left edge of a PR row
+           selects it (as space). In the changes tab, click the selected
            commit or file again to go in (as enter), and click the line
            "← ... (esc)" to go back
   wheel    move in the list, or scroll the main panel

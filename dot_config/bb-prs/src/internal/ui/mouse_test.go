@@ -89,6 +89,24 @@ func TestMouse(t *testing.T) {
 				}
 			}
 		}},
+		{"click on the mark column selects the row, again clears it, and a click on the text does not select", false, func(t *testing.T, f fixture) {
+			f.m = send(f.m, "0")
+			_, y := spot(t, f.m, "PR#")
+			x := layout(f.m.w, f.m.h).PRs.body().X // the mark, then one space
+			key := f.m.prRows()[1].Key()
+			// The click is on the space after the mark, the second column.
+			if f.m = click(f.m, x+1, y+2); !f.m.sel[key] || len(f.m.sel) != 1 || f.m.cursor["open"] != 1 || f.m.focus != focusPRs {
+				t.Errorf("selection = %v, cursor = %d, focus = %q after a click on the mark, want only %s, 1, and prs", f.m.sel, f.m.cursor["open"], f.m.focus, key)
+			}
+			if f.m = click(f.m, x, y+2); len(f.m.sel) != 0 || f.m.cursor["open"] != 1 {
+				t.Errorf("selection = %v, cursor = %d after a second click, want none and 1", f.m.sel, f.m.cursor["open"])
+			}
+			line := screen(f.m)[y+3]
+			f.m = click(f.m, ansi.StringWidth(line[:id.FindStringIndex(line)[0]]), y+3)
+			if len(f.m.sel) != 0 || f.m.cursor["open"] != 2 {
+				t.Errorf("selection = %v, cursor = %d after a click on the id, want none and 2", f.m.sel, f.m.cursor["open"])
+			}
+		}},
 		{"click on Closed", false, func(t *testing.T, f fixture) {
 			if f.m = clickOn(t, f.m, "Closed"); f.m.list != "closed" {
 				t.Errorf("list = %q, want closed", f.m.list)

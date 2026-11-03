@@ -511,6 +511,9 @@ func (m *Model) openOnly(action string) bool {
 	return false
 }
 
+// approve approves the PR under the cursor at once. With more than one
+// target, it asks first. The popup runs the approval for the PRs that it
+// lists.
 func (m *Model) approve() tea.Cmd {
 	if m.busy != "" || !m.openOnly("Approve") {
 		return nil
@@ -519,6 +522,15 @@ func (m *Model) approve() tea.Cmd {
 	if len(prs) == 0 {
 		return nil
 	}
+	if len(prs) > 1 {
+		m.showPopup(approveConfirm(prs))
+		return nil
+	}
+	return m.runApprove(prs)
+}
+
+// runApprove approves prs.
+func (m *Model) runApprove(prs []bb.PR) tea.Cmd {
 	m.startBusy("Approving…")
 	d := m.d.Actions
 	return func() tea.Msg {

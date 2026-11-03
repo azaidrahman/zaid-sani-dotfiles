@@ -20,6 +20,10 @@ func mark(selected bool) string {
 	return " "
 }
 
+// markWidth is the width of the mark column of a row: the mark, and one space
+// after it. A click on this column selects the row.
+const markWidth = 2
+
 // Widths of the columns of the lists. The mark of the selection comes first.
 const (
 	idWidth      = 6  // "#" and the number, aligned to the right

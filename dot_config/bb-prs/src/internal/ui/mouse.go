@@ -73,7 +73,9 @@ func (m *Model) clickFocus(key string) {
 
 // clickPRs handles a click in the PR panel r. A click on a name in the title
 // shows that list. A click on a row moves the cursor to that row. A click on
-// the header row or on an error line only gives the focus to [2].
+// the mark column of a row also selects the row, or clears its selection, as
+// space does. A click on the header row or on an error line only gives the
+// focus to [2].
 func (m *Model) clickPRs(r rect, x, y int) {
 	if i, ok := titleTab(r, x, y, "[2]", listNames); ok {
 		m.clickFocus("2")
@@ -89,8 +91,15 @@ func (m *Model) clickPRs(r rect, x, y int) {
 	pl := m.listPlace(r)
 	line := y - b.Y - 1 - len(pl.errs) // the line under the header and the errors
 	m.clickFocus("2")
-	if i := pl.off + line; line >= 0 && line < pl.rows && i < pl.n && i != pl.idx {
+	i := pl.off + line
+	if line < 0 || line >= pl.rows || i >= pl.n {
+		return
+	}
+	if i != pl.idx {
 		m.moveCursor(i - pl.idx)
+	}
+	if x-b.X < markWidth {
+		m.toggle()
 	}
 }
 

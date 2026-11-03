@@ -331,6 +331,30 @@ func TestKeyFlows(t *testing.T) {
 				t.Errorf("bar = %q, want 2 selected", bar)
 			}
 		}},
+		{"approve of two PRs asks", []string{"space", "j", "space", "a"}, func(t *testing.T, f fixture) {
+			if f.m.popup == nil || f.m.popup.kind != confirmKind || f.m.busy != "" {
+				t.Fatalf("popup = %+v, busy = %q, want the approve confirm and nothing running", f.m.popup, f.m.busy)
+			}
+			text := ansi.Strip(strings.Join(f.m.popup.lines, "\n"))
+			for _, want := range []string{"Approve these PRs?", "cur#11", "(your own PR, no approval)", "cur#12"} {
+				if !strings.Contains(text, want) {
+					t.Errorf("popup = %q, want %q", text, want)
+				}
+			}
+			if log := f.twg(); strings.Contains(log, " approve ") {
+				t.Errorf("twg log = %q, want no approve", log)
+			}
+			// esc cancels, and nothing runs.
+			if f.m = send(f.m, "wait", "esc"); f.m.popup != nil || strings.Contains(f.twg(), " approve ") || !strings.Contains(f.bar(), "Cancelled. Nothing changed.") {
+				t.Errorf("popup = %+v, twg log = %q, bar = %q, want a cancel", f.m.popup, f.twg(), f.bar())
+			}
+			// y approves the PR that is not yours.
+			f.m = send(f.m, "a", "wait", "y")
+			log := f.twg()
+			if !strings.Contains(log, "pull-requests approve 12 --repo ws/cur") || strings.Contains(log, "approve 11 ") {
+				t.Errorf("twg log = %q, want the approve of #12 only", log)
+			}
+		}},
 		{"merge asks", []string{"space", "j", "space", "m"}, func(t *testing.T, f fixture) {
 			if f.m.popup == nil || f.m.popup.kind != confirmKind {
 				t.Fatalf("popup = %+v, want a confirm popup", f.m.popup)
