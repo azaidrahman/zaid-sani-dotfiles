@@ -31,6 +31,12 @@ defaults write "$domain" Workspace.usesStandardInactiveWindowPaneStyles -bool tr
 defaults write "$domain" Workspace.terminalCursorStyle -string bar
 defaults write "$domain" Workspace.terminalFontPointSize -float 20
 
+# Use the same font as Ghostty (dot_config/ghostty/config). tmux runs in
+# Ghostty, so tmux also uses this font. Rex wants the family name, not the
+# PostScript name.
+defaults write "$domain" Workspace.terminalFontName -string "Iosevka Term"
+defaults write "$domain" Workspace.terminalFontStyle -string Regular
+
 # A pane is rarely an exact number of rows high, and Rex puts the extra pixels
 # below the last row. "extend" paints them with the colors of the last row, so
 # the nvim status line looks two rows high. "background" paints them with the
