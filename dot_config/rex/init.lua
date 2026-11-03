@@ -64,10 +64,6 @@ rex.bind("ctrl+space>e", "diff_review")
 -- prefix+f: pick a tab from all sessions (tab_picker.lua).
 rex.bind("ctrl+space>f", "tab_picker")
 
--- prefix+o: show the tab that had focus before the current tab
--- (last_tab.lua).
-rex.bind("ctrl+space>o", "last_tab")
-
 -- prefix+y: edit the commit message or the pull request draft that Claude
 -- proposed, in a float (commit_draft.lua).
 rex.bind("ctrl+space>y", "commit_draft")
@@ -80,15 +76,16 @@ rex.bind("ctrl+space>p", "bb_prs")
 -- (dock.lua). tmux has no floats, so this key has no tmux copy.
 rex.bind("ctrl+space>shift+d", "dock_float")
 
--- cmd+z or prefix+z: zen mode. The pane floats in the middle of its tab, over
--- a dark backdrop, with smaller text (zen.lua). prefix+Z only zooms the pane,
--- the same as in tmux.
+-- cmd+z or prefix+d: zen mode. The pane floats in the middle of its tab, over
+-- a dark backdrop, with smaller text (zen.lua). tmux uses prefix+z for zen
+-- mode, and prefix+d to detach. prefix+Z only zooms the pane, the same as in
+-- tmux.
 --
 -- In the app, cmd+z is Edit > Undo. Undo is off in a terminal pane, and a
 -- terminal does not send cmd keys to its program. Thus zen mode can use the
 -- key. shift+cmd+z (Redo) stays as it is.
 rex.bind("cmd+z", "zen")
-rex.bind("ctrl+space>z", "zen")
+rex.bind("ctrl+space>d", "zen")
 rex.bind("ctrl+space>shift+z", "zoom_pane")
 
 -- cmd+w does File > Close, as in the app. In zen mode, it leaves zen mode and
@@ -174,7 +171,6 @@ require("restart_claude")
 require("hold")
 require("diff_review")
 require("tab_picker")
-require("last_tab")
 require("commit_draft")
 require("bb_prs")
 require("dock")

@@ -82,3 +82,8 @@ tests/test-omp.zsh
 # The op-sa window replaced the service-account tokens in the keychain. The
 # old seed function is in archive/zsh/functions/.
 .config/zsh/functions/,op-sa-seed
+# Rex has no tab history now. ctrl+] and ctrl+[ show the next tab and the
+# previous tab. The old files are in archive/rex-last-tab/.
+.config/rex/last_tab.lua
+.config/rex/scripts/last-tab-watcher.lua
+.config/rex/scripts/tab-feed.lua

@@ -1,5 +1,6 @@
 -- Zen mode. This is the Rex copy of tmux prefix+z
--- (~/.tmux/scripts/tmux-zen.sh), in the style of zen-mode.nvim.
+-- (~/.tmux/scripts/tmux-zen.sh), in the style of zen-mode.nvim. In Rex, the
+-- keys are prefix+d and cmd+z (init.lua).
 --
 -- The zen action does these steps in the tab of the pane:
 --   1. It splits a placeholder pane off the pane. The placeholder keeps the
