@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"bbprs/internal/bb"
+	"bbprs/internal/review"
 	"bbprs/internal/store"
 )
 
@@ -27,6 +28,7 @@ const markWidth = 2
 // Widths of the columns of the lists. The mark of the selection comes first.
 const (
 	idWidth      = 6  // "#" and the number, aligned to the right
+	aiWidth      = 3  // the header "AI", and one space
 	maxRepoWidth = 16 // the most columns of the repo column
 	minRepoWidth = 4  // the width of the header "REPO"
 )
@@ -69,20 +71,40 @@ func listHeader(list string, repoW, width int) string {
 	if list == "log" {
 		b.WriteString(fit("TIME", 12) + "  " + fit("RESULT", 14))
 	} else {
-		b.WriteString(fitRight("AGE", 4) + "   " + fit("ROLE", 8) + fit("↓", 3) + fit("AUTHOR", 9) + " ")
+		b.WriteString(fitRight("AGE", 4) + "   " + fit("ROLE", 8) + fit("AI", aiWidth) + fit("↓", 3) + fit("AUTHOR", 9) + " ")
 	}
 	b.WriteString(fit("REPO", repoW) + " TITLE")
 	return dimStyle.Render(fit(b.String(), width))
 }
 
+// aiCell returns the AI column of the row of p, for the review rv (nil if p
+// has no review). The column shows nothing for no review, a dim "•" for a
+// review that runs, the color of the verdict for a finished review, and a red
+// "✗" for a failed review. A finished review of an older update of p (stale)
+// has a dim "•".
+func aiCell(p bb.PR, rv *review.State, now time.Time) string {
+	if rv == nil {
+		return fit("", aiWidth)
+	}
+	st := shownState(*rv, now)
+	dot := dimStyle.Render("•")
+	switch {
+	case st.Status == review.StatusFailed:
+		dot = fg(red).Render("✗")
+	case st.Status == review.StatusDone && !staleReview(p, st):
+		dot = verdictStyle(st.Verdict).Render("•")
+	}
+	return fit(dot, aiWidth)
+}
+
 // FormatRow returns the row of a PR in the list. The columns are: the mark of
-// the selection, the id, the age, the role, the commits behind the
-// destination, the author, the repo, and the title. The repo column is repoW
-// columns wide, and it shows "·" for the repo cur. The age of an open PR is
-// the time since it was sent. The age of a closed PR is the time since its
-// last change. A behind count of 0 shows nothing. The row is exactly width
-// columns wide.
-func FormatRow(p bb.PR, cur string, behind int, selected bool, now time.Time, repoW, width int) string {
+// the selection, the id, the age, the role, the background review (rv, or nil
+// for no review), the commits behind the destination, the author, the repo,
+// and the title. The repo column is repoW columns wide, and it shows "·" for
+// the repo cur. The age of an open PR is the time since it was sent. The age
+// of a closed PR is the time since its last change. A behind count of 0 shows
+// nothing. The row is exactly width columns wide.
+func FormatRow(p bb.PR, cur string, behind int, rv *review.State, selected bool, now time.Time, repoW, width int) string {
 	when := p.Sent
 	if !p.IsOpen() {
 		when = p.Updated
@@ -102,6 +124,7 @@ func FormatRow(p bb.PR, cur string, behind int, selected bool, now time.Time, re
 	b.WriteString(dimStyle.Render(fitRight(age, 4)) + " ")
 	b.WriteString(roleStyle(p.Role).Render("●") + " ")
 	b.WriteString(fit(clean(string(p.Role)), 8))
+	b.WriteString(aiCell(p, rv, now))
 	b.WriteString(fg(magenta).Render(fit(down, 3)))
 	b.WriteString(dimStyle.Render(fit(abbr(p.Author), 9)) + " ")
 	b.WriteString(repoCell(p.Repo, cur, repoW))

@@ -3,7 +3,9 @@
 //
 // With no arguments, it starts the screen. With "--refresh <list> [--auto]",
 // it loads one list into the cache and stops. The screen starts this child
-// process, and the child lives on after the screen closes.
+// process, and the child lives on after the screen closes. With
+// "--ai-review <repo> <id> [--again]", it runs the background reviewer on one
+// PR. The screen starts that child in the same way.
 package main
 
 import (
@@ -14,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -26,6 +29,7 @@ import (
 	"bbprs/internal/cmdlog"
 	"bbprs/internal/gitops"
 	"bbprs/internal/refresh"
+	"bbprs/internal/review"
 	"bbprs/internal/store"
 	"bbprs/internal/termtab"
 	"bbprs/internal/twg"
@@ -40,7 +44,8 @@ Show the open Bitbucket PRs for you.
   tab      focus the next panel (shift+tab: the previous panel)
   1 2 0    focus Status, PRs, or Main
   [ ]      change the list: open, closed, log of your actions
-  { }      change the tab of the main panel: Status, Changes, Activity
+  { }      change the tab of the main panel: Status, Changes, Activity,
+           Review
   w        turn the line wrap of the main panel on or off (Main has focus)
   ctrl+d   move half a page down (ctrl+u: up) in the list, or in the main panel
   h/l      scroll the main panel sideways (Main has focus, and wrap is off)
@@ -58,6 +63,12 @@ Show the open Bitbucket PRs for you.
   a        approve the selected PRs. If more than one PR is selected, a popup
            asks first
   m        approve and merge the selected PRs (asks first)
+  R        review the selected PRs with Claude in the background (set
+           another reviewer in ~/.config/bb-prs/reviewer.json). The AI column
+           of the list shows the outcome, and the Review tab shows the
+           summary and the findings. For a finished review, a popup asks:
+           open the review session, or run the review again. In the Review
+           tab, enter opens the review session
   o        open the PR in the browser (in the changes tab of the main panel:
            the selected commit)
   c        check the PR for conflicts. If it has any, make a worktree with the
@@ -102,6 +113,8 @@ func run(args []string) int {
 		return 0
 	case args[0] == "--refresh":
 		return runRefresh(args[1:])
+	case args[0] == "--ai-review":
+		return runAIReview(args[1:])
 	}
 	fmt.Fprint(os.Stderr, usage)
 	return 2
@@ -182,6 +195,60 @@ func runRefresh(args []string) int {
 	return 0
 }
 
+// runAIReview is the detached child of the key R. The usage text of the
+// screen does not list it, because only the screen starts it. With --again,
+// the child replaces a done review. Without it, the child does not touch a
+// done review.
+func runAIReview(args []string) int {
+	again := len(args) == 3 && args[2] == "--again"
+	id, err := 0, error(nil)
+	if len(args) == 2 || again {
+		id, err = strconv.Atoi(args[1])
+	}
+	if len(args) != 2 && !again || err != nil || id < 1 || strings.Count(args[0], "/") != 1 || strings.HasPrefix(args[0], "/") || strings.HasSuffix(args[0], "/") {
+		fmt.Fprintln(os.Stderr, "Usage: bb-prs --ai-review <workspace/repo> <id> [--again]")
+		return 2
+	}
+	repo := args[0]
+	// The child must live after the terminal closes.
+	signal.Ignore(syscall.SIGHUP)
+	// On a stop signal, cancel the context. The child then writes the state
+	// "failed" and releases the lock.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// The state file has a known path before the setup. A failure before the
+	// review writes the state "failed", so that the screen shows the error.
+	paths := store.DefaultPaths()
+	early := func(name string, err error) int {
+		fmt.Fprintf(os.Stderr, "bb-prs: %s\n", err)
+		_ = review.Fail(paths, name, repo, id, again, err.Error())
+		return 1
+	}
+	cfg, err := review.Load(review.ConfigPath())
+	if err != nil {
+		return early("", fmt.Errorf("The reviewer config is not valid: %s.", err))
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return early(cfg.Name, err)
+	}
+	env, err := setup(wd, paths, os.Getenv)
+	if err != nil {
+		return early(cfg.Name, err)
+	}
+	env.Twg = twg.New(nil)
+	env.Now = time.Now
+	switch err := review.Child(ctx, env, cfg, repo, id, again); {
+	case errors.Is(err, review.ErrLocked), errors.Is(err, review.ErrDone):
+		return 0 // Another child reviews this PR, or its review is done.
+	case err != nil:
+		fmt.Fprintf(os.Stderr, "bb-prs: %s\n", err)
+		return 1
+	}
+	return 0
+}
+
 func runUI() int {
 	for _, name := range []string{"twg", "git"} {
 		if _, err := exec.LookPath(name); err != nil {
@@ -236,6 +303,12 @@ func runUI() int {
 			return refresh.Spawn(self, wd, args...)
 		},
 		Review: func(url string) *exec.Cmd { return exec.Command("tuicr", "pr", url) },
+		ReviewConfig: func() (review.Config, error) {
+			return review.Load(review.ConfigPath())
+		},
+		StartReview: func(repo string, id int, again bool) error {
+			return review.Start(self, wd, repo, id, again)
+		},
 	})
 	// Mouse reporting, as lazygit does. Then a plain drag does not select
 	// text. The usage text tells the user to drag with shift.

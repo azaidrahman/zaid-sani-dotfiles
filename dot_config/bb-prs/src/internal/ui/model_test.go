@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -23,7 +24,9 @@ import (
 	"bbprs/internal/gitops"
 	"bbprs/internal/gitops/gitopstest"
 	"bbprs/internal/refresh"
+	"bbprs/internal/review"
 	"bbprs/internal/store"
+	"bbprs/internal/termtab"
 	"bbprs/internal/twg"
 )
 
@@ -58,11 +61,16 @@ func must(err error) {
 }
 
 // fixture is a model on a cache in a temporary directory. A fake twg appends
-// its arguments to twgLog. Spawn adds "<list> <auto>" to spawns.
+// its arguments to twgLog. Spawn adds "<list> <auto>" to spawns. StartReview
+// adds "--ai-review <repo> <id> [--again]" to starts. The terminal opener is Rex, and it
+// adds each command ("rex", then its arguments) to opened. The command that
+// goes to a tab that is open fails, so that the opener opens a tab.
 type fixture struct {
 	m      Model
 	paths  store.Paths
 	spawns *[]string
+	starts *[]string
+	opened *[][]string
 	twgLog string
 }
 
@@ -151,7 +159,7 @@ func newFixture(dir string, prs []bb.PR, errs []string) fixture {
 	listFile := paths.ListFile(env.Prompt, "open")
 	must(store.SaveList(listFile, store.ListCache{PRs: prs, Errors: errs, Saved: time.Now()}))
 
-	spawns := &[]string{}
+	spawns, starts, opened := &[]string{}, &[]string{}, &[][]string{}
 	m := New(Deps{
 		Env:     env,
 		Actions: actions.Deps{Twg: runner, Paths: paths, Repo: env.Repo, ListFile: listFile, Log: log, Now: time.Now},
@@ -164,11 +172,51 @@ func newFixture(dir string, prs []bb.PR, errs []string) fixture {
 			return nil
 		},
 		Review: func(url string) *exec.Cmd { return exec.Command("true", url) },
+		// sh is on the PATH, so the reviewer is there. No test runs it.
+		ReviewConfig: func() (review.Config, error) {
+			return review.Config{Name: "claude", Command: []string{"sh"}, Resume: []string{"claude", "--resume", "{session}"}}, nil
+		},
+		StartReview: func(repo string, id int, again bool) error {
+			start := fmt.Sprintf("--ai-review %s %d", repo, id)
+			if again {
+				start += " --again"
+			}
+			*starts = append(*starts, start)
+			return nil
+		},
+		Tab: termtab.Opener{
+			Env: func(k string) string { return map[string]string{"REX_SESSION": "s1"}[k] },
+			Run: func(_ context.Context, name string, args ...string) error {
+				*opened = append(*opened, append([]string{name}, args...))
+				if args[0] == "focus" {
+					return errors.New("no such tab")
+				}
+				return nil
+			},
+		},
 		NoTick: true,
 		// A popup ignores keys until the test sends "wait".
 		PopupGuard: time.Hour,
 	})
-	return fixture{m: feed(m, tea.WindowSizeMsg{Width: 120, Height: 40}), paths: paths, spawns: spawns, twgLog: twgLog}
+	return fixture{m: feed(m, tea.WindowSizeMsg{Width: 120, Height: 40}), paths: paths, spawns: spawns,
+		starts: starts, opened: opened, twgLog: twgLog}
+}
+
+// writeReview puts the state of a review of pr in the state directory.
+func (f fixture) writeReview(pr bb.PR, st review.State) {
+	must(review.WriteState(f.paths.ReviewFile(pr.Repo, pr.ID), st))
+}
+
+// doneReview is a finished review of pr with the session s-1. Its summary has
+// an escape sequence, which the screen must not send.
+func doneReview(pr bb.PR) review.State {
+	now := time.Now()
+	return review.State{
+		Status: review.StatusDone, Started: now.Add(-7 * time.Minute), Finished: now.Add(-5 * time.Minute),
+		Reviewer: "claude", Model: "haiku", Session: "s-1", Dir: "/work/review", Updated: pr.UpdatedRaw, Verdict: "request-changes",
+		Summary:  "The budget never resets.\x1b]52;c;eA==\x07 Add a test.",
+		Findings: []review.Finding{{File: "api/retry.go", Line: 12, Severity: "high", Note: "The budget is not reset after a success."}},
+	}
 }
 
 // writeDetails puts a fresh details preview of pr with the description desc
@@ -353,6 +401,18 @@ func TestKeyFlows(t *testing.T) {
 			log := f.twg()
 			if !strings.Contains(log, "pull-requests approve 12 --repo ws/cur") || strings.Contains(log, "approve 11 ") {
 				t.Errorf("twg log = %q, want the approve of #12 only", log)
+			}
+		}},
+		{"approve of two of your own PRs does not ask", nil, func(t *testing.T, f fixture) {
+			prs := fixturePRs()
+			prs[1].Role = bb.Mine
+			f = newFixture(t.TempDir(), prs, nil)
+			f.m = send(f.m, "space", "j", "space", "a")
+			if f.m.popup != nil || strings.Contains(f.twg(), " approve ") {
+				t.Fatalf("popup = %+v, twg log = %q, want no popup and no approve", f.m.popup, f.twg())
+			}
+			if bar, want := f.bar(), "#11 your own PR, no approval · #12 your own PR, no approval"; !strings.Contains(bar, want) {
+				t.Errorf("bar = %q, want %q", bar, want)
 			}
 		}},
 		{"merge asks", []string{"space", "j", "space", "m"}, func(t *testing.T, f fixture) {
@@ -753,6 +813,150 @@ func TestKeyFlows(t *testing.T) {
 		{"changes: k and ctrl+u on the first PR keep the files level", []string{"}", "0", "enter", "j", "2", "k", "ctrl+u"}, func(t *testing.T, f fixture) {
 			if f.m.level != levelFiles || f.m.file != 1 {
 				t.Errorf("level = %d, file = %d, want the files level (%d) and file 1: the cursor did not move", f.m.level, f.m.file, levelFiles)
+			}
+		}},
+		{"R with a missing reviewer", nil, func(t *testing.T, f fixture) {
+			f.m.d.ReviewConfig = func() (review.Config, error) {
+				return review.Config{Name: "claude", Command: []string{"bb-prs-no-such-reviewer"}}, nil
+			}
+			f.m = send(f.m, "R")
+			const want = `Reviewer "claude" not found. Install it, or set the reviewer in ~/.config/bb-prs/reviewer.json.`
+			if bar := f.bar(); !strings.Contains(bar, want) || len(*f.starts) != 0 {
+				t.Errorf("bar = %q, starts = %q, want %q and no start", bar, *f.starts, want)
+			}
+		}},
+		{"R with no review starts it, and a second R in the same read does not", []string{"RR"}, func(t *testing.T, f fixture) {
+			if want := []string{"--ai-review ws/cur 11"}; !slices.Equal(*f.starts, want) {
+				t.Errorf("starts = %q, want %q", *f.starts, want)
+			}
+			if bar, want := f.bar(), "A review of #11 runs already (started just now)."; !strings.Contains(bar, want) {
+				t.Errorf("bar = %q, want %q", bar, want)
+			}
+		}},
+		{"R while a review runs", nil, func(t *testing.T, f fixture) {
+			f.writeReview(fixturePRs()[0], review.State{Status: review.StatusRunning, Started: time.Now().Add(-2 * time.Minute)})
+			f.m = send(f.m, "R")
+			const want = "A review of #11 runs already (started 2m ago)."
+			if bar := f.bar(); !strings.Contains(bar, want) || len(*f.starts) != 0 {
+				t.Errorf("bar = %q, starts = %q, want %q and no start", bar, *f.starts, want)
+			}
+		}},
+		{"R on a finished review: choose to run it again, cancel, or open the session", nil, func(t *testing.T, f fixture) {
+			f.writeReview(fixturePRs()[0], doneReview(fixturePRs()[0]))
+			f.m = send(f.m, "R")
+			if f.m.popup == nil || f.m.popup.title != "Review of #11" || len(*f.starts) != 0 {
+				t.Fatalf("popup = %+v, starts = %q, want the popup Review of #11 and no start", f.m.popup, *f.starts)
+			}
+			shown := strings.Join(strings.Fields(ansi.Strip(strings.Join(f.m.popup.body(popupText), "\n"))), " ")
+			for _, want := range []string{"▸ Open the review session", "Run the review again (the old result is replaced)"} {
+				if !strings.Contains(shown, want) {
+					t.Errorf("popup = %q, want %q", shown, want)
+				}
+			}
+			if f.m = send(f.m, "wait", "esc"); f.m.popup != nil || len(*f.starts) != 0 || len(*f.opened) != 0 {
+				t.Errorf("popup = %+v, starts = %q, opened = %q after esc, want nothing", f.m.popup, *f.starts, *f.opened)
+			}
+			if f.m = send(f.m, "R", "wait", "enter"); len(*f.opened) != 2 || len(*f.starts) != 0 {
+				t.Errorf("opened = %q, starts = %q after enter, want the session opened and no review", *f.opened, *f.starts)
+			}
+			// Only this choice gives the child --again.
+			if f.m = send(f.m, "R", "wait", "j", "enter"); f.m.popup != nil || !slices.Equal(*f.starts, []string{"--ai-review ws/cur 11 --again"}) {
+				t.Errorf("popup = %+v, starts = %q after j and enter, want one new review with --again", f.m.popup, *f.starts)
+			}
+		}},
+		{"enter on the Review view opens the session: the tab label and the resume argv", []string{"{", "0"}, func(t *testing.T, f fixture) {
+			f.writeReview(fixturePRs()[0], doneReview(fixturePRs()[0]))
+			f.m = send(f.m, "enter")
+			want := [][]string{
+				{"rex", "focus", "-s", "s1", "review cur#11"},
+				{"rex", "run", "-s", "s1", "-c", "/work/review", "--label", "review cur#11", "--", "claude", "--resume", "s-1"},
+			}
+			if !reflect.DeepEqual(*f.opened, want) {
+				t.Errorf("commands = %q, want %q", *f.opened, want)
+			}
+			if bar, want := f.bar(), "Opened the review session of #11 in a Rex tab."; !strings.Contains(bar, want) {
+				t.Errorf("bar = %q, want %q", bar, want)
+			}
+		}},
+		{"two quick enters on the Review view open one tab", []string{"{", "0"}, func(t *testing.T, f fixture) {
+			f.writeReview(fixturePRs()[0], doneReview(fixturePRs()[0]))
+			// The second enter comes before the open of the first enter ends.
+			next, first := f.m.Update(keyMsg("enter"))
+			next, second := next.(Model).Update(keyMsg("enter"))
+			if f.m = run(run(next.(Model), first), second); len(*f.opened) != 2 {
+				t.Fatalf("commands = %q, want one open (focus, then run)", *f.opened)
+			}
+			if f.m = send(f.m, "enter"); len(*f.opened) != 4 {
+				t.Errorf("commands = %q, want a new open after the first open ended", *f.opened)
+			}
+		}},
+		{"enter on the Review view with no Rex or tmux puts the resume command in the command log", []string{"{", "0"}, func(t *testing.T, f fixture) {
+			f.m.d.Tab.Env = func(string) string { return "" }
+			st := doneReview(fixturePRs()[0])
+			st.Dir = "/work/my review"
+			f.writeReview(fixturePRs()[0], st)
+			f.m = send(f.m, "enter")
+			if want := "cd '/work/my review' && claude --resume s-1"; !f.logged(want) {
+				t.Errorf("command log = %+v, want %q", f.m.d.Log.Lines(20), want)
+			}
+			if bar, want := f.bar(), "No Rex or tmux. The resume command is in the command log."; !strings.Contains(bar, want) {
+				t.Errorf("bar = %q, want %q", bar, want)
+			}
+		}},
+		{"enter on the Review view while the review runs", []string{"{", "0"}, func(t *testing.T, f fixture) {
+			f.writeReview(fixturePRs()[0], review.State{Status: review.StatusRunning, Started: time.Now().Add(-time.Minute)})
+			f.m = send(f.m, "enter")
+			if bar, want := f.bar(), "The review of #11 runs. Its session opens when it ends."; len(*f.opened) != 0 || !strings.Contains(bar, want) {
+				t.Errorf("commands = %q, bar = %q, want no command and %q", *f.opened, bar, want)
+			}
+		}},
+		{"enter on the Review view refuses a session id with a bad character", []string{"{", "0"}, func(t *testing.T, f fixture) {
+			st := doneReview(fixturePRs()[0])
+			st.Session = "s-1; rm -rf ~"
+			f.writeReview(fixturePRs()[0], st)
+			f.m = send(f.m, "enter")
+			if bar := f.bar(); len(*f.opened) != 0 || !strings.Contains(bar, "not a valid session id") {
+				t.Errorf("commands = %q, bar = %q, want no command and a refusal", *f.opened, bar)
+			}
+		}},
+		{"R on two selected PRs, one with a finished review", []string{"space", "j", "space"}, func(t *testing.T, f fixture) {
+			f.writeReview(fixturePRs()[0], doneReview(fixturePRs()[0]))
+			f.m = send(f.m, "R")
+			if f.m.popup == nil || f.m.popup.kind != confirmKind || len(*f.starts) != 0 {
+				t.Fatalf("popup = %+v, starts = %q, want a confirm popup and no start", f.m.popup, *f.starts)
+			}
+			text := ansi.Strip(strings.Join(f.m.popup.lines, "\n"))
+			for _, want := range []string{"Review these PRs with claude?", "cur#11", "review exists, skipped", "cur#12"} {
+				if !strings.Contains(text, want) {
+					t.Errorf("popup = %q, want %q", text, want)
+				}
+			}
+			if f.m = send(f.m, "wait", "y"); !slices.Equal(*f.starts, []string{"--ai-review ws/cur 12"}) {
+				t.Errorf("starts = %q, want the review of #12 only", *f.starts)
+			}
+		}},
+		{"R on two PRs: a review that ends while the popup is open does not start again", []string{"space", "j", "space", "R"}, func(t *testing.T, f fixture) {
+			if f.m.popup == nil || f.m.popup.kind != confirmKind {
+				t.Fatalf("popup = %+v, want a confirm popup", f.m.popup)
+			}
+			// Another bb-prs finishes a review of #12.
+			f.writeReview(fixturePRs()[1], doneReview(fixturePRs()[1]))
+			f.m = send(f.m, "wait", "y")
+			if want := []string{"--ai-review ws/cur 11"}; !slices.Equal(*f.starts, want) {
+				t.Errorf("starts = %q, want %q", *f.starts, want)
+			}
+			if bar, want := f.bar(), "#12: review exists, skipped."; !strings.Contains(bar, want) {
+				t.Errorf("bar = %q, want %q", bar, want)
+			}
+		}},
+		{"R over the cap", nil, func(t *testing.T, f fixture) {
+			for id := range review.MaxRunning {
+				must(review.WriteState(f.paths.ReviewFile("ws/busy", id+1), review.State{Status: review.StatusRunning, Started: time.Now()}))
+			}
+			f.m = send(f.m, "R")
+			const want = "3 reviews run already. Wait for one to end."
+			if bar := f.bar(); !strings.Contains(bar, want) || len(*f.starts) != 0 {
+				t.Errorf("bar = %q, starts = %q, want %q and no start", bar, *f.starts, want)
 			}
 		}},
 		{"the mouse works again after tuicr", nil, func(t *testing.T, f fixture) {

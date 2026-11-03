@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -42,7 +43,8 @@ type popup struct {
 }
 
 // methodItem is one way to run the action of a confirm popup. The name is the
-// line that the user chooses. The text says what the method does.
+// line that the user chooses. The text says what the method does. It can be
+// empty.
 type methodItem struct {
 	name, text string
 	method     actions.Method
@@ -53,16 +55,20 @@ type menuItem struct {
 	run       string // the name of the key that the item runs
 }
 
+// menuItems are the items of the ? menu. menuPopup writes the text of R,
+// because the text has the name of the reviewer.
 var menuItems = []menuItem{
 	{"⏎", "Review in tuicr; in [0] Changes, go one level in", "enter"},
+	{"⏎", "In [0] Review: open the review session", "enter"},
 	{"space", "Select the PR (or click its left edge)", " "},
 	{"s", "Sync: rebase or merge the destination in", "s"},
 	{"a", "Approve; with more than one PR selected, ask first", "a"},
 	{"m", "Approve and merge", "m"},
+	{"R", "", "R"},
 	{"o", "Open in the browser: the PR, or the commit in [0] Changes", "o"},
 	{"c", "Check for conflicts, and open a worktree tab to fix them", "c"},
 	{"[ ]", "Next list: Open, Closed, Log", "]"},
-	{"{ }", "Next view: Status, Changes, Activity", "}"},
+	{"{ }", "Next view: Status, Changes, Activity, Review", "}"},
 	{"S", "Change the order", "S"},
 	{"/", "Filter", "/"},
 	{"r", "Load the list again", "r"},
@@ -100,8 +106,15 @@ func (p *popup) width(screen int) int {
 	return screen
 }
 
-func menuPopup() *popup {
-	return &popup{kind: menuKind, title: "Keybindings", foot: "⏎ run · esc close", items: menuItems}
+// menuPopup returns the ? menu. reviewer is the name of the reviewer.
+func menuPopup(reviewer string) *popup {
+	items := slices.Clone(menuItems)
+	for i, it := range items {
+		if it.run == "R" {
+			items[i].text = fmt.Sprintf("Review with %s in the background (see [0] Review)", reviewer)
+		}
+	}
+	return &popup{kind: menuKind, title: "Keybindings", foot: "⏎ run · esc close", items: items}
 }
 
 func (m *Model) popupKey(k tea.KeyMsg) tea.Cmd { return m.popupRun(k.String()) }
@@ -307,6 +320,9 @@ func (p *popup) bodyLines(w int) (out []string, item []int) {
 				row = cursorLine(row, true)
 			}
 			add(row, i)
+			if it.text == "" {
+				continue
+			}
 			for _, l := range wrap("     ", it.text, dimStyle, w-1) {
 				add(" "+l, i)
 			}
