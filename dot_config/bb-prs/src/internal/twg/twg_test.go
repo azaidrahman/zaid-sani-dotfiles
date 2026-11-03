@@ -5,9 +5,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"bbprs/internal/cmdlog"
 )
 
 // fakeTwg writes a shell script that runs body, and returns its path.
@@ -19,6 +22,16 @@ func fakeTwg(t *testing.T, dir, body string) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+// checkTimed checks that the command log has one line: the command line cmd
+// and the time of the call, for example "twg a b  0.1 s".
+func checkTimed(t *testing.T, log *cmdlog.Log, cmd string) {
+	t.Helper()
+	timed := regexp.MustCompile(`^` + regexp.QuoteMeta(cmd) + `  \d+\.\d s$`)
+	if lines := log.Lines(10); len(lines) != 1 || !timed.MatchString(lines[0].Text) {
+		t.Errorf("command log = %+v, want one line %q with the time", lines, cmd+"  <seconds> s")
+	}
 }
 
 func TestJSON(t *testing.T) {
@@ -68,8 +81,8 @@ func TestJSON(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
-			var recorded []string
-			r := New(func(line string) { recorded = append(recorded, line) })
+			var log cmdlog.Log
+			r := New(log.Add)
 			r.Bin = fakeTwg(t, dir, tt.script(dir))
 			if tt.timeout > 0 {
 				r.Timeout = tt.timeout
@@ -78,9 +91,7 @@ func TestJSON(t *testing.T) {
 			start := time.Now()
 			got, err := r.JSON(context.Background(), "a", "b")
 
-			if len(recorded) != 1 || recorded[0] != "twg a b -o json" {
-				t.Errorf("Record got %q, want [twg a b -o json]", recorded)
-			}
+			checkTimed(t, &log, "twg a b -o json")
 			switch {
 			case tt.wantErr != "":
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
@@ -138,15 +149,13 @@ func TestText(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
-			var recorded []string
-			r := New(func(line string) { recorded = append(recorded, line) })
+			var log cmdlog.Log
+			r := New(log.Add)
 			r.Bin = fakeTwg(t, dir, tt.script(dir))
 
 			got, err := r.Text(context.Background(), "a", "b")
 
-			if len(recorded) != 1 || recorded[0] != "twg a b" {
-				t.Errorf("Record got %q, want [twg a b]", recorded)
-			}
+			checkTimed(t, &log, "twg a b")
 			if tt.wantMsg != "" {
 				var te *Error
 				if !errors.As(err, &te) || te.Message != tt.wantMsg {

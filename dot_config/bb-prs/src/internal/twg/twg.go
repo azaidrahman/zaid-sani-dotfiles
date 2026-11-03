@@ -16,6 +16,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"bbprs/internal/cmdlog"
 )
 
 // Error is a failure that twg reported.
@@ -30,9 +32,14 @@ func (e *Error) Error() string { return e.Message }
 type Runner struct {
 	Bin     string
 	Timeout time.Duration
-	// Record gets the command line before each call. A caller can also give
-	// it a line about a failed call. It can be nil.
+	// Record gets the command line before each call, and the end line of the
+	// call (cmdlog.Ended) after it. A caller can also give it a line about a
+	// failed call. It can be nil.
 	Record func(line string)
+	// Failed gets the error of each call that fails, for example to see a
+	// rate limit. Many calls can run at the same time, so Failed must be
+	// safe for that. It can be nil.
+	Failed func(err error)
 }
 
 // New makes a Runner for the twg program. Each call times out after 60 seconds.
@@ -40,9 +47,17 @@ func New(record func(string)) *Runner {
 	return &Runner{Bin: "twg", Timeout: 60 * time.Second, Record: record}
 }
 
+// failed gives the error in err to Failed, if there is an error.
+func (r *Runner) failed(err *error) {
+	if *err != nil && r.Failed != nil {
+		r.Failed(*err)
+	}
+}
+
 // JSON runs twg with args and "-o json". It returns the JSON from the bare
 // output, or from the file that the envelope names.
-func (r *Runner) JSON(ctx context.Context, args ...string) ([]byte, error) {
+func (r *Runner) JSON(ctx context.Context, args ...string) (out []byte, err error) {
+	defer r.failed(&err)
 	full := append(append([]string{}, args...), "-o", "json")
 	stdout, stderr, err := r.run(ctx, full)
 	if err != nil {
@@ -58,7 +73,8 @@ func (r *Runner) JSON(ctx context.Context, args ...string) ([]byte, error) {
 // Text runs twg with args, without "-o json", and returns the output, for
 // example the text of a diff. If the output is an envelope, Text returns the
 // file that the envelope names, as JSON does.
-func (r *Runner) Text(ctx context.Context, args ...string) ([]byte, error) {
+func (r *Runner) Text(ctx context.Context, args ...string) (out []byte, err error) {
+	defer r.failed(&err)
 	stdout, stderr, err := r.run(ctx, args)
 	if err != nil {
 		return nil, failure(args, err, stdout, stderr)
@@ -86,7 +102,8 @@ func outputFile(args []string, envelope []byte, missing string) ([]byte, error) 
 }
 
 // Do runs twg with args for a write. The output is not used.
-func (r *Runner) Do(ctx context.Context, args ...string) error {
+func (r *Runner) Do(ctx context.Context, args ...string) (err error) {
+	defer r.failed(&err)
 	stdout, stderr, err := r.run(ctx, args)
 	if err != nil {
 		return failure(args, err, stdout, stderr)
@@ -96,9 +113,13 @@ func (r *Runner) Do(ctx context.Context, args ...string) error {
 
 // run starts the program and waits for it. When the timeout passes, it kills
 // the program and its children, and returns an error with the text "timed out".
+// Record gets the command line when the call starts, and the end line of the
+// command log, with the time of the call, when the call ends.
 func (r *Runner) run(ctx context.Context, args []string) (stdout, stderr []byte, err error) {
 	if r.Record != nil {
-		r.Record("twg " + strings.Join(args, " "))
+		line, start := "twg "+strings.Join(args, " "), time.Now()
+		r.Record(line)
+		defer func() { r.Record(cmdlog.Ended(line, time.Since(start))) }()
 	}
 	ctx, cancel := context.WithTimeout(ctx, r.Timeout)
 	defer cancel()

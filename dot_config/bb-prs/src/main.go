@@ -5,7 +5,9 @@
 // it loads one list into the cache and stops. The screen starts this child
 // process, and the child lives on after the screen closes. With
 // "--ai-review <repo> <id> [--again]", it runs the background reviewer on one
-// PR. The screen starts that child in the same way.
+// PR. The screen starts that child in the same way. With "--warm", it keeps
+// the cache of the open list warm. The LaunchAgent com.zaid.bb-prs-warm runs
+// it on a timer.
 package main
 
 import (
@@ -94,6 +96,15 @@ Mouse:
   To select text, hold shift and drag (in most terminals). Without shift,
   bb-prs gets the drag.
 
+Background:
+  bb-prs --warm  refresh the open list of the workspace, and load the data of
+                 its PRs into the cache, so that each PR shows at once. The
+                 LaunchAgent com.zaid.bb-prs-warm runs it every 15 minutes. It
+                 makes no call when the Mac is idle for 15 minutes or more, or
+                 for 30 minutes after a rate limit. If the list is younger than
+                 10 minutes, it loads only the data of the PRs. It writes one
+                 line to stderr (~/Library/Logs/bb-prs-warm.log)
+
 Environment:
   BB_WORKSPACE      the workspace to use outside a Bitbucket repo
   BB_PRS_OPEN_HOST  where o opens the browser: local, aqua, or onyx
@@ -117,6 +128,8 @@ func run(args []string) int {
 		return runRefresh(args[1:])
 	case args[0] == "--ai-review":
 		return runAIReview(args[1:])
+	case len(args) == 1 && args[0] == "--warm":
+		return runWarm()
 	}
 	fmt.Fprint(os.Stderr, usage)
 	return 2
@@ -195,6 +208,42 @@ func runRefresh(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// idleTimeout is the time for the ioreg call that reads the idle time.
+const idleTimeout = 10 * time.Second
+
+// runWarm is the run of the LaunchAgent com.zaid.bb-prs-warm. It runs in the
+// home directory, not in a repo, and it writes one line to stderr. launchd
+// sends stderr to the log file of the agent.
+func runWarm() int {
+	// On a stop signal, cancel the context, so that the run releases the lock.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	report := func(line string, ok bool) int {
+		fmt.Fprintf(os.Stderr, "%s bb-prs --warm: %s\n", time.Now().Format("2006-01-02 15:04"), line)
+		if !ok {
+			return 1
+		}
+		return 0
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return report("failed: "+err.Error(), false)
+	}
+	env, err := setup(home, store.DefaultPaths(), os.Getenv)
+	if err != nil {
+		return report("failed: "+err.Error(), false)
+	}
+	env.Twg = twg.New(nil)
+	env.Now = time.Now
+	idle := func(ctx context.Context) (time.Duration, bool) {
+		ctx, cancel := context.WithTimeout(ctx, idleTimeout)
+		defer cancel()
+		secs, ok := browser.LocalIdle(ctx, browser.Default)
+		return time.Duration(secs) * time.Second, ok
+	}
+	return report(refresh.Warm(ctx, env, idle))
 }
 
 // runAIReview is the detached child of the key R. The usage text of the

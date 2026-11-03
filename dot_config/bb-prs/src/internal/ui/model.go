@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -58,6 +57,9 @@ type Deps struct {
 	// example a result. Then a key that the user typed before the popup
 	// showed cannot confirm or close it. Zero means 400ms.
 	PopupGuard time.Duration
+	// Settle is the time that the cursor stays on a PR before the loads of
+	// the PR start. Zero means settleAfter.
+	Settle time.Duration
 }
 
 const (
@@ -118,7 +120,8 @@ const showTimeout = 30 * time.Second
 // tickMsg comes every 150ms, unless NoTick is true.
 type tickMsg time.Time
 
-// viewMsg holds the JSON of one view of a PR. The key is memKey of the PR.
+// viewMsg holds the patch of one commit, for the source "show" (see
+// ensureCommit). The views of a PR come in a cachedMsg and a fetchMsg.
 type viewMsg struct {
 	key, view string
 	raw       []byte
@@ -180,6 +183,16 @@ type viewData struct {
 	// lines keeps the rendered lines of the view, so that a frame does not
 	// render them again. A new load of the view gets a new map.
 	lines map[renderKey]rendered
+	// at is the time of the data: the modification time of its file, or the
+	// time of its load with twg. stale is true for a copy that needs an
+	// update: live data that was too old, or the data of an older update of
+	// the PR. failed is true when the last update failed. Then the copy
+	// stays.
+	at            time.Time
+	stale, failed bool
+	// bundle is the raw details bundle, for the source "details". A bundle
+	// with failed parts takes those parts from it (see fetch).
+	bundle []byte
 }
 
 // renderKey tells which lines of a view are in viewData.lines. The Status
@@ -291,7 +304,23 @@ type Model struct {
 	actions []store.Action
 	behind  map[string]behind // by the key of the PR
 	views   map[viewKey]viewData
-	pending map[viewKey]bool
+	// pending holds the id of the load of each source that loads now, and
+	// loadID is the last id.
+	pending map[viewKey]int
+	loadID  int
+	// The state of the loads (see loads.go). settled is the key of the PR on
+	// which the cursor stopped. waitFor is the key of the PR of the timer
+	// that runs, and seq is the number of the last timer. visited is the
+	// memKey and the view of the last check of the PR under the cursor.
+	// reading holds the id of each read of the disk that runs. queue holds the
+	// loads with twg that wait for a slot, and fetching is the number of
+	// loads with twg that run.
+	settled, waitFor string
+	seq              int
+	visited          string
+	reading          map[viewKey]int
+	queue            []job
+	fetching         int
 	// skipped holds the PRs that the running sync leaves, for its result.
 	skipped []actions.Outcome
 	// reviewer is the config of the background reviewer at its last load. R
@@ -316,7 +345,7 @@ func New(d Deps) Model {
 		d: d, focus: focusPRs, list: "open", view: "status", order: bb.Oldest,
 		cursor: map[string]int{}, offset: map[string]int{}, sel: map[string]bool{}, fileOf: map[string]int{},
 		caches: map[string]store.ListCache{}, mtimes: map[string]time.Time{}, locked: map[string]bool{},
-		behind: map[string]behind{}, views: map[viewKey]viewData{}, pending: map[viewKey]bool{},
+		behind: map[string]behind{}, views: map[viewKey]viewData{}, pending: map[viewKey]int{}, reading: map[viewKey]int{},
 		reviews: map[string]reviewEntry{}, newStarts: map[string]newStart{}, opening: map[string]bool{},
 	}
 	m.cwd = d.Env.Dir
@@ -333,6 +362,8 @@ func New(d Deps) Model {
 	m.syncReviews(time.Now())
 	m.autoRefresh("open")
 	m.syncShown()
+	// The cursor starts on its PR: the first loads do not wait.
+	m.settled = m.currentKey()
 	m.start = tea.Batch(append(cmds, m.ensureView())...)
 	return m
 }
@@ -370,6 +401,12 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		return tea.Batch(cmd, m.ensureView())
 	case tickMsg:
 		return m.onTick(time.Time(msg))
+	case settleMsg:
+		return m.onSettle(msg)
+	case cachedMsg:
+		return m.onCached(msg)
+	case fetchMsg:
+		return m.onFetch(msg)
 	case viewMsg:
 		k := viewKey{msg.key, msg.view}
 		delete(m.pending, k)
@@ -658,6 +695,14 @@ func (m *Model) behindOf(pr bb.PR) (int, bool) {
 // memKey names a PR in the view memory. A changed PR gets a new key.
 func memKey(pr bb.PR) string { return pr.Key() + "@" + pr.UpdatedRaw }
 
+// now returns the current time, or the time of Env.Now in a test.
+func (m Model) now() time.Time {
+	if m.d.Env.Now != nil {
+		return m.d.Env.Now()
+	}
+	return time.Now()
+}
+
 // syncShown puts the main panel back at its start when another PR comes
 // under the cursor, also without a key. For example, a reload removed the PR.
 // Then the Changes view starts again at its commit list, and no load uses
@@ -709,54 +754,6 @@ func (m *Model) keepScope(key string) {
 	}
 }
 
-// ensureView starts the loads of the data of the view under the cursor: each
-// source that is not in memory and does not load now. On the files level of
-// a commit, it also loads the files of the commit.
-func (m *Model) ensureView() tea.Cmd {
-	m.syncShown()
-	if m.focus == focusStatus {
-		return nil
-	}
-	pr, ok := m.current()
-	if !ok {
-		return nil
-	}
-	var cmds []tea.Cmd
-	for _, src := range sources[m.view] {
-		cmds = append(cmds, m.ensureSource(pr, src))
-	}
-	return tea.Batch(append(cmds, m.ensureCommit())...)
-}
-
-// ensureSource starts the load of the source src of pr with twg, if the
-// source is not in memory and does not load now.
-func (m *Model) ensureSource(pr bb.PR, src string) tea.Cmd {
-	k := viewKey{memKey(pr), src}
-	if _, ok := m.views[k]; ok || m.pending[k] {
-		return nil
-	}
-	m.pending[k] = true
-	env := m.d.Env
-	if r := env.Twg; r != nil && m.d.Log != nil {
-		// The head line goes to the command log before the first twg call.
-		// A view from the cache makes no call and adds no head line. The
-		// calls of this load go under its own head.
-		log, head := m.d.Log, fmt.Sprintf("Load the %s of #%d", src, pr.ID)
-		var once sync.Once
-		var e *cmdlog.Entry
-		named := *r
-		named.Record = func(line string) {
-			once.Do(func() { e = log.Begin(head) })
-			e.Add(line)
-		}
-		env.Twg = &named
-	}
-	return func() tea.Msg {
-		raw, err := refresh.LoadView(context.Background(), env, pr, src)
-		return viewMsg{key: k.pr, view: src, raw: raw, err: err}
-	}
-}
-
 // ensureCommit starts the load of the files of the selected commit with the
 // local git, on the files level of the Changes view. It runs only for a PR
 // of the repo of the checkout, and only if the files are not in memory and
@@ -771,10 +768,10 @@ func (m *Model) ensureCommit() tea.Cmd {
 		return nil
 	}
 	k := commitKey(cm.Full)
-	if _, ok := m.views[k]; ok || m.pending[k] {
+	if _, ok := m.views[k]; ok || m.loading(k) {
 		return nil
 	}
-	m.pending[k] = true
+	m.begin(k)
 	g := gitops.Git{Dir: m.d.Env.Dir, Record: m.d.Log.Begin("Load commit " + clean(cm.Hash)).Add}
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), showTimeout)
@@ -790,19 +787,23 @@ func (m Model) hasCheckout(pr bb.PR) bool {
 	return m.d.Env.Dir != "" && pr.Repo == m.d.Env.Repo
 }
 
-// dropViews removes each view of pr from memory.
+// dropViews removes each view of pr from memory, and the loads of pr: the
+// loads that run end with no effect, and the jobs that wait go away.
 func (m *Model) dropViews(pr bb.PR) {
 	prefix := pr.Key() + "@"
+	of := func(k viewKey) bool { return strings.HasPrefix(k.pr, prefix) }
 	for k := range m.views {
-		if strings.HasPrefix(k.pr, prefix) {
+		if of(k) {
 			delete(m.views, k)
 		}
 	}
 	for k := range m.pending {
-		if strings.HasPrefix(k.pr, prefix) {
+		if of(k) {
 			delete(m.pending, k)
+			delete(m.reading, k)
 		}
 	}
+	m.queue = slices.DeleteFunc(slices.Clone(m.queue), func(j job) bool { return of(j.k) })
 }
 
 // parseView reads the raw data of the source src. The source "show" is the
@@ -818,6 +819,7 @@ func parseView(src string, raw []byte) viewData {
 		}
 		if v.err = json.Unmarshal(raw, &b); v.err == nil {
 			v.details, v.err = bb.ParseDetails(b.PR, b.Checks, b.Diffstat)
+			v.bundle = raw
 		}
 	case "diff", "show":
 		v.files = bb.ParseDiff(raw)

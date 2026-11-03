@@ -14,13 +14,27 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"bbprs/internal/cmdlog"
 )
 
 // Git runs git commands in the checkout Dir. Record, if set, gets each
-// command as "git <args>" before the command runs.
+// command as "git <args>" before the command runs, and the end line of the
+// command (cmdlog.Ended) after it.
 type Git struct {
 	Dir    string
 	Record func(string)
+}
+
+// record gives the command line of args to Record. It returns the function
+// that gives the end line, with the time of the command, to Record.
+func (g Git) record(args []string) (end func()) {
+	if g.Record == nil {
+		return func() {}
+	}
+	line, start := "git "+strings.Join(args, " "), time.Now()
+	g.Record(line)
+	return func() { g.Record(cmdlog.Ended(line, time.Since(start))) }
 }
 
 // SyncResult is the outcome of Sync and SyncMerge.
@@ -72,9 +86,7 @@ func OriginURL(dir string) string {
 
 // run records and runs one git command in dir. It returns the combined output.
 func (g Git) run(ctx context.Context, dir string, args ...string) (string, error) {
-	if g.Record != nil {
-		g.Record("git " + strings.Join(args, " "))
-	}
+	defer g.record(args)()
 	out, err := command(ctx, dir, args...).CombinedOutput()
 	return strings.TrimSpace(string(out)), err
 }
@@ -218,10 +230,9 @@ func (g Git) Show(ctx context.Context, hash string) ([]byte, error) {
 	}
 	args := []string{"show", "--no-color", "--no-ext-diff", "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/",
 		"--format=", "--patch", "--diff-merges=first-parent", hash}
-	if g.Record != nil {
-		g.Record("git " + strings.Join(args, " "))
-	}
+	end := g.record(args)
 	out, err := command(ctx, g.Dir, args...).Output()
+	end()
 	if err == nil {
 		return out, nil
 	}
@@ -261,10 +272,9 @@ func IsFullHash(s string) bool {
 func (g Git) Conflicts(ctx context.Context, src, dst string) ([]string, error) {
 	args := []string{"merge-tree", "-z", "--write-tree", "--name-only", "--no-messages",
 		"refs/remotes/origin/" + dst, "refs/remotes/origin/" + src}
-	if g.Record != nil {
-		g.Record("git " + strings.Join(args, " "))
-	}
+	end := g.record(args)
 	out, err := command(ctx, g.Dir, args...).Output()
+	end()
 	if err == nil {
 		return nil, nil
 	}

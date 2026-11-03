@@ -71,6 +71,10 @@ func TestLock(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "list.json")
 			tt.setup(path + ".lock")
+			// Another process holds the lock when TryLock cannot take it.
+			if held := Held(path, 2*time.Minute); held != !tt.wantOK {
+				t.Errorf("Held = %t, want %t", held, !tt.wantOK)
+			}
 			release, ok, err := TryLock(path, 2*time.Minute)
 			if err != nil {
 				t.Fatal(err)
