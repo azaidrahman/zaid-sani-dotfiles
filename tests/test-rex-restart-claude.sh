@@ -153,4 +153,46 @@ idle=$(r window new -s "$sid" idle -c "$WORK" --json | jq -r '.block_ids[0]')
 wait_for "prompt of the idle shell" ready "$idle"
 check "no claude: the action fails" "no" "$(restart "$idle" >/dev/null 2>&1 && echo yes || echo no)"
 
+# --- A pane on another host: the host restarts Claude --------------------------
+# The app sends the key with ctx.server set to the label of the host. The call
+# to the host goes through the app, so no test server can make it. Thus a
+# script loads the module with a stub for rex.server. Each case prints the
+# calls that the action made, in order: "host" is a call to the host, "local"
+# is a look at a process on this Mac, and "error" stops the action. The action
+# must never look on this Mac, because the pid belongs to the host.
+cat >"$TMP/remote.lua" <<'EOF'
+local actions, calls, answer = {}, {}, nil
+rex.action = function(def) actions[def.name] = def end
+rex.block.call = function() calls[#calls + 1] = "local" end
+rex.exec = function() calls[#calls + 1] = "local" end
+rex.server = function(label)
+  if label ~= "onyx" then error("unknown server " .. label) end
+  return { call = function(method, req)
+    local arg = req.args and req.args.block_id or "-"
+    calls[#calls + 1] = table.concat({ "host", method, req.action, req.session_id, req.block_id, arg }, ":")
+    if answer then return nil, answer end
+    return {}
+  end }
+end
+dofile(rex.args.module)
+
+local function case(server, args, err)
+  calls, answer = {}, err
+  local ok = pcall(actions.restart_claude.run, { session_id = "s1", block_id = "b1", server = server }, args)
+  if not ok then calls[#calls + 1] = "error" end
+  print(table.concat(calls, " "))
+end
+case("onyx", {})
+case("onyx", { block_id = "b2" })
+case("onyx", {}, 'no action "restart_claude" (status=404 code=not_found)')
+case("gone", {})
+EOF
+out=$(r do "$TMP/remote.lua" module="$MODULE" 2>&1)
+line() { sed -n "$1p" <<<"$out"; }
+HOST="host:client.action:restart_claude:s1"
+check "remote: the host restarts the focused pane" "$HOST:b1:-" "$(line 1)"
+check "remote: the host gets the block_id argument" "$HOST:b2:b2" "$(line 2)"
+check "remote: a host without the action stops the action" "$HOST:b1:- error" "$(line 3)"
+check "remote: an unknown host stops the action" "error" "$(line 4)"
+
 exit "$fail"
