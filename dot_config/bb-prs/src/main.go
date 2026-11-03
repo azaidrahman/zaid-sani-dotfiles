@@ -59,7 +59,9 @@ Show the open Bitbucket PRs for you.
   s        sync the selected PRs with their destination. A popup asks first,
            and you choose the method: rebase the source branch onto the
            destination (force-push with lease), or merge the destination
-           into the source branch (one merge commit, normal push)
+           into the source branch (one merge commit, normal push). Any open
+           PR works. For a repo that is not the repo of the pane, bb-prs
+           uses its own clone in ~/.cache/bb-prs/repos
   a        approve the selected PRs. If more than one PR is selected, a popup
            asks first
   m        approve and merge the selected PRs (asks first)
@@ -277,8 +279,31 @@ func runUI() int {
 		Twg: env.Twg, Paths: paths, Repo: env.Repo,
 		ListFile: paths.ListFile(env.Prompt, "open"), Log: log, Now: time.Now,
 	}
+	var origin string
 	if env.Dir != "" {
 		acts.Git = &gitops.Git{Dir: env.Dir, Record: log.Add}
+		origin = gitops.OriginURL(env.Dir)
+	}
+	// A sync of a PR of another repo uses the own clone of bb-prs. CloneURL
+	// checks the name before the name goes into the path.
+	acts.GitFor = func(ctx context.Context, repo string, record func(string)) (*gitops.Git, error) {
+		url, err := gitops.CloneURL(repo, origin)
+		if err != nil {
+			return nil, err
+		}
+		return gitops.EnsureClone(ctx, paths.RepoDir(repo), url, record)
+	}
+	// Sync skips a PR from a fork. If the list does not tell the source repo,
+	// a details preview or one twg call tells it. The twg command goes under
+	// the head of the sync in the command log.
+	acts.SourceRepo = func(ctx context.Context, pr bb.PR, record func(string)) (string, error) {
+		e := env
+		if record != nil {
+			r := *env.Twg
+			r.Record = record
+			e.Twg = &r
+		}
+		return refresh.SourceRepo(ctx, e, pr)
 	}
 
 	model := ui.New(ui.Deps{

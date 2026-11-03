@@ -134,7 +134,6 @@ type actionMsg struct {
 
 type syncPlanMsg struct {
 	plan actions.SyncPlan
-	err  error
 }
 
 // openMsg is the result of "o". The text what names the page, for example
