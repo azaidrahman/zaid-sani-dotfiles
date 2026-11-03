@@ -6,10 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
+	"bbprs/internal/cmdlog"
 	"bbprs/internal/gitops/gitopstest"
 )
 
@@ -96,11 +98,12 @@ func TestEnsureClone(t *testing.T) {
 			if tc.before != nil {
 				tc.before(t, dir, url)
 			}
-			var recorded []string
-			g, err := EnsureClone(context.Background(), dir, url, func(s string) { recorded = append(recorded, s) })
+			var log cmdlog.Log
+			g, err := EnsureClone(context.Background(), dir, url, log.Add)
 			clone := "git clone --quiet --filter=blob:none --no-checkout -- " + url + " "
-			if cloned := len(recorded) == 1 && strings.HasPrefix(recorded[0], clone); cloned != tc.wantClone || len(recorded) > 1 {
-				t.Errorf("recorded = %q, want a clone: %t", recorded, tc.wantClone)
+			lines := log.Lines(10)
+			if cloned := len(lines) == 1 && strings.HasPrefix(lines[0].Text, clone); cloned != tc.wantClone || len(lines) > 1 {
+				t.Errorf("command log = %+v, want a clone: %t", lines, tc.wantClone)
 			}
 			entries, _ := os.ReadDir(filepath.Dir(dir))
 			if tc.wantErr != "" {
@@ -300,8 +303,8 @@ func TestConflicts(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.src, func(t *testing.T) {
 			_, work := gitopstest.Repos(t)
-			var recorded []string
-			g := Git{Dir: work, Record: func(s string) { recorded = append(recorded, s) }}
+			var log cmdlog.Log
+			g := Git{Dir: work, Record: log.Add}
 			got, err := g.Conflicts(context.Background(), tc.src, "main")
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("Conflicts error = %v, want an error: %t", err, tc.wantErr)
@@ -313,9 +316,12 @@ func TestConflicts(t *testing.T) {
 			if status := gitopstest.Git(t, work, "status", "--porcelain"); status != "" {
 				t.Errorf("git status = %q, want clean", status)
 			}
-			want := "git merge-tree -z --write-tree --name-only --no-messages refs/remotes/origin/main refs/remotes/origin/" + tc.src
-			if len(recorded) != 1 || recorded[0] != want {
-				t.Errorf("recorded = %q, want %q", recorded, want)
+			// The command log shows the time of the command at the end of its
+			// line.
+			want := regexp.MustCompile(`^` + regexp.QuoteMeta("git merge-tree -z --write-tree --name-only --no-messages "+
+				"refs/remotes/origin/main refs/remotes/origin/"+tc.src) + `  \d+\.\d s$`)
+			if lines := log.Lines(10); len(lines) != 1 || !want.MatchString(lines[0].Text) {
+				t.Errorf("command log = %+v, want one line that matches %s", lines, want)
 			}
 		})
 	}

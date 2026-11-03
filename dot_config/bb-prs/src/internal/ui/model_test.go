@@ -195,6 +195,9 @@ func newFixture(dir string, prs []bb.PR, errs []string) fixture {
 			},
 		},
 		NoTick: true,
+		// run waits for the timer of a move of the cursor. A short timer
+		// keeps the tests fast.
+		Settle: time.Millisecond,
 		// A popup ignores keys until the test sends "wait".
 		PopupGuard: time.Hour,
 	})
@@ -338,6 +341,106 @@ func run(m Model, cmd tea.Cmd) Model {
 	}
 	return feed(m, msg)
 }
+
+// msgs runs cmd and returns its messages. It does not give them to the model.
+// It looks into a batch or a sequence.
+func msgs(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	msg := cmd()
+	if v := reflect.ValueOf(msg); v.Kind() == reflect.Slice && v.Type().Elem() == cmdType {
+		var out []tea.Msg
+		for i := range v.Len() {
+			out = append(out, msgs(v.Index(i).Interface().(tea.Cmd))...)
+		}
+		return out
+	}
+	if msg == nil {
+		return nil
+	}
+	return []tea.Msg{msg}
+}
+
+// update gives each message to the model, and returns the commands of the
+// model without running them.
+func update(m Model, ms []tea.Msg) (Model, []tea.Cmd) {
+	var cmds []tea.Cmd
+	for _, msg := range ms {
+		next, cmd := m.Update(msg)
+		m, cmds = next.(Model), append(cmds, cmd)
+	}
+	return m, cmds
+}
+
+// holdFetches runs cmds. It gives each message to the model, and runs the
+// commands that come after it in the same way. It keeps the end of each load
+// with twg (fetchMsg), and returns them. Thus those loads still run for the
+// model.
+func holdFetches(m Model, cmds []tea.Cmd) (Model, []fetchMsg) {
+	var held []fetchMsg
+	for len(cmds) > 0 {
+		var next []tea.Cmd
+		for _, msg := range msgs(tea.Batch(cmds...)) {
+			if f, ok := msg.(fetchMsg); ok {
+				held = append(held, f)
+				continue
+			}
+			var more []tea.Cmd
+			m, more = update(m, []tea.Msg{msg})
+			next = append(next, more...)
+		}
+		cmds = next
+	}
+	return m, held
+}
+
+// heldFetch returns the held end of the load of the source src of the PR
+// with the key pr.
+func heldFetch(t *testing.T, held []fetchMsg, pr, src string) fetchMsg {
+	t.Helper()
+	for _, f := range held {
+		if strings.HasPrefix(f.k.pr, pr+"@") && f.k.view == src {
+			return f
+		}
+	}
+	t.Fatalf("no held load of the %s of %s in %+v", src, pr, held)
+	return fetchMsg{}
+}
+
+// startedLoads returns the heads "Load the ..." of the command log, except
+// the heads of the details.
+func startedLoads(f fixture) (out []string) {
+	for _, l := range f.m.d.Log.Lines(200) {
+		if l.Head && strings.HasPrefix(l.Text, "Load the ") && !strings.Contains(l.Text, "details") {
+			out = append(out, l.Text)
+		}
+	}
+	return out
+}
+
+// runAll runs each command, as run does.
+func runAll(m Model, cmds []tea.Cmd) Model {
+	for _, cmd := range cmds {
+		m = run(m, cmd)
+	}
+	return m
+}
+
+// manyPRs gives n PRs of ws/cur with the ids 21, 22, and so on. The open
+// list shows them in this order.
+func manyPRs(n int) []bb.PR {
+	var prs []bb.PR
+	for i := range n {
+		p := fixturePRs()[0]
+		p.ID, p.Sent = 21+i, p.Sent.Add(time.Duration(i)*time.Minute)
+		prs = append(prs, p)
+	}
+	return prs
+}
+
+// oldDetails is a details preview with the title "An old title".
+const oldDetails = `{"pr":{"id":11,"title":"An old title","state":"OPEN"},"checks":[],"diffstat":[]}`
 
 // sends runs cmd and reports whether it gives a message of the type of want,
 // for example tea.QuitMsg. It also looks into a batch or a sequence.
@@ -812,6 +915,240 @@ func TestKeyFlows(t *testing.T) {
 		{"changes: k and ctrl+u on the first PR keep the files level", []string{"}", "0", "enter", "j", "2", "k", "ctrl+u"}, func(t *testing.T, f fixture) {
 			if f.m.level != levelFiles || f.m.file != 1 {
 				t.Errorf("level = %d, file = %d, want the files level (%d) and file 1: the cursor did not move", f.m.level, f.m.file, levelFiles)
+			}
+		}},
+		{"fast moves: the loads start after the timer, for the last PR and its neighbours", nil, func(t *testing.T, f fixture) {
+			f = newFixture(t.TempDir(), manyPRs(7), nil)
+			f.m = run(f.m, f.m.Init()) // #21 and its neighbour #22
+			startup := f.twg()
+			var timers []tea.Cmd
+			for range 4 {
+				var cmds []tea.Cmd
+				f.m, cmds = update(f.m, []tea.Msg{keyMsg("j")})
+				timers = append(timers, cmds...)
+			}
+			// The timers of the first three moves do nothing.
+			if f.m = runAll(f.m, timers[:3]); f.twg() != startup {
+				t.Errorf("twg calls after the old timers = %q, want none", strings.TrimPrefix(f.twg(), startup))
+			}
+			f.m = run(f.m, timers[3])
+			calls := strings.TrimPrefix(f.twg(), startup)
+			for id, want := range map[int]bool{23: false, 24: true, 25: true, 26: true, 27: false} {
+				if got := strings.Contains(calls, fmt.Sprintf("pull-requests get %d ", id)); got != want {
+					t.Errorf("#%d loaded: %t, want %t; twg calls =\n%s", id, got, want, calls)
+				}
+			}
+		}},
+		{"a stale copy shows at once with the updating mark, and the new data replaces it", nil, func(t *testing.T, f fixture) {
+			old := fixturePRs()[0]
+			old.UpdatedRaw = "2026-10-30T10:00:00" // an older update of #11
+			f.writePreview(old, "details", oldDetails)
+			var updates []tea.Cmd
+			f.m, updates = update(f.m, msgs(f.m.Init())) // only the reads of the disk
+			title := func() string { return ansi.Strip(f.panel()[0]) }
+			if got := f.mainText(); !strings.Contains(got, "An old title") || !strings.Contains(title(), "· updating") {
+				t.Errorf("title = %q, panel =\n%s\nwant the old copy and the mark updating", title(), got)
+			}
+			f.m = runAll(f.m, updates)
+			if got := f.mainText(); strings.Contains(got, "An old title") || strings.Contains(title(), "updating") {
+				t.Errorf("title = %q, panel =\n%s\nwant the new data and no mark", title(), got)
+			}
+		}},
+		{"a failed update shows not updated, and the copy stays", nil, func(t *testing.T, f fixture) {
+			must(os.WriteFile(f.m.d.Env.Twg.Bin, []byte("#!/bin/sh\necho 'Bitbucket API error: 429'\nexit 1\n"), 0o755))
+			old := fixturePRs()[0]
+			old.UpdatedRaw = "2026-10-30T10:00:00"
+			f.writePreview(old, "details", oldDetails)
+			f.m = run(f.m, f.m.Init())
+			if got, title := f.mainText(), ansi.Strip(f.panel()[0]); !strings.Contains(got, "An old title") || !strings.Contains(title, "· not updated") {
+				t.Errorf("title = %q, panel =\n%s\nwant the old copy and the mark not updated", title, got)
+			}
+			if !f.logged("✗ details: Bitbucket API error: 429") {
+				t.Errorf("command log = %+v, want the failure", f.m.d.Log.Lines(30))
+			}
+		}},
+		{"a live view in memory that is older than a minute updates when the cursor stops on its PR", nil, func(t *testing.T, f fixture) {
+			f.m = run(f.m, f.m.Init()) // the details of #11
+			f.m.d.Env.Now = func() time.Time { return time.Now().Add(2 * time.Minute) }
+			f.m = send(f.m, "j", "k")
+			// The first load and the update each get the merge checks.
+			if log := f.twg(); strings.Count(log, "mergeability 11 ") != 2 {
+				t.Errorf("twg log =\n%s\nwant two mergeability calls for #11", log)
+			}
+		}},
+		{"at most 4 loads at the same time: the neighbours leave 2 slots, and the PR under the cursor goes first", nil, func(t *testing.T, f fixture) {
+			// Five PRs. The cursor stops on #23, whose details are on the
+			// disk. Its neighbours #22 and #24 load their details, and these
+			// loads end later.
+			f = newFixture(t.TempDir(), manyPRs(5), nil)
+			f.writeDetails(manyPRs(5)[2], "")
+			var cmds []tea.Cmd
+			var details, changes []fetchMsg
+			f.m, cmds = update(f.m, []tea.Msg{keyMsg("j"), keyMsg("j")})
+			f.m, details = holdFetches(f.m, cmds)
+			if len(details) != 2 {
+				t.Fatalf("loads = %+v, want the details of #22 and #24", details)
+			}
+			// The Changes view: the 2 loads of #23 start, and 4 loads run.
+			// The 4 loads of the neighbours wait.
+			f.m, cmds = update(f.m, []tea.Msg{keyMsg("}")})
+			f.m, changes = holdFetches(f.m, cmds)
+			want := []string{"Load the commits of #23", "Load the diff of #23"}
+			if !slices.Equal(startedLoads(f), want) {
+				t.Fatalf("loads that started = %q, want %q", startedLoads(f), want)
+			}
+			// The Activity view: 4 loads run, so the load of #23 waits.
+			f.m, cmds = update(f.m, []tea.Msg{keyMsg("}")})
+			if f.m, _ = holdFetches(f.m, cmds); !slices.Equal(startedLoads(f), want) {
+				t.Fatalf("loads that started = %q, want no fifth load", startedLoads(f))
+			}
+			// A load of a neighbour ends: the load of #23 starts before the
+			// loads of the neighbours that wait.
+			f.m, cmds = update(f.m, []tea.Msg{details[0]})
+			f.m, _ = holdFetches(f.m, cmds)
+			if want = append(want, "Load the activity of #23"); !slices.Equal(startedLoads(f), want) {
+				t.Fatalf("loads that started = %q, want %q", startedLoads(f), want)
+			}
+			// A load of #23 ends, and 3 loads run. A neighbour needs fewer
+			// than 2, so no load of a neighbour starts.
+			f.m, cmds = update(f.m, []tea.Msg{changes[0]})
+			if f.m, _ = holdFetches(f.m, cmds); !slices.Equal(startedLoads(f), want) {
+				t.Errorf("loads that started = %q, want no load of a neighbour", startedLoads(f))
+			}
+		}},
+		{"a move reads the disk at once, so a warm copy shows before the timer", nil, func(t *testing.T, f fixture) {
+			f.writeDetails(fixturePRs()[1], "A warm description.")
+			var cmds []tea.Cmd
+			f.m, cmds = update(f.m, []tea.Msg{keyMsg("j")})
+			// Give the reads of the disk to the model, but not the timer.
+			for _, msg := range msgs(tea.Batch(cmds...)) {
+				if c, ok := msg.(cachedMsg); ok {
+					f.m = feed(f.m, c)
+				}
+			}
+			if got := f.mainText(); !strings.Contains(got, "A warm description.") || f.twg() != "" {
+				t.Errorf("panel =\n%s\ntwg log = %q, want the copy of #12 and no twg call", got, f.twg())
+			}
+		}},
+		{"an action that ends while an update runs: the old data of the update does not come back", nil, func(t *testing.T, f fixture) {
+			// The fake twg gets #12 from the file get.json.
+			get := filepath.Join(filepath.Dir(f.m.d.Env.Twg.Bin), "get.json")
+			must(os.WriteFile(f.m.d.Env.Twg.Bin, []byte("#!/bin/sh\nif [ \"$3\" = get ]; then cat '"+get+"'; else echo '{}'; fi\n"), 0o755))
+			title := func(s string) { must(os.WriteFile(get, []byte(`{"id":12,"title":"`+s+`","state":"OPEN"}`), 0o644)) }
+			old := fixturePRs()[1]
+			old.UpdatedRaw = "2026-10-30T10:00:00" // an older update of #12
+			f.writePreview(old, "details", oldDetails)
+			// The cursor stops on #12. Its stale copy shows, and its update
+			// gets the data before the approval. That update ends late.
+			title("Before the approval")
+			var cmds []tea.Cmd
+			var held []fetchMsg
+			f.m, cmds = update(f.m, []tea.Msg{keyMsg("j")})
+			f.m, held = holdFetches(f.m, cmds)
+			late := heldFetch(t, held, "ws/cur#12", "details")
+			// a approves #12. The approval ends first: it drops the views,
+			// and a new load of the details starts.
+			title("After the approval")
+			f.m, cmds = update(f.m, []tea.Msg{keyMsg("a")})
+			var ended []tea.Msg
+			for _, msg := range msgs(tea.Batch(cmds...)) {
+				if _, ok := msg.(actionMsg); ok {
+					ended = append(ended, msg)
+				}
+			}
+			f.m, cmds = update(f.m, ended)
+			// The late update ends, and then the new load.
+			f.m = runAll(feed(f.m, late), cmds)
+			if got, mark := f.mainText(), ansi.Strip(f.panel()[0]); !strings.Contains(got, "After the approval") || strings.Contains(mark, "·") {
+				t.Errorf("title = %q, panel =\n%s\nwant the data after the approval, and no mark", mark, got)
+			}
+		}},
+		{"an action that ends while a read of the disk runs: the old copy does not come back", nil, func(t *testing.T, f fixture) {
+			get := filepath.Join(filepath.Dir(f.m.d.Env.Twg.Bin), "get.json")
+			must(os.WriteFile(f.m.d.Env.Twg.Bin, []byte("#!/bin/sh\nif [ \"$3\" = get ]; then cat '"+get+"'; else echo '{}'; fi\n"), 0o755))
+			must(os.WriteFile(get, []byte(`{"id":12,"title":"After the approval","state":"OPEN"}`), 0o644))
+			f.writePreview(fixturePRs()[1], "details", `{"pr":{"id":12,"title":"Before the approval","state":"OPEN"},"checks":[],"diffstat":[]}`)
+			// j reads the copy of #12 at once. That read ends late.
+			var cmds []tea.Cmd
+			f.m, cmds = update(f.m, []tea.Msg{keyMsg("j")})
+			var late, others []tea.Msg
+			for _, msg := range msgs(tea.Batch(cmds...)) {
+				if c, ok := msg.(cachedMsg); ok && c.k.view == "details" && c.pr.ID == 12 {
+					late = append(late, msg)
+				} else {
+					others = append(others, msg)
+				}
+			}
+			f.m, _ = update(f.m, others)
+			// a approves #12. The approval ends first, and a new load starts.
+			f.m, cmds = update(f.m, []tea.Msg{keyMsg("a")})
+			var ended []tea.Msg
+			for _, msg := range msgs(tea.Batch(cmds...)) {
+				if _, ok := msg.(actionMsg); ok {
+					ended = append(ended, msg)
+				}
+			}
+			f.m, cmds = update(f.m, ended)
+			// The late read ends, and then the new load.
+			f.m, _ = update(f.m, late)
+			f.m = runAll(f.m, cmds)
+			if got := f.mainText(); !strings.Contains(got, "After the approval") {
+				t.Errorf("panel =\n%s\nwant the data after the approval", got)
+			}
+		}},
+		{"a partial bundle keeps the part of the copy that failed, and shows not updated", nil, func(t *testing.T, f fixture) {
+			must(os.WriteFile(f.m.d.Env.Twg.Bin, []byte("#!/bin/sh\ncase \"$3\" in\n"+
+				"get) echo '{\"id\":11,\"title\":\"A new title\",\"state\":\"OPEN\"}' ;;\n"+
+				"mergeability) echo 'server error'; exit 1 ;;\n*) echo '[]' ;;\nesac\n"), 0o755))
+			old := fixturePRs()[0]
+			old.UpdatedRaw = "2026-10-30T10:00:00"
+			f.writePreview(old, "details", `{"pr":{"id":11,"title":"An old title","state":"OPEN"},`+
+				`"checks":[{"type":"git_mergeability_check","status":"PASSED","reason":"No conflicts"}],"diffstat":[]}`)
+			f.m = run(f.m, f.m.Init())
+			if got, mark := f.mainText(), ansi.Strip(f.panel()[0]); !strings.Contains(got, "A new title") ||
+				!strings.Contains(got, "No conflicts") || !strings.Contains(mark, "· not updated") {
+				t.Errorf("title = %q, panel =\n%s\nwant the new title, the old checks, and the mark not updated", mark, got)
+			}
+		}},
+		// A closed PR does not expire. Without a retry, a partial bundle of a
+		// closed PR stays not updated for the whole session.
+		{"a partial bundle of a closed PR updates again on a visit after a minute", nil, func(t *testing.T, f fixture) {
+			prs := fixturePRs()
+			prs[0].Role = bb.Merged
+			f = newFixture(t.TempDir(), prs, nil)
+			must(os.WriteFile(f.m.d.Env.Twg.Bin, []byte("#!/bin/sh\necho \"$*\" >> '"+f.twgLog+"'\ncase \"$3\" in\n"+
+				"diffstat) echo 'server error'; exit 1 ;;\n*) echo '{}' ;;\nesac\n"), 0o755))
+			f.m = run(f.m, f.m.Init())
+			if mark := ansi.Strip(f.panel()[0]); !strings.Contains(mark, "· not updated") {
+				t.Fatalf("title = %q, want the mark not updated", mark)
+			}
+			f.m.d.Env.Now = func() time.Time { return time.Now().Add(2 * time.Minute) }
+			f.m = send(f.m, "j", "k")
+			if log := f.twg(); strings.Count(log, "diffstat 11 ") != 2 {
+				t.Errorf("twg log =\n%s\nwant a second load of the details of #11", log)
+			}
+		}},
+		{"a new commit list of another PR does not move the row of the shown PR", nil, func(t *testing.T, f fixture) {
+			// An old copy of the commits of #12 has a commit that the new
+			// list does not have.
+			old := fixturePRs()[1]
+			old.UpdatedRaw = "2026-10-30T10:00:00"
+			f.writePreview(old, "commits", `[{"hash": "c0ffee0000000000000000000000000000000000", "date": "2026-10-30T09:00:00+00:00",
+ "message": "An old commit", "author": {"raw": "Ana Tester <ana@example.com>"}}]`)
+			f.m = send(f.m, "}")
+			// The cursor stops on #12: the update of its commits starts, and
+			// it ends later. Then the cursor goes back to the first commit of
+			// #11.
+			var cmds []tea.Cmd
+			var held []fetchMsg
+			f.m, cmds = update(f.m, []tea.Msg{keyMsg("j")})
+			f.m, held = holdFetches(f.m, cmds)
+			if f.m = send(f.m, "k", "0", "j"); f.m.row != 1 {
+				t.Fatalf("row = %d, want 1", f.m.row)
+			}
+			f.m = feed(f.m, heldFetch(t, held, "ws/cur#12", "commits"))
+			if f.m.currentKey() != "ws/cur#11" || f.m.row != 1 || f.m.level != levelCommits {
+				t.Errorf("cursor on %s, row %d, level %d; want #11, row 1, the commit list", f.m.currentKey(), f.m.row, f.m.level)
 			}
 		}},
 		{"R with a missing reviewer", nil, func(t *testing.T, f fixture) {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -84,7 +85,14 @@ func TestMerge(t *testing.T) {
 		{Text: "twg bitbucket pull-requests approve 12 --repo ws/cur"},
 		{Text: "twg bitbucket pull-requests merge --pull-request 12 --repo ws/cur" + flags},
 	}
-	if lines := d.Log.Lines(10); !reflect.DeepEqual(lines, wantLog) {
+	// The times of the calls change from run to run. Compare the lines
+	// without them.
+	took := regexp.MustCompile(`  \d+\.\d s$`)
+	lines := d.Log.Lines(10)
+	for i := range lines {
+		lines[i].Text = took.ReplaceAllString(lines[i].Text, "")
+	}
+	if !reflect.DeepEqual(lines, wantLog) {
 		t.Errorf("log = %+v, want %+v", lines, wantLog)
 	}
 

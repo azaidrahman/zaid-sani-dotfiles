@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
+	"regexp"
 	"sync"
 	"syscall"
 	"time"
@@ -19,11 +19,14 @@ import (
 )
 
 const (
-	autoMaxAge   = 3 * time.Minute
-	staleLock    = 2 * time.Minute
-	lockWait     = 120 * time.Second
-	lockPoll     = 100 * time.Millisecond
-	previewKeep  = 24 * time.Hour
+	autoMaxAge = 3 * time.Minute
+	staleLock  = 2 * time.Minute
+	lockWait   = 120 * time.Second
+	lockPoll   = 100 * time.Millisecond
+	// previewKeep is the age at which a preview file goes away. Pinned files
+	// of a PR that does not change stay for a week, so that the prefetch does
+	// not load them again each day.
+	previewKeep  = 7 * 24 * time.Hour
 	rateLimitTip = " (Bitbucket rate limit: wait some minutes, then r)"
 )
 
@@ -115,6 +118,27 @@ func Run(ctx context.Context, env Env, list string, auto bool) error {
 		}
 	}()
 
+	prs, errs, err := save(ctx, env, list, path)
+	if err != nil {
+		return err
+	}
+	release()
+	released = true
+
+	env.Paths.PruneOldPreviews(previewKeep)
+	// Only the open list gets previews in advance. The closed list is long,
+	// and you look at few of its PRs.
+	if list == "open" && len(errs) == 0 {
+		Prefetch(ctx, env, prs, 4)
+	}
+	return nil
+}
+
+// save loads the list and saves it in the file path. The caller holds the
+// lock of the file. It returns the PRs that it loaded, and one error line for
+// each source that failed. If a source fails and the file has PRs, the file
+// keeps the old PRs.
+func save(ctx context.Context, env Env, list, path string) ([]bb.PR, []string, error) {
 	prs, errs := load(ctx, env, list)
 
 	old, _ := store.LoadList(path)
@@ -135,18 +159,9 @@ func Run(ctx context.Context, env Env, list string, auto bool) error {
 		}
 	}
 	if err := store.SaveList(path, next); err != nil {
-		return err
+		return nil, nil, err
 	}
-	release()
-	released = true
-
-	env.Paths.PruneOldPreviews(previewKeep)
-	// Only the open list gets previews in advance. The closed list is long,
-	// and you look at few of its PRs.
-	if list == "open" && len(errs) == 0 {
-		Prefetch(ctx, env, prs, 4)
-	}
-	return nil
+	return prs, errs, nil
 }
 
 // waitForLock waits until the lock of the list goes away. It stops after 120
@@ -217,12 +232,21 @@ func load(ctx context.Context, env Env, list string) ([]bb.PR, []string) {
 
 // errorLine makes the text of an error of one source.
 func errorLine(what string, err error) string {
-	msg := err.Error()
-	line := "could not load the " + what + ": " + msg
-	if strings.Contains(msg, "429") {
+	line := "could not load the " + what + ": " + err.Error()
+	if rateLimited(err) {
 		line += rateLimitTip
 	}
 	return line
+}
+
+// rateLimitRe finds the HTTP status 429 as a whole word, so that a PR number
+// such as #1429 or a hash does not match.
+var rateLimitRe = regexp.MustCompile(`\b429\b`)
+
+// rateLimited is true when err is the rate limit of Bitbucket: the HTTP
+// status 429 in the message of twg.
+func rateLimited(err error) bool {
+	return err != nil && rateLimitRe.MatchString(err.Error())
 }
 
 // Spawn starts "self args..." in dir as a detached process. The process has

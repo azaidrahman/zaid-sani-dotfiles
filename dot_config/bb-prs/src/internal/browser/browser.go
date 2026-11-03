@@ -129,8 +129,13 @@ func (o Opener) openOn(ctx context.Context, peer, url string) (string, string, e
 }
 
 // localIdle returns the idle time of this Mac, in seconds.
-func (o Opener) localIdle(ctx context.Context) (int64, bool) {
-	out, err := o.run(ctx, "ioreg", "-c", "IOHIDSystem", "-d", "4")
+func (o Opener) localIdle(ctx context.Context) (int64, bool) { return LocalIdle(ctx, o.run) }
+
+// LocalIdle returns the time since the last key or mouse event on this Mac,
+// in seconds. It reads HIDIdleTime from ioreg, with run. It is false if ioreg
+// fails or does not tell the time.
+func LocalIdle(ctx context.Context, run Exec) (int64, bool) {
+	out, err := run(ctx, "ioreg", "-c", "IOHIDSystem", "-d", "4")
 	if err != nil {
 		return 0, false
 	}

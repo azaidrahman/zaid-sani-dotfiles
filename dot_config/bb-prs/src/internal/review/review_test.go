@@ -324,6 +324,7 @@ func TestChild(t *testing.T) {
 		name       string
 		inCache    bool
 		noPreview  bool // no preview files, and no twg: the load panics
+		oldPreview bool // the preview files are an hour old: their live data needs an update
 		repo       string
 		holdLock   bool
 		cancel     bool
@@ -348,6 +349,9 @@ func TestChild(t *testing.T) {
 		{name: "second child exits", inCache: true, repo: "ws/app", holdLock: true, reviewer: good, wantErr: ErrLocked},
 		{name: "cancelled", inCache: true, repo: "ws/app", cancel: true, reviewer: good, wantStatus: StatusFailed, wantErrTxt: "cancelled"},
 		{name: "panic", inCache: true, noPreview: true, repo: "ws/app", reviewer: good, wantStatus: StatusFailed, wantErrTxt: "internal error"},
+		// The update of the merge checks fails, but the review does not use them.
+		{name: "an old copy of the same update, and twg fails: the review uses the copy", inCache: true, oldPreview: true,
+			repo: "ws/app", reviewer: good, wantStatus: StatusDone, wantDir: "pane"},
 		{name: "a second child takes the lock: the first does not write or release", inCache: true, repo: "ws/app", reviewer: steal,
 			wantErr: ErrLocked, wantKeep: secondState, wantStolen: true},
 		{name: "done, no --again: the child writes nothing", inCache: true, repo: "ws/app", before: doneBefore, reviewer: good,
@@ -380,6 +384,14 @@ func TestChild(t *testing.T) {
 					writeFile(t, paths.PreviewFile(c.repo, 7, updated, "details"),
 						`{"pr":{"id":7,"title":"Fix","description":"Because."},"checks":[],"diffstat":[]}`, 0o644)
 					writeFile(t, paths.PreviewFile(c.repo, 7, updated, "diff"), "diff --git a/x b/x\n+y\n", 0o644)
+				}
+				if c.oldPreview {
+					old := time.Now().Add(-time.Hour)
+					for _, view := range []string{"details", "diff"} {
+						if err := os.Chtimes(paths.PreviewFile(c.repo, 7, updated, view), old, old); err != nil {
+							t.Fatal(err)
+						}
+					}
 				}
 			}
 			state := paths.ReviewFile(c.repo, 7)

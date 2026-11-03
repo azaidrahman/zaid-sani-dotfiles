@@ -1,0 +1,28 @@
+#!/bin/bash
+# plist hash: {{ include "private_Library/LaunchAgents/com.zaid.bb-prs-warm.plist.tmpl" | sha256sum }}
+#
+# Load the LaunchAgent of "bb-prs --warm" again. The agent keeps the cache of
+# bb-prs warm (see the comment in the plist). The cache is on the disk of each
+# Mac, so each Mac loads its own agent.
+#
+# The agent runs the program that run_onchange_after_build-bb-prs.sh builds.
+# chezmoi runs the after scripts in the order of their names, so the build
+# runs first. launchd starts the program again for each run, so a new build
+# needs no new load.
+{{ if eq .chezmoi.os "darwin" -}}
+set -euo pipefail
+
+LABEL=com.zaid.bb-prs-warm
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+DOMAIN="gui/$(id -u)"
+
+# A bootout returns before the agent stops. Wait until launchd forgets the
+# label, or the bootstrap fails with "Input/output error".
+launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+for _ in $(seq 1 50); do
+  launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1 || break
+  sleep 0.1
+done
+launchctl bootstrap "$DOMAIN" "$PLIST"
+echo "load-bb-prs-warm: the agent runs bb-prs --warm every 15 minutes"
+{{ end -}}

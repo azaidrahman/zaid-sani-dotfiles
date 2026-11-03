@@ -200,10 +200,7 @@ func (m Model) prsBox(r rect) string {
 	pl := m.listPlace(r)
 	errs, n, idx, rows, off := pl.errs, pl.n, pl.idx, pl.rows, pl.off
 	cur := m.d.Env.Repo
-	now := time.Now()
-	if m.d.Env.Now != nil {
-		now = m.d.Env.Now()
-	}
+	now := m.now()
 	var prs []bb.PR
 	var acts []store.Action
 	if m.list == "log" {
@@ -272,6 +269,9 @@ func (m Model) mainBox(r rect) string {
 	}
 	names, on := m.mainTabs()
 	title := tabs("[0]", names, on, state)
+	if mark := m.updateMark(); mark != "" {
+		title += dimStyle.Render(" · ") + mark
+	}
 	if c, ok := m.changesData(); ok {
 		return box(title, "", m.changesBody(c), r.W, r.H, state)
 	}
