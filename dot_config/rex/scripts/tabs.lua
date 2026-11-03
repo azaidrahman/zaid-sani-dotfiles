@@ -13,6 +13,11 @@
 -- Over a relay of the tailnet, each call can take 30 ms. Thus collect makes
 -- few calls: one view for each session, and three calls for each tab.
 --
+-- The title, the processes, and the status of a tab come from the focused
+-- block of the tab. `bid` is the ID of that block. The Rex app records the
+-- status of each block that you saw. The Alfred workflow finds the tabs
+-- with a status that you did not see, with `bid`.
+--
 -- rex.json encodes an empty table as an empty object, not as an empty list.
 -- Thus `tabs` or `status.records` can be {} in the JSON.
 
@@ -49,6 +54,7 @@ function M.collect(opts)
       tabs[#tabs + 1] = {
         sid = sid, slabel = s.label or "", pos = pos,
         wid = w.window_id, wlabel = w.label or "", panes = panes,
+        bid = w.focused_block_id or "",
         title = call("title"), proc = call("process"),
         status = call("program_status"),
       }
