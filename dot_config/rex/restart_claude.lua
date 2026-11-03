@@ -25,6 +25,13 @@
 --
 -- To run the action without the key, use `rex do restart_claude`. Add
 -- block_id=<id> to restart Claude in a pane that does not have focus.
+--
+-- A pane on another host, for example onyx in the Rex app of aqua, runs on
+-- that host. The app sends the key to the Rex of aqua, with ctx.server set to
+-- the label of onyx. The pid of claude is a pid on onyx, and the session file
+-- is in the home directory on onyx. Thus this file asks the Rex of onyx to
+-- run its own restart_claude (see on_host). The action never falls back to
+-- this Mac: here the pid can belong to a different process.
 
 local TERMINAL = "com.superlogical.terminal"
 local SHELL = "com.superlogical.terminal.shell"
@@ -184,11 +191,36 @@ local function restart(ctx, args)
   return { block_id = target, command = cmd }
 end
 
+-- on_host asks the host that holds the session of ctx to run its own
+-- restart_claude, and returns the result of the host. If the host cannot run
+-- the action, the action fails. For example, the configuration of the host
+-- can be older than this file.
+local function on_host(ctx, args)
+  local ok, host = pcall(rex.server, ctx.server)
+  if not ok then error("Rex cannot reach the host " .. ctx.server .. ".", 0) end
+  local request = {
+    action = "restart_claude",
+    session_id = ctx.session_id,
+    block_id = args.block_id or ctx.block_id,
+  }
+  if args.block_id then request.args = { block_id = args.block_id } end
+  local result, err = host.call("client.action", request)
+  if err == nil then return result end
+  if tostring(err):find("code=not_found", 1, true) then
+    error(ctx.server .. " has no restart_claude action. Apply the Rex configuration on " .. ctx.server .. ".", 0)
+  end
+  error(err, 0)
+end
+
 rex.action{
   name = "restart_claude",
   title = "Restart Claude",
   description = "Stop the Claude session in this pane and resume the same conversation, for example after a Claude Code update.",
   keywords = "claude restart reload resume update",
   args = { block_id = "string?" },
-  run = restart,
+  run = function(ctx, args)
+    args = args or {}
+    if ctx.server then return on_host(ctx, args) end
+    return restart(ctx, args)
+  end,
 }
