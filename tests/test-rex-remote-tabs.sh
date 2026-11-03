@@ -83,10 +83,11 @@ HOST_PID=$SERVER_PID
 
 sid=$(rex --autostart=false -S "$HOST" new rt-test -c "$TMP" --window alpha --json | jq -r '.session_id')
 wid=$(rex --autostart=false -S "$HOST" window ls -s "$sid" --json | jq -r '.windows[0].window_id')
+bid=$(rex --autostart=false -S "$HOST" api call -s "$sid" session.view | jq -r '.windows[0].focused_block_id')
 
 # --- list-tabs.lua -------------------------------------------------------------
-labels=$(rex --autostart=false -S "$HOST" do "$DIR/list-tabs.lua" --json | jq -r '[.tabs[].wlabel] | join(",")')
-check "list-tabs.lua lists the tabs of a server" "alpha" "$labels"
+tabs=$(rex --autostart=false -S "$HOST" do "$DIR/list-tabs.lua" --json | jq -r '[.tabs[] | .wlabel, .bid] | join(",")')
+check "list-tabs.lua lists the tabs of a server and their focused blocks" "alpha,$bid" "$tabs"
 
 # --- the copy of the host -------------------------------------------------------
 start_server "$LOCAL" "$TMP/init.lua" || exit 1
