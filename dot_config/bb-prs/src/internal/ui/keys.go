@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -106,10 +107,14 @@ func (m *Model) runKey(key string) tea.Cmd {
 	case " ":
 		m.toggle()
 	case "enter":
-		// Only [0] on the Changes view uses enter to go one level in.
-		if m.focus == focusMain && m.view == "changes" {
+		// [0] on the Changes view uses enter to go one level in, and [0] on
+		// the Review view uses it to open the session of the review.
+		switch {
+		case m.focus == focusMain && m.view == "changes":
 			m.goIn()
 			return nil
+		case m.focus == focusMain && m.view == "review":
+			return m.openReview()
 		}
 		return m.review()
 	case "s":
@@ -122,6 +127,8 @@ func (m *Model) runKey(key string) tea.Cmd {
 		return m.open()
 	case "c":
 		return m.conflicts()
+	case "R":
+		m.aiReview()
 	case "S":
 		m.cycleOrder()
 	case "r":
@@ -136,7 +143,7 @@ func (m *Model) runKey(key string) tea.Cmd {
 			m.filtering = true
 			m.focus = focusPRs
 		default:
-			m.popup = menuPopup()
+			m.popup = menuPopup(m.reviewerName())
 		}
 	case "q":
 		return m.quit()
@@ -511,6 +518,10 @@ func (m *Model) openOnly(action string) bool {
 	return false
 }
 
+// approve approves the PR under the cursor at once. With more than one
+// target, it asks first. The popup runs the approval for the PRs that it
+// lists. If each target is your own PR, there is nothing to approve: it does
+// not ask, and the bar tells it, as for one own PR.
 func (m *Model) approve() tea.Cmd {
 	if m.busy != "" || !m.openOnly("Approve") {
 		return nil
@@ -519,6 +530,16 @@ func (m *Model) approve() tea.Cmd {
 	if len(prs) == 0 {
 		return nil
 	}
+	allMine := !slices.ContainsFunc(prs, func(p bb.PR) bool { return p.Role != bb.Mine })
+	if len(prs) > 1 && !allMine {
+		m.showPopup(approveConfirm(prs))
+		return nil
+	}
+	return m.runApprove(prs)
+}
+
+// runApprove approves prs.
+func (m *Model) runApprove(prs []bb.PR) tea.Cmd {
 	m.startBusy("Approving…")
 	d := m.d.Actions
 	return func() tea.Msg {

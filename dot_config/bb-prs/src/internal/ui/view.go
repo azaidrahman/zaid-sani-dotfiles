@@ -13,6 +13,7 @@ import (
 
 	"bbprs/internal/bb"
 	"bbprs/internal/gitops"
+	"bbprs/internal/review"
 	"bbprs/internal/store"
 )
 
@@ -29,14 +30,16 @@ func (b barItem) label() string { return b.name + ": " + b.keys }
 const barSep = " | "
 
 // options are the keys in the bar, for each panel with focus. A narrow bar
-// cuts the end, so "Page" comes after "Keybindings".
+// cuts the end, so "Page" comes after "Keybindings". The item of R gets the
+// name of the reviewer. On the Review view, the item of enter is "Open".
 var options = map[string][]barItem{
 	focusPRs: {{"Review", "⏎", "enter"}, {"Sync", "s", "s"}, {"Approve", "a", "a"}, {"Merge", "m", "m"},
-		{"Browser", "o", "o"}, {"Conflicts", "c", "c"}, {"Select", "space", " "}, {"Filter", "/", "/"},
-		{"Lists", "[ ]", "]"}, {"Views", "{ }", "}"}, {"Keybindings", "?", "?"}, {"Page", "^d/^u", "ctrl+d"}},
-	focusMain: {{"Scroll", "j/k", "j"}, {"Sideways", "h/l", "l"}, {"Wrap", "w", "w"}, {"Views", "{ }", "}"},
-		{"Review", "⏎", "enter"}, {"Browser", "o", "o"}, {"PR list", "2", "2"}, {"Keybindings", "?", "?"},
+		{"Claude", "R", "R"}, {"Browser", "o", "o"}, {"Conflicts", "c", "c"}, {"Select", "space", " "},
+		{"Filter", "/", "/"}, {"Lists", "[ ]", "]"}, {"Views", "{ }", "}"}, {"Keybindings", "?", "?"},
 		{"Page", "^d/^u", "ctrl+d"}},
+	focusMain: {{"Scroll", "j/k", "j"}, {"Sideways", "h/l", "l"}, {"Wrap", "w", "w"}, {"Views", "{ }", "}"},
+		{"Review", "⏎", "enter"}, {"Claude", "R", "R"}, {"Browser", "o", "o"}, {"PR list", "2", "2"},
+		{"Keybindings", "?", "?"}, {"Page", "^d/^u", "ctrl+d"}},
 	focusStatus: {{"Refresh", "r", "r"}, {"PR list", "2", "2"}, {"Keybindings", "?", "?"}, {"Quit", "q", "q"}},
 }
 
@@ -115,13 +118,7 @@ func (m Model) shownList() string {
 }
 
 // ago returns "just now" or the age of t, for example "5m ago".
-func (m Model) ago(t time.Time) string {
-	d := time.Since(t)
-	if d < time.Minute {
-		return "just now"
-	}
-	return bb.Age(d) + " ago"
-}
+func (m Model) ago(t time.Time) string { return agoText(time.Since(t)) }
 
 func (m Model) statusBox(r rect) string {
 	state := plain
@@ -234,7 +231,11 @@ func (m Model) prsBox(r rect) string {
 		} else {
 			p := prs[i]
 			b, _ := m.behindOf(p)
-			line = FormatRow(p, cur, b, m.sel[p.Key()], now, repoW, width)
+			var rv *review.State
+			if st, ok := m.reviewOf(p); ok {
+				rv = &st
+			}
+			line = FormatRow(p, cur, b, rv, m.sel[p.Key()], now, repoW, width)
 		}
 		if i == idx {
 			line = cursorLine(line, m.focus == focusPRs)
@@ -566,8 +567,8 @@ func (m *Model) maxHScroll() int {
 }
 
 // mainLines returns the lines of the main panel for a panel of width
-// columns: the overview, or the Status or Activity view of the PR under the
-// cursor. With wrap off, a line of a view can be wider than width.
+// columns: the overview, or the Status, Activity, or Review view of the PR
+// under the cursor. With wrap off, a line of a view can be wider than width.
 func (m Model) mainLines(width int) rendered {
 	if m.focus == focusStatus {
 		return newRendered(renderOverview(m.overview(), width))
@@ -575,6 +576,19 @@ func (m Model) mainLines(width int) rendered {
 	pr, ok := m.current()
 	if !ok {
 		return newRendered([]string{dimStyle.Render("Nothing to show.")})
+	}
+	if m.view == "review" {
+		// The status has the age of the review, so the lines change with the
+		// time, and the cache does not keep them.
+		var rv *review.State
+		if st, ok := m.reviewOf(pr); ok {
+			rv = &st
+		}
+		lines := renderReview(pr, rv, m.reviewerName(), time.Now(), width, m.wrap)
+		if m.wrap {
+			lines = wrapLines(lines, width)
+		}
+		return newRendered(lines)
 	}
 	src := sources[m.view][0]
 	v, ok := m.views[viewKey{memKey(pr), src}]
@@ -698,7 +712,16 @@ func (m Model) barItems() []barItem {
 	case m.focus == focusMain && m.view == "changes":
 		return changesOptions[m.level]
 	}
-	return options[m.focus]
+	items := slices.Clone(options[m.focus])
+	for i, it := range items {
+		switch {
+		case it.run == "R":
+			items[i].name = m.reviewerTitle()
+		case it.run == "enter" && m.focus == focusMain && m.view == "review":
+			items[i].name = "Open"
+		}
+	}
+	return items
 }
 
 // barRight returns the right side of the bar while no filter is typed: the

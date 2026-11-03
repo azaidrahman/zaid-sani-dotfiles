@@ -42,6 +42,18 @@ func (p Paths) ListFile(prompt, list string) string {
 	return filepath.Join(p.Cache, name)
 }
 
+// ReviewDir returns the directory of the review state files.
+func (p Paths) ReviewDir() string { return filepath.Join(p.State, "reviews") }
+
+// ReviewFile returns the path of the state file of the review of one PR.
+func (p Paths) ReviewFile(repo string, id int) string {
+	return filepath.Join(p.ReviewDir(), strings.ReplaceAll(repo, "/", "_")+"-"+strconv.Itoa(id)+".json")
+}
+
+// ReviewWorkDir returns the working folder of a review of a PR that is not in
+// the repo of the pane.
+func (p Paths) ReviewWorkDir() string { return filepath.Join(p.ReviewDir(), "work") }
+
 // ListCache is the content of a list file.
 type ListCache struct {
 	PRs    []bb.PR   `json:"prs"`
@@ -73,6 +85,10 @@ func SaveList(path string, c ListCache) error {
 	}
 	return writeAtomic(path, data)
 }
+
+// WriteAtomic writes a file in one step: a temporary file in the same
+// directory, and then a rename. It makes the directory if necessary.
+func WriteAtomic(path string, data []byte) error { return writeAtomic(path, data) }
 
 func writeAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
@@ -135,6 +151,32 @@ func TryLock(path string, stale time.Duration) (release func(), ok bool, err err
 		}
 	}
 	return nil, false, nil
+}
+
+// TryLockOwned is TryLock for a lock with an owner. It writes token to the
+// file "owner" in the lock. After a stale lock, another process can hold the
+// lock: owns tells if the lock still holds token. release removes the lock
+// only while it holds token.
+func TryLockOwned(path string, stale time.Duration, token string) (owns func() bool, release func(), ok bool, err error) {
+	if _, ok, err = TryLock(path, stale); !ok || err != nil {
+		return nil, nil, ok, err
+	}
+	lock := path + ".lock"
+	owner := filepath.Join(lock, "owner")
+	if err := writeAtomic(owner, []byte(token)); err != nil {
+		_ = os.RemoveAll(lock)
+		return nil, nil, false, err
+	}
+	owns = func() bool {
+		data, err := os.ReadFile(owner)
+		return err == nil && string(data) == token
+	}
+	release = func() {
+		if owns() {
+			_ = os.RemoveAll(lock)
+		}
+	}
+	return owns, release, true, nil
 }
 
 // Locked is true when the lock of a path exists.

@@ -73,7 +73,9 @@ func (m *Model) clickFocus(key string) {
 
 // clickPRs handles a click in the PR panel r. A click on a name in the title
 // shows that list. A click on a row moves the cursor to that row. A click on
-// the header row or on an error line only gives the focus to [2].
+// the mark column of a row also selects the row, or clears its selection, as
+// space does. A click on the header row or on an error line only gives the
+// focus to [2].
 func (m *Model) clickPRs(r rect, x, y int) {
 	if i, ok := titleTab(r, x, y, "[2]", listNames); ok {
 		m.clickFocus("2")
@@ -89,8 +91,15 @@ func (m *Model) clickPRs(r rect, x, y int) {
 	pl := m.listPlace(r)
 	line := y - b.Y - 1 - len(pl.errs) // the line under the header and the errors
 	m.clickFocus("2")
-	if i := pl.off + line; line >= 0 && line < pl.rows && i < pl.n && i != pl.idx {
+	i := pl.off + line
+	if line < 0 || line >= pl.rows || i >= pl.n {
+		return
+	}
+	if i != pl.idx {
 		m.moveCursor(i - pl.idx)
+	}
+	if x-b.X < markWidth {
+		m.toggle()
 	}
 }
 
@@ -98,7 +107,8 @@ func (m *Model) clickPRs(r rect, x, y int) {
 // title shows that view. On the Changes view, a click on a row of the commit
 // list or on a file selects it. If [0] has the focus, a click on the selected
 // row or file goes in, as ⏎ does. On the files level, a click on the line of
-// the scope goes one level out, as esc does.
+// the scope goes one level out, as esc does. On the Review view, a click on
+// the open line opens the session of the review, as ⏎ does.
 func (m *Model) clickMain(r rect, x, y int) tea.Cmd {
 	names, _ := m.mainTabs()
 	if i, ok := titleTab(r, x, y, "[0]", names); ok {
@@ -114,10 +124,14 @@ func (m *Model) clickMain(r rect, x, y int) tea.Cmd {
 		return nil
 	}
 	// Look before the focus moves: when [1] has focus, [0] shows the
-	// overview, not the Changes view.
+	// overview, not the Changes view or the Review view.
 	c, ok := m.changesData()
 	had := m.focus == focusMain
+	open := m.focus != focusStatus && m.view == "review" && m.onOpenLine(b, x, y)
 	m.clickFocus("0")
+	if open {
+		return m.openReview()
+	}
 	if !ok {
 		return nil
 	}
@@ -156,6 +170,23 @@ func (m *Model) clickMain(r rect, x, y int) tea.Cmd {
 		m.moveFile(i - cur)
 	}
 	return nil
+}
+
+// onOpenLine is true when the cell at the column x and the line y of the body
+// b of the main panel is on the text of the open line of the Review view. It
+// uses the same scroll and side scroll as mainBox.
+func (m Model) onOpenLine(b rect, x, y int) bool {
+	width, rows := m.mainSize()
+	rl := m.mainLines(width)
+	i := max(0, min(m.scroll, len(rl.lines)-rows)) + y - b.Y
+	if i < 0 || i >= len(rl.lines) || ansi.Strip(rl.lines[i]) != openLine {
+		return false
+	}
+	hs := 0
+	if !m.wrap {
+		hs = min(m.hscroll, rl.maxSide(width))
+	}
+	return x-b.X < ansi.StringWidth(openLine)-hs
 }
 
 // listRect returns the place on the screen of the list of the Changes view

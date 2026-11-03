@@ -21,6 +21,7 @@ import (
 	"bbprs/internal/cmdlog"
 	"bbprs/internal/gitops"
 	"bbprs/internal/refresh"
+	"bbprs/internal/review"
 	"bbprs/internal/store"
 	"bbprs/internal/termtab"
 )
@@ -40,8 +41,16 @@ type Deps struct {
 	// of the script. Its exit status 1 is normal, so the caller looks at the
 	// worktree, not at the error.
 	PRConflicts func(ctx context.Context, g gitops.Git, args ...string) (string, error)
-	// Tab opens the terminal tab for the worktree of a conflict check.
+	// Tab opens a terminal tab: for the worktree of a conflict check, and for
+	// the session of a review.
 	Tab termtab.Opener
+	// ReviewConfig loads the config of the background reviewer. If it is
+	// nil, the reviewer is the default.
+	ReviewConfig func() (review.Config, error)
+	// StartReview starts the detached child that reviews one PR:
+	// "bb-prs --ai-review <repo> <id>", and "--again" if again is true. Only
+	// the choice "Run the review again" gives again.
+	StartReview func(repo string, id int, again bool) error
 	// NoTick stops the timer of the model. The tests use it.
 	NoTick bool
 	// PopupGuard is the time that a popup ignores keys after it opens. Each
@@ -52,12 +61,16 @@ type Deps struct {
 }
 
 const (
-	tickEvery   = 150 * time.Millisecond
-	flashFor    = 4 * time.Second
-	freshAge    = 3 * time.Minute // the same age as the automatic refresh
-	maxActions  = 300
-	openTimeout = 30 * time.Second
-	popupGuard  = 400 * time.Millisecond
+	tickEvery = 150 * time.Millisecond
+	// reviewsEvery is the time between two reads of the review state files
+	// on the tick. R and the confirm of R read the files of their PRs at
+	// once.
+	reviewsEvery = time.Second
+	flashFor     = 4 * time.Second
+	freshAge     = 3 * time.Minute // the same age as the automatic refresh
+	maxActions   = 300
+	openTimeout  = 30 * time.Second
+	popupGuard   = 400 * time.Millisecond
 )
 
 // The panels that can have focus.
@@ -74,15 +87,16 @@ var (
 	listOrder   = []string{"open", "closed", "log"}
 	// listNames are the names of the lists in the title of the PR panel.
 	listNames = []string{"Open", "Closed", "Log"}
-	viewOrder = []string{"status", "changes", "activity"}
+	viewOrder = []string{"status", "changes", "activity", "review"}
 	// viewNames are the names of the views in the title of the main panel.
-	viewNames = []string{"Status", "Changes", "Activity"}
+	viewNames = []string{"Status", "Changes", "Activity", "Review"}
 	sortOrder = []bb.Order{bb.Oldest, bb.Newest, bb.ByRepo}
 )
 
 // sources names the data that each view of the main panel shows. Each name
 // is a view of the refresh package. The Changes view shows the commit list
-// and the diff of all the files of the PR.
+// and the diff of all the files of the PR. The Review view has no source: it
+// shows the state file of the review.
 var sources = map[string][]string{
 	"status":   {"details"},
 	"changes":  {"commits", "diff"},
@@ -281,8 +295,19 @@ type Model struct {
 	pending map[viewKey]bool
 	// skipped holds the PRs that the running sync leaves, for its result.
 	skipped []actions.Outcome
-	cwd     string
-	start   tea.Cmd
+	// reviewer is the config of the background reviewer at its last load. R
+	// loads it again. reviews holds the state of the review of each PR, by
+	// the key of the PR, and reviewsAt is the time of the last read of all
+	// of them. newStarts holds the reviews that started, until their child
+	// writes the state file, by the key of the PR. opening holds the keys of
+	// the PRs whose review session opens now.
+	reviewer  review.Config
+	reviews   map[string]reviewEntry
+	reviewsAt time.Time
+	newStarts map[string]newStart
+	opening   map[string]bool
+	cwd       string
+	start     tea.Cmd
 }
 
 // New loads the cached lists and the log of actions. It also starts the
@@ -293,6 +318,7 @@ func New(d Deps) Model {
 		cursor: map[string]int{}, offset: map[string]int{}, sel: map[string]bool{}, fileOf: map[string]int{},
 		caches: map[string]store.ListCache{}, mtimes: map[string]time.Time{}, locked: map[string]bool{},
 		behind: map[string]behind{}, views: map[viewKey]viewData{}, pending: map[viewKey]bool{},
+		reviews: map[string]reviewEntry{}, newStarts: map[string]newStart{}, opening: map[string]bool{},
 	}
 	m.cwd = d.Env.Dir
 	if m.cwd == "" {
@@ -304,6 +330,8 @@ func New(d Deps) Model {
 		m.locked[list] = store.Locked(m.listFile(list))
 	}
 	m.loadActions()
+	_, _ = m.loadReviewer()
+	m.syncReviews(time.Now())
 	m.autoRefresh("open")
 	m.syncShown()
 	m.start = tea.Batch(append(cmds, m.ensureView())...)
@@ -364,6 +392,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.onOpen(msg)
 	case conflictMsg:
 		m.onConflict(msg)
+	case sessionMsg:
+		m.onSession(msg)
 	case reviewMsg:
 		m.onReview(msg)
 		// The release of the terminal turns off the mouse, and the restore does
@@ -385,6 +415,9 @@ func (m *Model) onTick(now time.Time) tea.Cmd {
 		if !modTime(path).Equal(m.mtimes[list]) {
 			cmds = append(cmds, m.loadList(list))
 		}
+	}
+	if now.Sub(m.reviewsAt) >= reviewsEvery {
+		m.syncReviews(now)
 	}
 	return tea.Batch(append(cmds, m.ensureView(), m.tick())...)
 }
