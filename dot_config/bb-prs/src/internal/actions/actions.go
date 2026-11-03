@@ -25,16 +25,25 @@ const (
 	mergeTimeout = 5 * time.Minute
 )
 
-// Deps holds what the actions need. Git is nil outside a repo. Repo is the
-// repo of the current checkout. ListFile is the cache file of the open list.
+// Deps holds what the actions need. Git is the clone of the pane. It is nil
+// outside a repo. Repo is the repo of that clone. GitFor returns the own clone
+// of bb-prs for another repo. It makes the clone on the first use, and it
+// gives each git command to record. SourceRepo returns the repo of the source
+// branch of a PR whose SrcRepo is empty, and it gives each twg command to
+// record. ListFile is the cache file of the open list.
 type Deps struct {
-	Twg      *twg.Runner
-	Git      *gitops.Git
-	Paths    store.Paths
-	Repo     string
-	ListFile string
-	Log      *cmdlog.Log
-	Now      func() time.Time
+	Twg        *twg.Runner
+	Git        *gitops.Git
+	GitFor     func(ctx context.Context, repo string, record func(string)) (*gitops.Git, error)
+	SourceRepo func(ctx context.Context, pr bb.PR, record func(string)) (string, error)
+	Paths      store.Paths
+	Repo       string
+	ListFile   string
+	Log        *cmdlog.Log
+	Now        func() time.Time
+
+	// addLine adds a line to the entry of the command log that begin made.
+	addLine func(string)
 }
 
 // Outcome is the result for one PR. Text is the line for the result popup.
@@ -45,10 +54,12 @@ type Outcome struct {
 	Text string
 }
 
-// Behind is a PR whose source branch is behind the destination branch.
+// Behind is a PR whose source branch is behind the destination branch. Git
+// is the clone that PlanSync fetched. RunSync syncs the PR in that clone.
 type Behind struct {
 	PR      bb.PR
 	Commits int
+	Git     *gitops.Git
 }
 
 // SyncPlan is the result of PlanSync. Todo holds the PRs that RunSync
@@ -139,12 +150,13 @@ func Merge(ctx context.Context, d Deps, prs []bb.PR) []Outcome {
 	return out
 }
 
-// PlanSync finds the PRs that RunSync can change. It fetches origin first.
-func PlanSync(ctx context.Context, d Deps, prs []bb.PR) (SyncPlan, error) {
+// PlanSync finds the PRs that RunSync can change. A PR of the repo of the
+// pane uses the clone of the pane. A PR of another repo uses the own clone of
+// bb-prs, from GitFor. PlanSync fetches origin one time for each repo. If the
+// clone or the fetch of a repo fails, PlanSync skips only the PRs of that
+// repo, with the reason.
+func PlanSync(ctx context.Context, d Deps, prs []bb.PR) SyncPlan {
 	var plan SyncPlan
-	if d.Git == nil {
-		return plan, errors.New("Sync needs a checkout. Open bb-prs in the repo of the PR.")
-	}
 	var open []bb.PR
 	for _, pr := range prs {
 		if pr.IsOpen() {
@@ -154,39 +166,105 @@ func PlanSync(ctx context.Context, d Deps, prs []bb.PR) (SyncPlan, error) {
 		}
 	}
 	if len(open) == 0 {
-		return plan, nil
+		return plan
 	}
 	d = d.begin("Fetch origin to sync", open)
-	if err := d.Git.Fetch(ctx); err != nil {
-		return plan, fmt.Errorf("git fetch failed: %w", err)
-	}
+	clones := map[string]clone{}
 	for _, pr := range open {
-		if pr.Repo != d.Repo {
-			plan.Skipped = append(plan.Skipped, skipped(pr, "not in "+d.Repo))
+		// Check the source repo before any git work for the PR.
+		if reason := d.checkSource(ctx, pr); reason != "" {
+			plan.Skipped = append(plan.Skipped, skipped(pr, reason))
 			continue
 		}
-		n, ok := d.Git.Behind(pr.Src, pr.Dst)
+		c, done := clones[pr.Repo]
+		if !done {
+			c = d.fetch(ctx, pr.Repo)
+			clones[pr.Repo] = c
+		}
+		if c.fail != "" {
+			plan.Skipped = append(plan.Skipped, skipped(pr, c.fail))
+			continue
+		}
+		n, ok := c.git.Behind(pr.Src, pr.Dst)
 		switch {
 		case !ok:
 			plan.Skipped = append(plan.Skipped, skipped(pr, fmt.Sprintf("no branch %s or %s on origin", pr.Src, pr.Dst)))
 		case n == 0:
 			plan.Skipped = append(plan.Skipped, skipped(pr, "up to date with "+pr.Dst))
 		default:
-			plan.Todo = append(plan.Todo, Behind{PR: pr, Commits: n})
+			plan.Todo = append(plan.Todo, Behind{PR: pr, Commits: n, Git: c.git})
 		}
 	}
-	return plan, nil
+	return plan
 }
 
-// RunSync updates the source branch of each PR of the plan with the method.
-// Rebase puts the commits of the source branch on the destination branch, and
-// force pushes with a lease. Merge merges the destination branch into the
-// source branch, and pushes without force. Each PR has 2 minutes. Then git
-// stops, for example if ssh waits for a passphrase.
-func RunSync(ctx context.Context, d Deps, plan SyncPlan, method Method) []Outcome {
-	if d.Git == nil {
-		return nil
+// clone is the fetched clone of one repo. If fail is not empty, the clone or
+// the fetch failed, and fail is the reason to skip the PRs of the repo.
+type clone struct {
+	git  *gitops.Git
+	fail string
+}
+
+// fetch gets the clone of repo, and fetches origin there. A reason to skip
+// holds only the first line of the error.
+func (d Deps) fetch(ctx context.Context, repo string) clone {
+	g := d.Git
+	if !d.inPane(repo) {
+		if d.GitFor == nil {
+			return clone{fail: fmt.Sprintf("could not clone %s: Deps.GitFor is not set", repo)}
+		}
+		var err error
+		if g, err = d.GitFor(ctx, repo, d.addLine); err != nil {
+			return clone{fail: fmt.Sprintf("could not clone %s: %s", repo, firstLine(err))}
+		}
 	}
+	if err := g.Fetch(ctx); err != nil {
+		return clone{fail: "git fetch failed: " + firstLine(err)}
+	}
+	return clone{git: g}
+}
+
+// checkSource returns the reason to skip pr if the source branch is not in
+// the repo of the PR, or if the source repo is not known. A sync of a PR from
+// a fork would change the branch of the same name in the repo of the PR.
+// SourceRepo finds the source repo only if the list did not tell it.
+func (d Deps) checkSource(ctx context.Context, pr bb.PR) string {
+	src := pr.SrcRepo
+	if src == "" {
+		if d.SourceRepo == nil {
+			return "could not check the source repo: Deps.SourceRepo is not set"
+		}
+		var err error
+		if src, err = d.SourceRepo(ctx, pr, d.addLine); err != nil {
+			return "could not check the source repo: " + firstLine(err)
+		}
+		if src == "" {
+			return "could not check the source repo: the PR has no source repo"
+		}
+	}
+	// Bitbucket does not care about the case of a repo name.
+	if !strings.EqualFold(src, pr.Repo) {
+		return "from a fork, sync it in its own repo"
+	}
+	return ""
+}
+
+// firstLine returns the first line of the text of err.
+func firstLine(err error) string {
+	first, _, _ := strings.Cut(err.Error(), "\n")
+	return first
+}
+
+// inPane reports whether repo is the repo of the clone of the pane.
+func (d Deps) inPane(repo string) bool { return d.Git != nil && repo == d.Repo }
+
+// RunSync updates the source branch of each PR of the plan with the method.
+// It syncs each PR in the clone that PlanSync fetched. Rebase puts the
+// commits of the source branch on the destination branch, and force pushes
+// with a lease. Merge merges the destination branch into the source branch,
+// and pushes without force. Each PR has 2 minutes. Then git stops, for
+// example if ssh waits for a passphrase.
+func RunSync(ctx context.Context, d Deps, plan SyncPlan, method Method) []Outcome {
 	prs := make([]bb.PR, len(plan.Todo))
 	for i, b := range plan.Todo {
 		prs[i] = b.PR
@@ -194,8 +272,9 @@ func RunSync(ctx context.Context, d Deps, plan SyncPlan, method Method) []Outcom
 	d = d.beginWith("Sync", syncDetail(prs, method), prs)
 
 	out := make([]Outcome, 0, len(prs))
-	for _, pr := range prs {
-		res, msg := d.sync(ctx, pr, method)
+	for _, b := range plan.Todo {
+		pr := b.PR
+		res, msg := d.sync(ctx, b, method)
 		o := Outcome{PR: pr}
 		switch res {
 		case gitops.Synced:
@@ -208,7 +287,7 @@ func RunSync(ctx context.Context, d Deps, plan SyncPlan, method Method) []Outcom
 			d.record(pr, "sync", "ok", string(method))
 			d.Paths.DropPreviews(pr.Repo, pr.ID)
 		case gitops.Conflict:
-			o.Text = fmt.Sprintf("#%d conflicts, nothing changed. Run: git pr-conflicts %d", pr.ID, pr.ID)
+			o.Text = d.conflictText(pr)
 			d.record(pr, "sync", "conflict", string(method))
 		default:
 			o.Text = fmt.Sprintf("#%d sync failed: %s", pr.ID, msg)
@@ -217,6 +296,17 @@ func RunSync(ctx context.Context, d Deps, plan SyncPlan, method Method) []Outcom
 		out = append(out, o)
 	}
 	return out
+}
+
+// conflictText tells the user how to see the conflicts of pr. The own clone
+// of bb-prs is not a folder of the user. Thus, for a PR of another repo, the
+// text names the repo, not a command to run here.
+func (d Deps) conflictText(pr bb.PR) string {
+	if d.inPane(pr.Repo) {
+		return fmt.Sprintf("#%d conflicts, nothing changed. Run: git pr-conflicts %d", pr.ID, pr.ID)
+	}
+	_, name, _ := strings.Cut(pr.Repo, "/")
+	return fmt.Sprintf("#%d conflicts, nothing changed. Run git pr-conflicts %d in a clone of %s.", pr.ID, pr.ID, name)
 }
 
 // syncDetail names the method for the head line of the command log. For one
@@ -231,15 +321,20 @@ func syncDetail(prs []bb.PR, method Method) string {
 	return fmt.Sprintf("rebase %s onto %s", prs[0].Src, prs[0].Dst)
 }
 
-// sync runs the sync of one PR with its own timeout.
-func (d Deps) sync(ctx context.Context, pr bb.PR, method Method) (gitops.SyncResult, string) {
+// sync runs the sync of one PR with its own timeout, in the clone of the
+// plan. The git commands go under the head of the sync.
+func (d Deps) sync(ctx context.Context, b Behind, method Method) (gitops.SyncResult, string) {
 	ctx, cancel := context.WithTimeout(ctx, syncTimeout)
 	defer cancel()
-	sync := d.Git.Sync
-	if method == MethodMerge {
-		sync = d.Git.SyncMerge
+	g := *b.Git
+	if d.addLine != nil {
+		g.Record = d.addLine
 	}
-	res, msg := sync(ctx, pr.Src, pr.Dst)
+	sync := g.Sync
+	if method == MethodMerge {
+		sync = g.SyncMerge
+	}
+	res, msg := sync(ctx, b.PR.Src, b.PR.Dst)
 	if res == gitops.Failed && errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		msg = "git stopped after 2 minutes. It can wait for a password or a passphrase."
 	}
@@ -294,6 +389,7 @@ func (d Deps) beginWith(verb, detail string, prs []bb.PR) Deps {
 		head += " (" + detail + ")"
 	}
 	e := d.Log.Begin(head)
+	d.addLine = e.Add
 	if d.Twg != nil {
 		r := *d.Twg
 		r.Record = e.Add

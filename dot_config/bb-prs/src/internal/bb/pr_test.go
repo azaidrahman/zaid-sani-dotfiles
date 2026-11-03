@@ -55,7 +55,7 @@ func TestMergeOpen(t *testing.T) {
 		t.Errorf("roles = %q; want %q", got, want)
 	}
 	first := prs[0]
-	if first.Src != "feat-a" || first.Dst != "main" || first.Author != "Ana" || first.Title != "t10" ||
+	if first.Src != "feat-a" || first.SrcRepo != "ws/fork" || first.Dst != "main" || first.Author != "Ana" || first.Title != "t10" ||
 		first.URL != "https://bitbucket.org/ws/cur/pull-requests/10" || !first.Draft {
 		t.Errorf("fields of ws/cur#10 are wrong: %+v", first)
 	}
@@ -64,6 +64,11 @@ func TestMergeOpen(t *testing.T) {
 	}
 	if first.UpdatedRaw != "2026-03-02T10:00:00+00:00" {
 		t.Errorf("UpdatedRaw = %q", first.UpdatedRaw)
+	}
+	// The author inbox wins for #11, but the inbox has no source repo. The
+	// merged PR keeps the source repo of the repo query.
+	if mine := prs[1]; mine.SrcRepo != "ws/cur" {
+		t.Errorf("SrcRepo of ws/cur#11 = %q; want the one from the repo query", mine.SrcRepo)
 	}
 
 	none, err := MergeOpen(nil, nil, nil, "ws/cur")

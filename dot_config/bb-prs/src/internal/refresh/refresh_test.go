@@ -47,6 +47,52 @@ func readLog(t *testing.T, log string) string {
 	return string(data)
 }
 
+func TestSourceRepo(t *testing.T) {
+	tests := []struct {
+		name    string
+		preview string // the "pr" part of an old details preview; empty: none
+		out     string // the output of the fake twg
+		want    string
+		wantErr string
+		wantGet bool // twg gets the PR
+	}{
+		{name: "a details preview of an old update", preview: `{"source":{"repository":{"full_name":"ws/fork"}}}`, want: "ws/fork"},
+		{name: "no preview: twg gets the PR one time", out: `{"source":{"repository":{"full_name":"ws/cur"}}}`, want: "ws/cur", wantGet: true},
+		{name: "a PR without the field", out: `{}`, wantErr: "the PR has no source repo", wantGet: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			env, log := testEnv(t, tc.out, 0)
+			pr := bb.PR{Repo: "ws/cur", ID: 7, Role: bb.Open, UpdatedRaw: "new"}
+			if tc.preview != "" {
+				// The source repo never changes, so a preview of any update and any age is good.
+				path := env.Paths.PreviewFile(pr.Repo, pr.ID, "old", "details")
+				bundle := `{"pr":` + tc.preview + `,"checks":[],"diffstat":[]}`
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte(bundle), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				old := time.Now().Add(-30 * 24 * time.Hour)
+				if err := os.Chtimes(path, old, old); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			got, err := SourceRepo(context.Background(), env, pr)
+
+			if got != tc.want || (err == nil) != (tc.wantErr == "") || err != nil && !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("SourceRepo = %q, %v; want %q, an error with %q", got, err, tc.want, tc.wantErr)
+			}
+			calls := strings.Count(readLog(t, log), "bitbucket pull-requests get 7 --repo ws/cur -o json")
+			if want := map[bool]int{true: 1}[tc.wantGet]; calls != want {
+				t.Errorf("twg got the PR %d times, want %d", calls, want)
+			}
+		})
+	}
+}
+
 // The calls must keep the arguments of the bash script.
 func TestCalls(t *testing.T) {
 	cases := []struct {

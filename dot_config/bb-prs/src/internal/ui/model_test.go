@@ -493,7 +493,6 @@ func TestKeyFlows(t *testing.T) {
 			bin := t.TempDir()
 			must(os.WriteFile(filepath.Join(bin, "git"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
 			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-			f.m.d.Actions.Git = &gitops.Git{Dir: t.TempDir()}
 			// gitLines returns the git commands in the command log.
 			gitLines := func() (lines []string) {
 				for _, l := range f.m.d.Log.Lines(50) {
@@ -504,7 +503,7 @@ func TestKeyFlows(t *testing.T) {
 				return lines
 			}
 			f.m.busy = "Fetching origin…" // as after s
-			plan := actions.SyncPlan{Todo: []actions.Behind{{PR: fixturePRs()[0], Commits: 2}}}
+			plan := actions.SyncPlan{Todo: []actions.Behind{{PR: fixturePRs()[0], Commits: 2, Git: &gitops.Git{Dir: t.TempDir()}}}}
 			f.m = send(feed(f.m, syncPlanMsg{plan: plan}), "wait")
 			// The popup wraps long lines, so compare the words.
 			shown := func() string {

@@ -100,6 +100,28 @@ func LoadView(ctx context.Context, env Env, pr bb.PR, view string) ([]byte, erro
 	return raw, nil
 }
 
+// SourceRepo returns the full name of the repo of the source branch of pr.
+// The source repo of a PR never changes. Thus SourceRepo first reads a details
+// preview of the PR, of any update and of any age. If there is none, or if
+// it does not tell the repo, SourceRepo gets the PR from twg one time.
+func SourceRepo(ctx context.Context, env Env, pr bb.PR) (string, error) {
+	if data, ok := env.Paths.FindPreview(pr.Repo, pr.ID, "details"); ok {
+		var bundle struct {
+			PR json.RawMessage `json:"pr"`
+		}
+		if json.Unmarshal(data, &bundle) == nil {
+			if src, err := bb.SourceRepo(bundle.PR); err == nil {
+				return src, nil
+			}
+		}
+	}
+	get, err := env.Twg.JSON(ctx, "bitbucket", "pull-requests", "get", strconv.Itoa(pr.ID), "--repo", pr.Repo)
+	if err != nil {
+		return "", err
+	}
+	return bb.SourceRepo(get)
+}
+
 // loadDetails loads the details bundle. A failed part is [] and does not
 // fail the bundle. Then complete is false, and the twg runner records the
 // line "✗ <part>: <message>" in the command log.

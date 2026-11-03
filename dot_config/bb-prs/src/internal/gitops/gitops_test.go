@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"bbprs/internal/gitops/gitopstest"
 )
@@ -17,6 +18,116 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	cleanup()
 	os.Exit(code)
+}
+
+func TestCloneURL(t *testing.T) {
+	tests := []struct {
+		repo   string
+		origin string // the origin URL of the pane
+		want   string // empty: CloneURL refuses the name
+	}{
+		{"ws/app", "", "https://bitbucket.org/ws/app.git"},
+		{"my.ws/a_b-1.x", "", "https://bitbucket.org/my.ws/a_b-1.x.git"},
+		{"ws/app", "git@bitbucket.org:ws/cur.git", "git@bitbucket.org:ws/app.git"},
+		{"ws/app", "ssh://git@bitbucket.org/ws/cur.git", "git@bitbucket.org:ws/app.git"},
+		// SSH to another host does not tell how the user gets to Bitbucket.
+		{"ws/app", "git@example.com:me/app.git", "https://bitbucket.org/ws/app.git"},
+		// A name must be safe in a path and in a URL.
+		{"ws", "", ""},
+		{"ws/app/x", "", ""},
+		{"-ws/app", "", ""},
+		{"ws/-app", "", ""},
+		{".ws/app", "", ""},
+		{"ws/.git", "", ""},
+		{"ws/a b", "", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.repo+" "+tc.origin, func(t *testing.T) {
+			got, err := CloneURL(tc.repo, tc.origin)
+			if (err != nil) != (tc.want == "") || got != tc.want {
+				t.Errorf("CloneURL(%q, %q) = %q, %v; want %q", tc.repo, tc.origin, got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestEnsureClone(t *testing.T) {
+	tests := []struct {
+		name      string
+		before    func(t *testing.T, dir, url string)
+		relative  bool          // give a relative folder
+		timeout   time.Duration // the time limit of the clone, if not 0
+		wantClone bool
+		wantErr   string // text that the error holds
+	}{
+		{name: "a first use clones", wantClone: true},
+		{name: "a second use does not clone again", before: func(t *testing.T, dir, url string) {
+			if _, err := EnsureClone(context.Background(), dir, url, nil); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "a folder that is not a repo is cloned again", before: func(t *testing.T, dir, url string) {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "junk"), nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}, wantClone: true},
+		{name: "a relative folder is refused", relative: true, wantErr: "not an absolute path"},
+		{name: "a clone that hits its time limit", timeout: time.Nanosecond, wantClone: true, wantErr: "git stopped after 5 minutes"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			origin, _ := gitopstest.Repos(t)
+			// A partial clone from a local path needs file:// and this.
+			gitopstest.Git(t, origin, "config", "uploadpack.allowFilter", "true")
+			url := "file://" + origin
+			dir := filepath.Join(t.TempDir(), "repos", "ws", "app")
+			if tc.relative {
+				t.Chdir(t.TempDir())
+				dir = filepath.Join("repos", "ws", "app")
+			}
+			if tc.timeout != 0 {
+				old := cloneTimeout
+				cloneTimeout = tc.timeout
+				t.Cleanup(func() { cloneTimeout = old })
+			}
+			if tc.before != nil {
+				tc.before(t, dir, url)
+			}
+			var recorded []string
+			g, err := EnsureClone(context.Background(), dir, url, func(s string) { recorded = append(recorded, s) })
+			clone := "git clone --quiet --filter=blob:none --no-checkout -- " + url + " "
+			if cloned := len(recorded) == 1 && strings.HasPrefix(recorded[0], clone); cloned != tc.wantClone || len(recorded) > 1 {
+				t.Errorf("recorded = %q, want a clone: %t", recorded, tc.wantClone)
+			}
+			entries, _ := os.ReadDir(filepath.Dir(dir))
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %v, want %q", err, tc.wantErr)
+				}
+				// No clone, and no temporary folder, is left.
+				if len(entries) != 0 {
+					t.Errorf("the folder of the clone holds %v, want nothing", entries)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if g.Dir != dir {
+				t.Errorf("Dir = %q, want %q", g.Dir, dir)
+			}
+			if _, ok := g.Behind("feat", "main"); !ok {
+				t.Error("the clone does not have origin/feat and origin/main")
+			}
+			// The temporary folder of the clone is gone.
+			if len(entries) != 1 {
+				t.Errorf("the folder of the clone holds %v, want only app", entries)
+			}
+		})
+	}
 }
 
 func TestSync(t *testing.T) {

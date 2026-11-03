@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -84,13 +85,101 @@ func (g Git) Run(ctx context.Context, args ...string) (string, error) {
 	return g.run(ctx, g.Dir, args...)
 }
 
+// cloneTimeout is the time for the first clone of a repo. It is a variable
+// only so that a test can make it short.
+var cloneTimeout = 5 * time.Minute
+
+// repoName is the form of a full repo name: "<workspace>/<repo>".
+var repoName = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$`)
+
+// errBadRepo means that a text is not a full repo name that is safe in a
+// path and in a URL.
+var errBadRepo = errors.New("not a valid repo name")
+
+// CloneURL returns the URL to clone repo from Bitbucket. Repo is a full name,
+// for example "ws/app". Origin is the origin URL of the pane, or empty. The
+// URL uses https. If origin is a Bitbucket SSH URL, the URL uses SSH, because
+// the credentials of the user work for that form. CloneURL refuses a name
+// that is not safe in a path or in a URL. A part of the name cannot start
+// with "-" (an option) or with "." (for example ".", "..", or ".git").
+func CloneURL(repo, origin string) (string, error) {
+	if !repoName.MatchString(repo) {
+		return "", errBadRepo
+	}
+	for _, part := range strings.Split(repo, "/") {
+		if strings.HasPrefix(part, ".") || strings.HasPrefix(part, "-") {
+			return "", errBadRepo
+		}
+	}
+	if strings.HasPrefix(origin, "git@bitbucket.org:") || strings.HasPrefix(origin, "ssh://git@bitbucket.org/") {
+		return "git@bitbucket.org:" + repo + ".git", nil
+	}
+	return "https://bitbucket.org/" + repo + ".git", nil
+}
+
+// EnsureClone returns the git of the clone at dir. If dir is not a clone,
+// EnsureClone removes dir and clones url first. The clone has no working tree
+// and no file contents: git gets a file only when a command needs it. Git
+// clones into a new temporary folder next to dir, and EnsureClone then renames
+// that folder to dir. Thus a clone that stops half way never counts. If
+// another bb-prs made dir first, EnsureClone uses that clone. The function
+// record gets the clone command. The returned git also uses record. Dir must
+// be an absolute path, because EnsureClone can remove it.
+func EnsureClone(ctx context.Context, dir, url string, record func(string)) (*Git, error) {
+	if !filepath.IsAbs(dir) {
+		return nil, fmt.Errorf("%q is not an absolute path", dir)
+	}
+	g := &Git{Dir: dir, Record: record}
+	if isClone(dir) {
+		return g, nil
+	}
+	// dir is in the cache of bb-prs. If dir is there, the clone is broken.
+	if err := os.RemoveAll(dir); err != nil {
+		return nil, err
+	}
+	parent := filepath.Dir(dir)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return nil, err
+	}
+	tmp, err := os.MkdirTemp(parent, filepath.Base(dir)+".tmp-*")
+	if err != nil {
+		return nil, err
+	}
+	// After the rename, tmp is gone, and this does nothing.
+	defer os.RemoveAll(tmp)
+	ctx, cancel := context.WithTimeout(ctx, cloneTimeout)
+	defer cancel()
+	// "--" stops git from reading the URL as an option.
+	if out, err := g.run(ctx, parent, "clone", "--quiet", "--filter=blob:none", "--no-checkout", "--", url, tmp); err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, errors.New("git stopped after 5 minutes. It can wait for a password or a passphrase.")
+		}
+		return nil, errors.New(firstLines(out, err))
+	}
+	if err := os.Rename(tmp, dir); err != nil && !isClone(dir) {
+		return nil, err
+	}
+	return g, nil
+}
+
+// isClone reports whether dir is the top folder of a clone. A folder inside
+// another clone does not count: there, git gives the path of the git folder
+// of that clone, not ".git".
+func isClone(dir string) bool {
+	out, err := command(context.Background(), dir, "rev-parse", "--git-dir").Output()
+	return err == nil && strings.TrimSpace(string(out)) == ".git"
+}
+
 // Fetch updates the remote branches from origin. It stops after 60 seconds,
-// for example if git waits for a password or the network is down.
+// for example if git waits for a password or the network is down. On a
+// failure, the error holds the first lines of the output of git.
 func (g Git) Fetch(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
-	_, err := g.run(ctx, g.Dir, "fetch", "-q", "origin")
-	return err
+	if out, err := g.run(ctx, g.Dir, "fetch", "-q", "origin"); err != nil {
+		return errors.New(firstLines(out, err))
+	}
+	return nil
 }
 
 // Behind counts the commits that origin/dst has and origin/src does not have.

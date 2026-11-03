@@ -61,7 +61,7 @@ var menuItems = []menuItem{
 	{"⏎", "Review in tuicr; in [0] Changes, go one level in", "enter"},
 	{"⏎", "In [0] Review: open the review session", "enter"},
 	{"space", "Select the PR (or click its left edge)", " "},
-	{"s", "Sync: rebase or merge the destination in", "s"},
+	{"s", "Sync any open PR: rebase or merge (other repos: own clone)", "s"},
 	{"a", "Approve; with more than one PR selected, ask first", "a"},
 	{"m", "Approve and merge", "m"},
 	{"R", "", "R"},

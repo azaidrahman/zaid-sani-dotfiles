@@ -571,8 +571,7 @@ func (m *Model) sync() tea.Cmd {
 	d := m.d.Actions
 	m.startBusy("Fetching origin…")
 	return func() tea.Msg {
-		plan, err := actions.PlanSync(context.Background(), d, prs)
-		return syncPlanMsg{plan: plan, err: err}
+		return syncPlanMsg{plan: actions.PlanSync(context.Background(), d, prs)}
 	}
 }
 
@@ -690,14 +689,11 @@ func (m *Model) removeMerged(outs []actions.Outcome) {
 
 func (m *Model) onSyncPlan(msg syncPlanMsg) {
 	m.busy = ""
-	switch {
-	case msg.err != nil:
-		m.setFlash(msg.err.Error(), red)
-	case len(msg.plan.Todo) == 0:
+	if len(msg.plan.Todo) == 0 {
 		m.showPopup(nothingToSync(msg.plan.Skipped))
-	default:
-		m.showPopup(syncConfirm(msg.plan))
+		return
 	}
+	m.showPopup(syncConfirm(msg.plan))
 }
 
 func (m *Model) onOpen(msg openMsg) {

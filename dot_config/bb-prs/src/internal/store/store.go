@@ -54,6 +54,13 @@ func (p Paths) ReviewFile(repo string, id int) string {
 // the repo of the pane.
 func (p Paths) ReviewWorkDir() string { return filepath.Join(p.ReviewDir(), "work") }
 
+// RepoDir returns the folder of the own clone of bb-prs for repo, a full
+// name such as "ws/app". A sync of a PR that is not in the repo of the pane
+// uses this clone. RepoDir does not check the name: check it first.
+func (p Paths) RepoDir(repo string) string {
+	return filepath.Join(p.Cache, "repos", filepath.FromSlash(repo))
+}
+
 // ListCache is the content of a list file.
 type ListCache struct {
 	PRs    []bb.PR   `json:"prs"`
@@ -298,6 +305,25 @@ func (p Paths) PreviewFile(repo string, id int, updated, view string) string {
 		}
 	}
 	return filepath.Join(p.previewDir(), previewPrefix(repo, id)+keep.String()+"-"+view+".json")
+}
+
+// FindPreview returns a preview file of one view of a PR, of any update time
+// and of any age. Use it only for data that never changes. If there is no
+// file, ok is false.
+func (p Paths) FindPreview(repo string, id int, view string) (data []byte, ok bool) {
+	entries, err := os.ReadDir(p.previewDir())
+	if err != nil {
+		return nil, false
+	}
+	prefix, suffix := previewPrefix(repo, id), "-"+view+".json"
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), prefix) && strings.HasSuffix(e.Name(), suffix) {
+			if data, err := os.ReadFile(filepath.Join(p.previewDir(), e.Name())); err == nil {
+				return data, true
+			}
+		}
+	}
+	return nil, false
 }
 
 // DropPreviews removes each preview file of a PR.

@@ -4,6 +4,7 @@ package bb
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -24,15 +25,19 @@ const (
 
 // PR is one row of the list.
 type PR struct {
-	Repo   string `json:"repo"`
-	ID     int    `json:"id"`
-	Role   Role   `json:"role"`
-	URL    string `json:"url"`
-	Src    string `json:"src"`
-	Dst    string `json:"dst"`
-	Author string `json:"author"`
-	Title  string `json:"title"`
-	Draft  bool   `json:"draft"`
+	Repo string `json:"repo"`
+	ID   int    `json:"id"`
+	Role Role   `json:"role"`
+	URL  string `json:"url"`
+	Src  string `json:"src"`
+	Dst  string `json:"dst"`
+	// SrcRepo is the full name of the repo of the source branch. It is not
+	// Repo for a PR from a fork. It is empty if the list did not tell it: the
+	// inbox does not, and an old cache does not.
+	SrcRepo string `json:"src_repo,omitempty"`
+	Author  string `json:"author"`
+	Title   string `json:"title"`
+	Draft   bool   `json:"draft"`
 	// Sent is the time of creation. Updated is the time of the last change.
 	Sent    time.Time `json:"sent"`
 	Updated time.Time `json:"updated"`
@@ -104,21 +109,38 @@ type queryPR struct {
 		UUID        string `json:"uuid"`
 		DisplayName string `json:"display_name"`
 	} `json:"author"`
-	Source struct {
-		Branch struct {
-			Name string `json:"name"`
-		} `json:"branch"`
-	} `json:"source"`
-	Destination struct {
-		Branch struct {
-			Name string `json:"name"`
-		} `json:"branch"`
-	} `json:"destination"`
-	Links struct {
+	Source      side `json:"source"`
+	Destination side `json:"destination"`
+	Links       struct {
 		HTML struct {
 			Href string `json:"href"`
 		} `json:"html"`
 	} `json:"links"`
+}
+
+// side is the source or the destination of a PR in the JSON of Bitbucket.
+type side struct {
+	Branch struct {
+		Name string `json:"name"`
+	} `json:"branch"`
+	Repository struct {
+		FullName string `json:"full_name"`
+	} `json:"repository"`
+}
+
+// SourceRepo reads the full name of the source repo from the JSON of one PR,
+// for example the output of `pull-requests get`. A missing name is an error.
+func SourceRepo(pr []byte) (string, error) {
+	var p struct {
+		Source side `json:"source"`
+	}
+	if err := decode(pr, &p); err != nil {
+		return "", fmt.Errorf("PR: %w", err)
+	}
+	if p.Source.Repository.FullName == "" {
+		return "", errors.New("the PR has no source repo")
+	}
+	return p.Source.Repository.FullName, nil
 }
 
 var hrefRepoRe = regexp.MustCompile(`bitbucket\.org/([^/]+/[^/]+)/`)
@@ -174,7 +196,7 @@ func queryPRs(list []queryPR, me string, closed bool) []PR {
 		}
 		out = append(out, PR{
 			Repo: m[1], ID: q.ID, Role: role, URL: q.Links.HTML.Href,
-			Src: q.Source.Branch.Name, Dst: q.Destination.Branch.Name,
+			Src: q.Source.Branch.Name, Dst: q.Destination.Branch.Name, SrcRepo: q.Source.Repository.FullName,
 			Author: q.Author.DisplayName, Title: q.Title, Draft: q.Draft,
 			Sent: parseTime(q.CreatedOn), Updated: parseTime(q.UpdatedOn), UpdatedRaw: q.UpdatedOn,
 		})
@@ -183,15 +205,20 @@ func queryPRs(list []queryPR, me string, closed bool) []PR {
 }
 
 // dedupe keeps the first PR for each key. It returns the PRs in the order of
-// repo, then id.
+// repo, then id. An inbox does not tell the source repo. Thus, if the kept PR
+// has no SrcRepo, dedupe takes the SrcRepo of a later copy. Then a sync does
+// not need to look up the source repo.
 func dedupe(prs []PR) []PR {
-	seen := map[string]bool{}
+	seen := map[string]int{}
 	var out []PR
 	for _, p := range prs {
-		if seen[p.Key()] {
+		if i, ok := seen[p.Key()]; ok {
+			if out[i].SrcRepo == "" {
+				out[i].SrcRepo = p.SrcRepo
+			}
 			continue
 		}
-		seen[p.Key()] = true
+		seen[p.Key()] = len(out)
 		out = append(out, p)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
