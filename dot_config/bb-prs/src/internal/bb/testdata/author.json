@@ -1,0 +1,4 @@
+{"currentUser": {"uuid": "{me}"}, "items": [
+  {"id": 11, "repo": "ws/cur", "title": "t", "draft": false, "link": "https://bitbucket.org/ws/cur/pull-requests/11", "author": {"displayName": "a"}},
+  {"id": 7, "repo": "ws/zzz", "title": "t", "draft": false, "link": "https://bitbucket.org/ws/zzz/pull-requests/7", "author": {"displayName": "a"}}
+]}

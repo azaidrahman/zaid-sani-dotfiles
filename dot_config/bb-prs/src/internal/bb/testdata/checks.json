@@ -1,0 +1,5 @@
+[
+  {"type": "git_mergeability_check", "status": "PASSED", "reason": "Can merge"},
+  {"type": "default_reviewer_approvals", "status": "FAILED", "check": {"kind": "approvals"},
+   "requirement": {"minimum_approvals": 1}, "observed": {"approval_count": 0}}
+]

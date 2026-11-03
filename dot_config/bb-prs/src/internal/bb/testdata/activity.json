@@ -1,0 +1,8 @@
+[
+  {"approval": {"date": "2026-03-03T09:00:00+00:00", "user": {"display_name": "Ana"}}, "pull_request": {"id": 21}},
+  {"comment": {"created_on": "2026-03-02T12:00:00+00:00", "user": {"display_name": "Cy"},
+               "content": {"raw": "Check this.\nSecond line."}, "inline": {"path": "src/a.go", "to": 42, "from": null}},
+   "pull_request": {"id": 21}},
+  {"update": {"date": "2026-03-01T10:00:00+00:00", "author": {"display_name": "Ben"}, "changes": {}, "state": "OPEN"},
+   "pull_request": {"id": 21}}
+]
