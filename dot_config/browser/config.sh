@@ -13,6 +13,9 @@ BROWSER_SPACES="Work Research Zaid YouTube"
 #   <name>[@<driver>]|<space>|<URL prefix>
 # A driver finds the tab whose URL starts with the prefix. A line with
 # @<driver> replaces the line without it, for that driver only.
+# Google numbers the accounts in the order of sign-in. In Vivaldi, the
+# personal account is 0 and the work account is 1.
 # Do not write a company domain here. This repository is public.
 BROWSER_TABS='gchat|Work|https://chat.google.com
-gmail|Work|https://mail.google.com/mail/u/0'
+gmail|Zaid|https://mail.google.com/mail/u/0
+gmail-work|Work|https://mail.google.com/mail/u/1'

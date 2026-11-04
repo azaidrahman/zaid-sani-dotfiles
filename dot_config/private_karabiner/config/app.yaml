@@ -23,7 +23,8 @@ app:
   - 3 | web(research) | sh:$HOME/.local/bin/browser space Research
   - 4 | web(youtube) | sh:$HOME/.local/bin/browser space YouTube
   - k | KM | Keyboard Maestro
-  - l | gmail(gmd) | sh:$HOME/.local/bin/browser tab gmail
+  - l | gmail | sh:$HOME/.local/bin/browser tab gmail
+  - L | gmail(work) | sh:$HOME/.local/bin/browser tab gmail-work
   - \ | switch | !Cgrave_accent_and_tilde
   - v | chrome | Google Chrome
   - b | telegram | Telegram

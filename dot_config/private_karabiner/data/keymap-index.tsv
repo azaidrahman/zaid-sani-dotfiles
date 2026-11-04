@@ -16,7 +16,8 @@ app	⌥R	⇧g	safari	Safari
 app	⌥R	3	web(research)	sh:$HOME/.local/bin/browser space Research
 app	⌥R	4	web(youtube)	sh:$HOME/.local/bin/browser space YouTube
 app	⌥R	k	KM	Keyboard Maestro
-app	⌥R	l	gmail(gmd)	sh:$HOME/.local/bin/browser tab gmail
+app	⌥R	l	gmail	sh:$HOME/.local/bin/browser tab gmail
+app	⌥R	⇧l	gmail(work)	sh:$HOME/.local/bin/browser tab gmail-work
 app	⌥R	\	switch	!Cgrave_accent_and_tilde
 app	⌥R	v	chrome	Google Chrome
 app	⌥R	b	telegram	Telegram

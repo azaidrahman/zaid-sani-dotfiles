@@ -21,7 +21,7 @@ arc_spaces=" Work Research Zaid "
 arc_title() {
   case "$1" in
     gchat) echo GCHAT ;;
-    gmail) echo "GMAIL GMD" ;;
+    gmail-work) echo "GMAIL GMD" ;;
     *)
       echo "Arc has no tab for $1" >&2
       return 1
