@@ -19,7 +19,10 @@ import (
 )
 
 const (
-	autoMaxAge = 3 * time.Minute
+	// autoMaxAge is the age at which the screen refreshes a list. The warm
+	// run comes every 9 minutes, so a list that the screen uses stays
+	// younger.
+	autoMaxAge = 10 * time.Minute
 	staleLock  = 2 * time.Minute
 	lockWait   = 120 * time.Second
 	lockPoll   = 100 * time.Millisecond
@@ -95,9 +98,12 @@ func Calls(list, repo, ws string) []Call {
 // Run refreshes one list and saves it. It is the background refresh.
 //
 // If auto is true and the list file is new enough, Run does nothing. If
-// another refresh holds the lock, Run waits until the lock goes away, and then
-// returns. A source that fails does not fail Run. Its message goes to the
-// Errors of the list file. Then the old PRs stay, if there are any.
+// another refresh holds the lock, Run waits until the lock goes away. Then an
+// automatic Run returns. A Run that is not automatic tries the lock one more
+// time: the user asked for data from after an action, and the other refresh
+// can have started before the action. A source that fails does not fail Run.
+// Its message goes to the Errors of the list file. Then the old PRs stay, if
+// there are any.
 func Run(ctx context.Context, env Env, list string, auto bool) error {
 	path := env.Paths.ListFile(env.Prompt, list)
 	if auto && store.Fresh(path, autoMaxAge) {
@@ -109,7 +115,12 @@ func Run(ctx context.Context, env Env, list string, auto bool) error {
 	}
 	if !ok {
 		waitForLock(ctx, path)
-		return nil
+		if auto || ctx.Err() != nil {
+			return nil
+		}
+		if release, ok, err = store.TryLock(path, staleLock); err != nil || !ok {
+			return err
+		}
 	}
 	released := false
 	defer func() {
@@ -118,7 +129,7 @@ func Run(ctx context.Context, env Env, list string, auto bool) error {
 		}
 	}()
 
-	prs, errs, err := save(ctx, env, list, path)
+	prs, errs, err := save(ctx, env, env.Twg.JSON, list, path)
 	if err != nil {
 		return err
 	}
@@ -134,12 +145,25 @@ func Run(ctx context.Context, env Env, list string, auto bool) error {
 	return nil
 }
 
-// save loads the list and saves it in the file path. The caller holds the
-// lock of the file. It returns the PRs that it loaded, and one error line for
-// each source that failed. If a source fails and the file has PRs, the file
-// keeps the old PRs.
-func save(ctx context.Context, env Env, list, path string) ([]bb.PR, []string, error) {
-	prs, errs := load(ctx, env, list)
+// callFunc runs one twg call with "-o json" and returns the JSON. The method
+// JSON of twg.Runner is one.
+type callFunc func(ctx context.Context, args ...string) ([]byte, error)
+
+// save loads the list with call and saves it in the file path. The caller
+// holds the lock of the file. It returns the PRs that it loaded, and one
+// error line for each source that failed. If a source fails and the file has
+// PRs, the file keeps the old PRs.
+//
+// An action writes the list file without the lock, for example to remove a
+// merged PR. If the file changed while the load ran, the loaded data can be
+// from before the action. Then save does not write the file, but it still
+// returns the loaded PRs.
+func save(ctx context.Context, env Env, call callFunc, list, path string) ([]bb.PR, []string, error) {
+	before := modTime(path)
+	prs, errs := load(ctx, env, call, list)
+	if !modTime(path).Equal(before) {
+		return prs, errs, nil
+	}
 
 	old, _ := store.LoadList(path)
 	next := store.ListCache{PRs: prs, Errors: errs, Saved: env.now()}
@@ -164,6 +188,16 @@ func save(ctx context.Context, env Env, list, path string) ([]bb.PR, []string, e
 	return prs, errs, nil
 }
 
+// modTime returns the modification time of the file path, or the zero time
+// if the file does not exist.
+func modTime(path string) time.Time {
+	info, err := os.Stat(path)
+	if err != nil {
+		return time.Time{}
+	}
+	return info.ModTime()
+}
+
 // waitForLock waits until the lock of the list goes away. It stops after 120
 // seconds, or when ctx ends.
 func waitForLock(ctx context.Context, path string) {
@@ -182,10 +216,10 @@ func waitForLock(ctx context.Context, path string) {
 	}
 }
 
-// load runs the calls of the list at the same time. For the open list in a
-// checkout, it also runs git fetch. It returns the merged PRs and one error
-// line for each failed source.
-func load(ctx context.Context, env Env, list string) ([]bb.PR, []string) {
+// load runs the calls of the list at the same time, with call. For the open
+// list in a checkout, it also runs git fetch. It returns the merged PRs and
+// one error line for each failed source.
+func load(ctx context.Context, env Env, call callFunc, list string) ([]bb.PR, []string) {
 	calls := Calls(list, env.Repo, env.WS)
 	out := make([][]byte, len(calls))
 	fails := make([]error, len(calls))
@@ -194,7 +228,7 @@ func load(ctx context.Context, env Env, list string) ([]bb.PR, []string) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			out[i], fails[i] = env.Twg.JSON(ctx, c.Args...)
+			out[i], fails[i] = call(ctx, c.Args...)
 		}()
 	}
 	// Only the open list shows behind counts, so only the open list fetches.

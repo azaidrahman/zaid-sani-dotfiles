@@ -1,5 +1,6 @@
 // Package store keeps the files of bb-prs: the list cache, the lock of a
-// refresh, the log of actions, the last workspace, and the preview files.
+// refresh, the log of actions, the last workspace, the uses of each list, and
+// the preview files.
 package store
 
 import (
@@ -66,6 +67,45 @@ func (p Paths) ListFiles(ws, list string) []string {
 // WarmBackoff returns the path of the marker file of a rate limit in a warm
 // run. While the file is new, the warm runs make no call.
 func (p Paths) WarmBackoff() string { return filepath.Join(p.State, "warm-backoff") }
+
+func (p Paths) usedDir() string { return filepath.Join(p.State, "used") }
+
+// MarkUsed records a use of the list of prompt now. The screen marks its
+// prompt, and the warm run refreshes the lists that the screen used. Each
+// prompt has one file. Its modification time is the time of the last use,
+// and it holds the prompt and a newline.
+func (p Paths) MarkUsed(prompt string) error {
+	name := strings.ReplaceAll(prompt, "/", "_")
+	return writeAtomic(filepath.Join(p.usedDir(), name), []byte(prompt+"\n"))
+}
+
+// UsedSince returns the prompts with a use at t or after t, sorted. It reads
+// each prompt from its file. It ignores the temporary files of writeAtomic,
+// and a file that does not end with a newline: that is a partial write.
+func (p Paths) UsedSince(t time.Time) []string {
+	entries, err := os.ReadDir(p.usedDir())
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".tmp-") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || e.IsDir() || info.ModTime().Before(t) {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(p.usedDir(), e.Name()))
+		prompt, ok := strings.CutSuffix(string(data), "\n")
+		if err != nil || !ok || prompt == "" || strings.Contains(prompt, "\n") {
+			continue
+		}
+		out = append(out, prompt)
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
 
 // ReviewDir returns the directory of the review state files.
 func (p Paths) ReviewDir() string { return filepath.Join(p.State, "reviews") }

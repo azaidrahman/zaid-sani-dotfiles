@@ -15,7 +15,9 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	"bbprs/internal/actions"
 	"bbprs/internal/bb"
@@ -64,13 +66,15 @@ func must(err error) {
 // its arguments to twgLog. Spawn adds "<list> <auto>" to spawns. StartReview
 // adds "--ai-review <repo> <id> [--again]" to starts. The terminal opener is Rex, and it
 // adds each command ("rex", then its arguments) to opened. The command that
-// goes to a tab that is open fails, so that the opener opens a tab.
+// goes to a tab that is open fails, so that the opener opens a tab. MarkUsed
+// adds one to marks.
 type fixture struct {
 	m      Model
 	paths  store.Paths
 	spawns *[]string
 	starts *[]string
 	opened *[][]string
+	marks  *int
 	twgLog string
 }
 
@@ -159,7 +163,7 @@ func newFixture(dir string, prs []bb.PR, errs []string) fixture {
 	listFile := paths.ListFile(env.Prompt, "open")
 	must(store.SaveList(listFile, store.ListCache{PRs: prs, Errors: errs, Saved: time.Now()}))
 
-	spawns, starts, opened := &[]string{}, &[]string{}, &[][]string{}
+	spawns, starts, opened, marks := &[]string{}, &[]string{}, &[][]string{}, new(int)
 	m := New(Deps{
 		Env:     env,
 		Actions: actions.Deps{Twg: runner, Paths: paths, Repo: env.Repo, ListFile: listFile, Log: log, Now: time.Now},
@@ -171,7 +175,8 @@ func newFixture(dir string, prs []bb.PR, errs []string) fixture {
 			*spawns = append(*spawns, fmt.Sprintf("%s %t", list, auto))
 			return nil
 		},
-		Review: func(url string) *exec.Cmd { return exec.Command("true", url) },
+		MarkUsed: func() { *marks++ },
+		Review:   func(url string) *exec.Cmd { return exec.Command("true", url) },
 		// sh is on the PATH, so the reviewer is there. No test runs it.
 		ReviewConfig: func() (review.Config, error) {
 			return review.Config{Name: "claude", Command: []string{"sh"}, Resume: []string{"claude", "--resume", "{session}"}}, nil
@@ -202,7 +207,7 @@ func newFixture(dir string, prs []bb.PR, errs []string) fixture {
 		PopupGuard: time.Hour,
 	})
 	return fixture{m: feed(m, tea.WindowSizeMsg{Width: 120, Height: 40}), paths: paths, spawns: spawns,
-		starts: starts, opened: opened, twgLog: twgLog}
+		starts: starts, opened: opened, marks: marks, twgLog: twgLog}
 }
 
 // writeReview puts the state of a review of pr in the state directory.
@@ -480,6 +485,32 @@ func TestKeyFlows(t *testing.T) {
 		{"select two", []string{"space", "j", "space"}, func(t *testing.T, f fixture) {
 			if bar := f.bar(); !strings.Contains(bar, "2 selected") {
 				t.Errorf("bar = %q, want 2 selected", bar)
+			}
+		}},
+		// The warm run refreshes the lists that the screen used. A screen
+		// that stays open marks its list again.
+		{"the screen marks its list as used at the start, and again after 10 minutes", nil, func(t *testing.T, f fixture) {
+			start := time.Now()
+			for _, step := range []struct {
+				after time.Duration
+				want  int
+			}{{0, 1}, {9 * time.Minute, 1}, {10 * time.Minute, 2}, {19 * time.Minute, 2}} {
+				if step.after > 0 {
+					f.m = feed(f.m, tickMsg(start.Add(step.after)))
+				}
+				if *f.marks != step.want {
+					t.Errorf("marks after %s = %d, want %d", step.after, *f.marks, step.want)
+				}
+			}
+		}},
+		{"a list of 9 minutes is fresh: the command log tells it", nil, func(t *testing.T, f fixture) {
+			at := time.Now().Add(-9 * time.Minute)
+			must(os.Chtimes(f.paths.ListFile("ws/cur", "open"), at, at))
+			d := f.m.d
+			d.Log = &cmdlog.Log{}
+			f.m = New(d)
+			if want := "Open list is fresh (less than 10 minutes). No calls."; !f.logged(want) {
+				t.Errorf("command log = %+v, want %q", f.m.d.Log.Lines(10), want)
 			}
 		}},
 		{"approve of two PRs asks", []string{"space", "j", "space", "a"}, func(t *testing.T, f fixture) {
@@ -1295,6 +1326,13 @@ func TestKeyFlows(t *testing.T) {
 				t.Errorf("bar = %q, starts = %q, want %q and no start", bar, *f.starts, want)
 			}
 		}},
+		// The review can change the PR, for example its approval.
+		{"after tuicr, the shown list refreshes at once, also when it is fresh", nil, func(t *testing.T, f fixture) {
+			f.m = feed(f.m, reviewMsg{pr: fixturePRs()[0]})
+			if got := *f.spawns; len(got) == 0 || got[len(got)-1] != "open false" {
+				t.Errorf("Spawn calls = %q, want open false last", got)
+			}
+		}},
 		{"the mouse works again after tuicr", nil, func(t *testing.T, f fixture) {
 			// tuicr turns off the mouse, and Bubble Tea does not turn it on
 			// again.
@@ -1364,6 +1402,116 @@ func TestEmptyAndFailedList(t *testing.T) {
 	f.m = send(f.m, "j", "k", "enter", "m", "s", "a", "o")
 	if log := f.twg(); log != "" {
 		t.Errorf("twg log = %q, want no call", log)
+	}
+}
+
+// The status panel and the title of [2] while a refresh of the open list
+// runs. If a list shows, the refresh looks like a check in the background:
+// no spinner, and a dim mark after the normal line.
+func TestRefreshState(t *testing.T) {
+	// The dim style shows only with a color profile.
+	old := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI)
+	t.Cleanup(func() { lipgloss.SetColorProfile(old) })
+	cases := []struct {
+		name    string
+		none    bool     // no list file
+		errs    []string // the errors of the list file
+		locked  bool     // a refresh runs
+		status  string   // the end of the second line of [1], without styles
+		spinner bool     // a spinner shows in [1] and in the title of [2]
+	}{
+		{name: "a list, and a refresh runs", locked: true, status: "✓ list loaded 6m ago · checking…"},
+		{name: "a failed list, and a refresh runs", errs: []string{"could not load the review inbox: server error"}, locked: true,
+			status: "! the last refresh failed · list loaded 6m ago · checking…"},
+		{name: "no list yet, and a refresh runs", none: true, locked: true, status: "loading the open list", spinner: true},
+		{name: "a list, and no refresh", status: "✓ list loaded 6m ago"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFixture(t.TempDir(), fixturePRs(), nil)
+			// The panel of the status must be wide enough for the full line.
+			f.m = feed(f.m, tea.WindowSizeMsg{Width: 250, Height: 40})
+			path := f.paths.ListFile("ws/cur", "open")
+			if c.none {
+				must(os.Remove(path))
+			} else {
+				must(store.SaveList(path, store.ListCache{PRs: fixturePRs(), Errors: c.errs, Saved: time.Now().Add(-6 * time.Minute)}))
+				later := time.Now().Add(time.Minute)
+				must(os.Chtimes(path, later, later))
+			}
+			if c.locked {
+				if _, ok, err := store.TryLock(path, time.Minute); err != nil || !ok {
+					t.Fatalf("TryLock: %t, %v", ok, err)
+				}
+			}
+			// The tick reads the list file and its lock again.
+			f.m = feed(f.m, tickMsg(time.Now()))
+
+			p := layout(f.m.w, f.m.h)
+			status := f.m.statusBox(p.Status)
+			second := strings.TrimSpace(strings.Trim(strings.Split(ansi.Strip(status), "\n")[2], "│"))
+			title := strings.Split(ansi.Strip(f.m.prsBox(p.PRs)), "\n")[0]
+			spins := func(s string) bool {
+				return slices.ContainsFunc(spinFrames, func(fr string) bool { return strings.Contains(s, fr) })
+			}
+			if !strings.HasSuffix(second, c.status) || spins(second) != c.spinner || spins(title) != c.spinner {
+				t.Errorf("second line = %q, title = %q; want the end %q, and a spinner: %t", second, title, c.status, c.spinner)
+			}
+			if mark := dimStyle.Render("· checking…"); strings.Contains(second, "checking") && !strings.Contains(status, mark) {
+				t.Errorf("status = %q, want the dim mark %q", status, mark)
+			}
+		})
+	}
+}
+
+// A reload of the open list that brings new PRs tells their number in the
+// bar. The PRs are new only against a list that loaded: not against no list,
+// and not against a first refresh that failed. A reload of the closed list
+// tells nothing.
+func TestNewPRs(t *testing.T) {
+	more := func(n int) []bb.PR {
+		prs := fixturePRs()
+		for i := range n {
+			p := prs[0]
+			p.ID = 31 + i
+			prs = append(prs, p)
+		}
+		return prs
+	}
+	changed := fixturePRs()[:2]
+	changed[0].UpdatedRaw, changed[0].Title = "2026-11-02T09:00:00", "A new title"
+	loaded := store.ListCache{PRs: fixturePRs(), Saved: time.Now()}
+	cases := []struct {
+		name string
+		list string
+		prev store.ListCache // the list in memory before the reload
+		prs  []bb.PR         // the list after the reload
+		want string          // the text of the flash; "" for none
+	}{
+		{"one new PR", "open", loaded, more(1), "1 new PR"},
+		{"three new PRs", "open", loaded, more(3), "3 new PRs"},
+		{"a changed PR and one PR less", "open", loaded, changed, ""},
+		{"an empty list that loaded", "open", store.ListCache{Saved: time.Now()}, fixturePRs()[:1], "1 new PR"},
+		{"the first load", "open", store.ListCache{}, more(1), ""},
+		// The failed refresh saves no PRs, with its errors and the time.
+		{"the first good load after a first refresh that failed", "open",
+			store.ListCache{Errors: []string{"could not load the review inbox: server error"}, Saved: time.Now()}, more(1), ""},
+		{"the closed list", "closed", loaded, more(1), ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFixture(t.TempDir(), fixturePRs(), nil)
+			f.m.caches[c.list] = c.prev
+			path := f.paths.ListFile("ws/cur", c.list)
+			must(store.SaveList(path, store.ListCache{PRs: c.prs, Saved: time.Now()}))
+			later := time.Now().Add(time.Minute)
+			must(os.Chtimes(path, later, later))
+			f.m = feed(f.m, tickMsg(time.Now()))
+			if f.m.flash.text != c.want {
+				t.Errorf("flash = %q, want %q", f.m.flash.text, c.want)
+			}
+		})
 	}
 }
 

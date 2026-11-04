@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 const (
@@ -121,5 +124,47 @@ func TestSafeURL(t *testing.T) {
 		if got := SafeURL(tc.url); got != tc.want {
 			t.Errorf("SafeURL(%q) = %v, want %v", tc.url, got, tc.want)
 		}
+	}
+}
+
+// The files are fake ttys in a temp dir. The test cannot give a file to
+// another user, so the row "another user" asks for the files of another uid.
+func TestTTYIdle(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+	cases := []struct {
+		name     string
+		files    map[string]time.Duration // the age of the access time, by name
+		otherUID bool
+		want     time.Duration
+		wantOK   bool
+	}{
+		{name: "the newest tty", files: map[string]time.Duration{"ttys001": time.Hour, "ttys002": 3 * time.Minute},
+			want: 3 * time.Minute, wantOK: true},
+		{name: "a file that is not a tty does not count",
+			files: map[string]time.Duration{"ttys001": time.Hour, "console": time.Minute}, want: time.Hour, wantOK: true},
+		{name: "another user", files: map[string]time.Duration{"ttys001": time.Minute}, otherUID: true},
+		{name: "no tty", files: map[string]time.Duration{"console": time.Minute}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for name, age := range c.files {
+				path := filepath.Join(dir, name)
+				if err := os.WriteFile(path, nil, 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chtimes(path, now.Add(-age), now.Add(-24*time.Hour)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			uid := os.Getuid()
+			if c.otherUID {
+				uid++
+			}
+			got, ok := TTYIdle(dir, uid, now)
+			if got != c.want || ok != c.wantOK {
+				t.Errorf("TTYIdle = %s, %t; want %s, %t", got, ok, c.want, c.wantOK)
+			}
+		})
 	}
 }

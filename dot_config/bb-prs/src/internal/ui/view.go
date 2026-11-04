@@ -133,9 +133,11 @@ func (m Model) statusBox(r rect) string {
 	}
 	list := m.shownList()
 	c := m.caches[list]
+	// A refresh of a list that shows is a check in the background. Only the
+	// first load of a list gets the spinner.
 	var second string
 	switch {
-	case m.locked[list]:
+	case c.Saved.IsZero() && m.locked[list]:
 		second = m.spinner() + " " + fg(cyan).Render("loading the "+list+" list")
 	case c.Saved.IsZero():
 		second = dimStyle.Render("No " + list + " list yet. Press r to load it.")
@@ -143,6 +145,9 @@ func (m Model) statusBox(r rect) string {
 		second = fg(red).Render("! the last refresh failed") + " " + dimStyle.Render("· list loaded "+m.ago(c.Saved))
 	default:
 		second = fg(green).Render("✓") + " " + dimStyle.Render("list loaded "+m.ago(c.Saved))
+	}
+	if !c.Saved.IsZero() && m.locked[list] {
+		second += " " + dimStyle.Render("· checking…")
 	}
 	return box(tabs("[1]", statusNames, 0, state), "", []string{first, second}, r.W, r.H, state)
 }
@@ -192,7 +197,7 @@ func (m Model) prsBox(r rect) string {
 		state = focused
 	}
 	title := tabs("[2]", listNames, indexOf(listOrder, m.list), state)
-	if m.locked[m.shownList()] {
+	if list := m.shownList(); m.locked[list] && m.caches[list].Saved.IsZero() {
 		title += " " + m.spinner()
 	}
 
