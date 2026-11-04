@@ -1,25 +1,26 @@
 app	⌥R	w	WA	Whatsapp
 app	⌥R	⇧w	messages	Messages
 app	⌥R	e	obsidian	Obsidian
-app	⌥R	1	arc(work)	sh:$HOME/.config/karabiner/scripts/arc-space.sh Work
-app	⌥R	2	arc(zaid)	sh:$HOME/.config/karabiner/scripts/arc-space.sh Zaid
+app	⌥R	1	web(work)	sh:$HOME/.local/bin/browser space Work
+app	⌥R	2	web(zaid)	sh:$HOME/.local/bin/browser space Zaid
 app	⌥R	t	ghostty	sh:$HOME/.config/karabiner/scripts/ghostty-window.sh
 app	⌥R	i	IINA	IINA
 app	⌥R	⇧i	ino	Inoreader
 app	⌥R	j	jira	Jira
-app	⌥R	p	gchat	sh:$HOME/.config/karabiner/scripts/arc-tab.sh Work GCHAT
+app	⌥R	p	gchat	sh:$HOME/.local/bin/browser tab gchat
 app	⌥R	s	slack	Slack
 app	⌥R	f	cal	Calendar
 app	⌥R	⇧f	alfred	Alfred Preferences
 app	⌥R	g	iPhone	iPhone Mirroring
 app	⌥R	⇧g	safari	Safari
-app	⌥R	3	arc(research)	sh:$HOME/.config/karabiner/scripts/arc-space.sh Research
+app	⌥R	3	web(research)	sh:$HOME/.local/bin/browser space Research
+app	⌥R	4	web(youtube)	sh:$HOME/.local/bin/browser space YouTube
 app	⌥R	k	KM	Keyboard Maestro
-app	⌥R	l	gmail(gmd)	sh:$HOME/.config/karabiner/scripts/arc-tab.sh Work 'GMAIL GMD'
+app	⌥R	l	gmail(gmd)	sh:$HOME/.local/bin/browser tab gmail
 app	⌥R	\	switch	!Cgrave_accent_and_tilde
 app	⌥R	v	chrome	Google Chrome
 app	⌥R	b	telegram	Telegram
-app	⌥R	n	todoist	sh:$HOME/.config/karabiner/scripts/arc-float-tab.sh https://todoistenhanced.julesbertolino.fr
+app	⌥R	n	todoist	sh:$HOME/.local/bin/browser open https://todoistenhanced.julesbertolino.fr https://todoistenhanced.julesbertolino.fr
 app	⌥R	o	todoist(app)	Todoist
 app	⌥R	x	mixlet	Mixlet
 app	⌥R	0	claude	Claude
