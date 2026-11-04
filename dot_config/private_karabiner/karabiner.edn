@@ -49,7 +49,7 @@
        :clear-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
                                :text ""}}
        :show-ws-help {:noti {:id "org.pqrs.notificaion_message_workspace"
-                             :text "q:ws3/→ws3, w:ws4/→ws4, e:ws5/→ws5, o:back, p:full/nfull, f:float, h:←/mv←, j:↓/mv↓, k:↑/mv↑, l:→/mv→, -:-size, 0:tile, 1:ws1/→ws1, 2:ws2/→ws2, 8:vacc, 9:hacc, =:+size"}}
+                             :text "q:ws5/→ws5, w:ws6/→ws6, e:ws7/→ws7, o:back, p:full/nfull, f:float, h:←/mv←, j:↓/mv↓, k:↑/mv↑, l:→/mv→, -:-size, 0:tile, 1:ws1/→ws1, 2:ws2/→ws2, 3:ws3/→ws3, 4:ws4/→ws4, 8:vacc, 9:hacc, =:+size"}}
        :clear-ws-help {:noti {:id "org.pqrs.notificaion_message_workspace"
                               :text ""}}
        :show-l1-help {:noti {:id "org.pqrs.notificaion_message_layer1"
@@ -329,9 +329,11 @@
    [;; opt+key
     [:!O1      [:aero "workspace 1"]]  ;; ws1
     [:!O2      [:aero "workspace 2"]]  ;; ws2
-    [:!Oq      [:aero "workspace 3"]]  ;; ws3
-    [:!Ow      [:aero "workspace 4"]]  ;; ws4
-    [:!Oe      [:aero "workspace 5"]]  ;; ws5
+    [:!O3      [:aero "workspace 3"]]  ;; ws3
+    [:!O4      [:aero "workspace 4"]]  ;; ws4
+    [:!Oq      [:aero "workspace 5"]]  ;; ws5
+    [:!Ow      [:aero "workspace 6"]]  ;; ws6
+    [:!Oe      [:aero "workspace 7"]]  ;; ws7
     [:!Oh      [:aero "focus --boundaries-action wrap-around-the-workspace left"]]  ;; ←
     [:!Oj      [:aero "focus --boundaries-action wrap-around-the-workspace down"]]  ;; ↓
     [:!Ok      [:aero "focus --boundaries-action wrap-around-the-workspace up"]]  ;; ↑
@@ -348,9 +350,11 @@
     ;; opt+shift+key
     [:!OS1     [:aero "move-node-to-workspace 1 --focus-follows-window"]]  ;; →ws1
     [:!OS2     [:aero "move-node-to-workspace 2 --focus-follows-window"]]  ;; →ws2
-    [:!OSq     [:aero "move-node-to-workspace 3 --focus-follows-window"]]  ;; →ws3
-    [:!OSw     [:aero "move-node-to-workspace 4 --focus-follows-window"]]  ;; →ws4
-    [:!OSe     [:aero "move-node-to-workspace 5 --focus-follows-window"]]  ;; →ws5
+    [:!OS3     [:aero "move-node-to-workspace 3 --focus-follows-window"]]  ;; →ws3
+    [:!OS4     [:aero "move-node-to-workspace 4 --focus-follows-window"]]  ;; →ws4
+    [:!OSq     [:aero "move-node-to-workspace 5 --focus-follows-window"]]  ;; →ws5
+    [:!OSw     [:aero "move-node-to-workspace 6 --focus-follows-window"]]  ;; →ws6
+    [:!OSe     [:aero "move-node-to-workspace 7 --focus-follows-window"]]  ;; →ws7
     [:!OSh     [:aero "move left"]]  ;; mv←
     [:!OSj     [:aero "move down"]]  ;; mv↓
     [:!OSk     [:aero "move up"]]  ;; mv↑
