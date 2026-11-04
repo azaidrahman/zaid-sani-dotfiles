@@ -169,6 +169,26 @@ drv_focus_url() {
   viv_focus_tab "${found%%	*}" "${found#*	}"
 }
 
+# drv_open_in <space> <index> <url>: show the workspace, then focus the tab
+# of the URL in it. If the workspace has no such tab, open the URL there: a
+# new tab opens in the workspace that Vivaldi shows, unless a workspace rule
+# sends it to a different one.
+drv_open_in() {
+  local pos found
+  pos=$(viv_position "$1")
+  if [ "$pos" -eq 0 ]; then
+    echo "Vivaldi has no workspace $1" >&2
+    return 1
+  fi
+  viv_show "$pos" || return 1
+  found=$(viv_js find-in "$3" "$pos") || return 1
+  if [ -n "$found" ]; then
+    viv_js activate "$found" > /dev/null
+  else
+    open -b "$DRIVER_BUNDLE" "$3"
+  fi
+}
+
 # drv_tab <name> <space> <url prefix>
 drv_tab() {
   drv_focus_url "$3" "$3" "$2"
@@ -181,6 +201,13 @@ drv_tabs() {
     return 0
   fi
   viv_js tabs
+}
+
+# drv_current_space: print the workspace of the front window, or nothing.
+# Alfred runs this at each key press. Do not start Vivaldi.
+drv_current_space() {
+  pgrep -x Vivaldi > /dev/null || return 0
+  viv_js current
 }
 
 # drv_focus_tab <window id> <tab id>

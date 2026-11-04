@@ -41,6 +41,13 @@ drv_space() {
   "$arc_scripts/arc-space.sh" "$1"
 }
 
+# drv_open_in <space> <index> <url>: show the space, then open the URL in a
+# new tab.
+drv_open_in() {
+  drv_space "$1" "$2" || return 1
+  open -b "$DRIVER_BUNDLE" "$3"
+}
+
 # drv_space_window <name> <index>: arc-space.sh already opens a new window
 # when no window shows the space.
 drv_space_window() {

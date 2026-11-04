@@ -45,7 +45,7 @@
 
 ;; BEGIN HELP-TEXT (auto-generated from config/help-text.yaml)
  :tos {:show-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
-                              :text "w:WA, W:messages, e:obsidian, r:rex, t:ghostty, i:IINA, I:ino, o:todoist(app), p:gchat, \\:switch, s:slack, f:cal, F:alfred, g:iPhone, G:safari, j:jira, k:KM, l:gmail, L:gmail(work), x:mixlet, v:chrome, b:telegram, n:todoist, m:ytm, 0:claude, 1:web(work), 2:web(zaid), 3:web(research), 4:web(youtube), ⇧1:win(work), ⇧2:win(zaid), ⇧3:win(research), ⇧4:win(youtube)"}}
+                              :text "w:WA, W:messages, e:obsidian, r:rex, t:ghostty, i:IINA, I:ino, o:todoist(app), p:gchat, \\:switch, s:slack, f:cal, F:alfred, g:iPhone, G:safari, j:jira, k:KM, l:gmail, L:gmail(work), x:mixlet, v:chrome, b:telegram, n:todoist, m:ytm, 0:claude, 1:web(work), 2:web(zaid), 3:web(research), 4:web(youtube), 5:web(study), ⇧1:win(work), ⇧2:win(zaid), ⇧3:win(research), ⇧4:win(youtube), ⇧5:win(study)"}}
        :clear-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
                                :text ""}}
        :show-ws-help {:noti {:id "org.pqrs.notificaion_message_workspace"
@@ -65,7 +65,7 @@
        :clear-l3-help {:noti {:id "org.pqrs.notificaion_message_layer3"
                               :text ""}}
        :show-hyper-help {:noti {:id "org.pqrs.notificaion_message_hyper"
-                                :text "h:← ⇧prevTab ⌘sel ⌥word ⌥⌘selWord\nj:↓ ⇧nextApp ⌘sel ⌥⌘sel3 ⌃expose\nk:↑ ⇧prevApp ⌘sel ⌥⌘sel3\nl:→ ⇧nextTab ⌘sel ⌥word ⌥⌘selWord\nu:home ⌘sel\np:end ⌘sel\nx:⌫ ⇧⌦\nf:expose\nc:alfred clip\ns:alfred snippet\nz:alfred zuno search\n-:alfred arc bookmarks\n=:alfred arc opentabs\n\\:alfred pin bookmarks\ne:alfred open windows\nr:alfred rex tabs ⇧alfred bitbucket repos\ni:mouseless overlay\ng:alfredo new task ⌃alfredo all tasks\n2:alfred jira ⇧alfred bitbucket prs\n8:alfred menu bar search\nm:alfred youtube music\n0:ice bar\nq:mouseless freekey (hold)\no:⌃alfred audio out\n⌘spa:emoji  esc:caps"}}
+                                :text "h:← ⇧prevTab ⌘sel ⌥word ⌥⌘selWord\nj:↓ ⇧nextApp ⌘sel ⌥⌘sel3 ⌃expose\nk:↑ ⇧prevApp ⌘sel ⌥⌘sel3\nl:→ ⇧nextTab ⌘sel ⌥word ⌥⌘selWord\nu:home ⌘sel\np:end ⌘sel\nx:⌫ ⇧⌦\nf:expose\nc:alfred clip\ns:alfred snippet\nz:alfred zuno search\n-:browser bookmarks\n=:browser tabs\n\\:alfred pin bookmarks\ne:alfred open windows\nr:alfred rex tabs ⇧alfred bitbucket repos\ni:mouseless overlay\ng:alfredo new task ⌃alfredo all tasks\n2:alfred jira ⇧alfred bitbucket prs\n8:alfred menu bar search\nm:alfred youtube music\n0:ice bar\nq:mouseless freekey (hold)\no:⌃alfred audio out\n⌘spa:emoji  esc:caps"}}
        :clear-hyper-help {:noti {:id "org.pqrs.notificaion_message_hyper"
                                  :text ""}}
 }
@@ -130,6 +130,7 @@
     [:!S2 "$HOME/.local/bin/browser space-window Zaid":app-launch]
     [:!S3 "$HOME/.local/bin/browser space-window Research":app-launch]
     [:!S4 "$HOME/.local/bin/browser space-window YouTube":app-launch]
+    [:!S5 "$HOME/.local/bin/browser space-window Study":app-launch]
     ; [:!St :!TOSf13                    :app-launch]  ;; quick terminal (ghostty)
     ; [:!Sv [:open "Arc"]                   :app-launch]
 
@@ -158,6 +159,7 @@
     [:2 "$HOME/.local/bin/browser space Zaid":app-launch]
     [:3 "$HOME/.local/bin/browser space Research":app-launch]
     [:4 "$HOME/.local/bin/browser space YouTube":app-launch]
+    [:5 "$HOME/.local/bin/browser space Study":app-launch]
     ; [:y [:open "Sioyek"]                  :app-launch]
     ; [:u [:open "Conductor"]               :app-launch]
     ; [:d [:open "T3 Code (Alpha)"]         :app-launch]
@@ -220,10 +222,10 @@
     [:!QWERz           :!CTOSz]  ;; alfred zuno search
 
     ;; -
-    [:!QWERhyphen      :!CTOShyphen]  ;; alfred arc bookmarks
+    [:!QWERhyphen      :!CTOShyphen]  ;; browser bookmarks
 
     ;; =
-    [:!QWERequal_sign  :!CTOSequal_sign]  ;; alfred arc opentabs
+    [:!QWERequal_sign  :!CTOSequal_sign]  ;; browser tabs
 
     ;; \
     [:!QWERbackslash   :!CTOSbackslash]  ;; alfred pin bookmarks

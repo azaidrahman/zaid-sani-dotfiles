@@ -8,9 +8,15 @@
 //                              tab whose URL starts with the prefix, or
 //                              nothing. The position is of the workspace of
 //                              the tab (see below), else of the space, else 0.
+//   find-in <url> <position>   print the id of the first tab in the workspace
+//                              at the position whose URL starts with the URL,
+//                              when you ignore the Google account parts of
+//                              both (see sameAccountFree), or nothing
 //   tab-position <tab id>      print the position of the workspace of the tab
 //   activate <tab id>          make the tab the active tab of its window
 //   tabs                       print the open tabs as Alfred script filter JSON
+//   current                    print the name of the workspace of the active
+//                              tab of the front window, or nothing
 //
 // Vivaldi scripting does not tell the workspace of a tab. This helper reads
 // it from the session file of Vivaldi (see sessionWorkspaces). If the session
@@ -104,6 +110,17 @@ function positionOfTab(ws, session, tab) {
   return positionOfUrl(ws, tab.url);
 }
 
+// sameAccountFree: the URL without the fragment and without the parts that
+// select a Google account ("/u/1/" in the path, "authuser=" in the query).
+// A bookmark that selects the account by email ("authuser=<email>") then
+// matches the tab of that account, which Google moved to "/u/<number>/".
+function sameAccountFree(url) {
+  return url.replace(/#.*$/, '')
+    .replace(/\/u\/[^/?#]+(\/|$)/, '/')
+    .replace(/([?&])authuser=[^&]*(&|$)/, '$1')
+    .replace(/[?&]$/, '');
+}
+
 // Tabs that the tab list does not show.
 function isHidden(url) {
   return url === 'about:blank' || url.startsWith('chrome://vivaldi-webui/startpage') ||
@@ -145,6 +162,15 @@ function run(argv) {
         (arg2 ? positionOfName(ws, arg2) : 0);
       return `${tab.id}\t${pos}`;
     }
+    case 'find-in': {
+      const ws = readWorkspaces(prefsPath);
+      const session = sessionWorkspaces(prefsPath);
+      const want = sameAccountFree(arg);
+      const pos = Number(arg2);
+      const tab = allTabs().find((t) => positionOfTab(ws, session, t) === pos &&
+        sameAccountFree(t.url).startsWith(want));
+      return tab ? tab.id : '';
+    }
     case 'tab-position':
       return String(positionOfTab(readWorkspaces(prefsPath), sessionWorkspaces(prefsPath),
         tabById(arg)));
@@ -152,6 +178,12 @@ function run(argv) {
       const tab = tabById(arg);
       tab.window.activeTabIndex = tab.index;
       return 'ok';
+    }
+    case 'current': {
+      const ws = readWorkspaces(prefsPath);
+      const front = Application('Vivaldi').windows[0].activeTab;
+      const pos = positionOfTab(ws, sessionWorkspaces(prefsPath), { id: String(front.id()), url: front.url() });
+      return pos ? ws.list[pos - 1].name : '';
     }
     case 'tabs': {
       // The subtitle starts with the workspace, so that the user sees it.

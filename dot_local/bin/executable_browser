@@ -6,9 +6,13 @@
 #   browser space-window <name>     show a space in its own window
 #   browser tab <name>              focus a named tab (see config.sh)
 #   browser tabs                    print the open tabs as Alfred JSON
+#   browser bookmarks               print the Pinboard bookmarks of all
+#                                   spaces as Alfred JSON, current first
 #   browser focus-tab <win> <tab>   focus a tab that "browser tabs" printed
 #   browser open <url> [<prefix>]   open the URL; if a tab URL starts with
 #                                   the prefix, focus that tab instead
+#   browser open-in <space> <url>   show the space, then focus the tab of
+#                                   the URL in it, or open the URL there
 #   browser use <driver>            use the driver, and make its browser
 #                                   the default browser
 #   browser current                 print the name of the active driver
@@ -16,10 +20,10 @@
 # Each browser has a driver: $BROWSER_HOME/drivers/<name>.sh. A driver sets
 # DRIVER_APP and DRIVER_BUNDLE, and defines one function for each action that
 # it can do: drv_space, drv_space_window, drv_tab, drv_tabs, drv_focus_tab,
-# and drv_focus_url.
+# drv_focus_url, drv_open_in, and drv_current_space.
 # If the driver cannot do an action, or the action fails, the command shows a
-# notification. "browser tabs" shows the error as an Alfred item instead,
-# because Alfred runs it at each key press.
+# notification. "browser tabs" and "browser bookmarks" show the error as an
+# Alfred item instead, because Alfred runs them at each key press.
 #
 # The active driver is $BROWSER_DRIVER if it is set, else the one in the
 # state file, else BROWSER_DEFAULT from config.sh.
@@ -54,7 +58,7 @@ json_string() {
 
 # fail <status> <message>: report the error and stop.
 fail() {
-  if [ "$action" = tabs ]; then
+  if [ "$action" = tabs ] || [ "$action" = bookmarks ]; then
     printf '{"items":[{"title":%s,"valid":false}]}\n' "$(json_string "$2")"
     exit 0
   fi
@@ -63,7 +67,7 @@ fail() {
 }
 
 usage() {
-  sed -n '3,15s/^# \{0,1\}//p' "$0" >&2
+  sed -n '3,19s/^# \{0,1\}//p' "$0" >&2
   fail 2 "unknown action: ${action:-none}"
 }
 
@@ -159,7 +163,7 @@ case "$action" in
     echo "browser: now using $1"
     exit 0
     ;;
-  space | space-window | tab | tabs | focus-tab | open) ;;
+  space | space-window | tab | tabs | bookmarks | focus-tab | open | open-in) ;;
   *) usage ;;
 esac
 
@@ -184,6 +188,16 @@ case "$action" in
   tabs)
     call drv_tabs
     ;;
+  bookmarks)
+    # The bookmarks of the current space come first. A driver that cannot
+    # tell the current space gets them in the order of the spaces.
+    current=""
+    if declare -F drv_current_space > /dev/null; then
+      current=$(drv_current_space 2> /dev/null) || current=""
+    fi
+    osascript -l JavaScript "$BROWSER_HOME/lib/bookmarks.js" "${BROWSER_BOOKMARKS:-}" \
+      "$current" "${BROWSER_BOOKMARK_TAGS:-}" || fail 1 "cannot list the bookmarks"
+    ;;
   focus-tab)
     [ $# -eq 2 ] || usage
     call drv_focus_tab "$1" "$2"
@@ -195,5 +209,10 @@ case "$action" in
     else
       open -b "$DRIVER_BUNDLE" "$1" || fail 1 "could not open $1 in $DRIVER_APP"
     fi
+    ;;
+  open-in)
+    [ $# -eq 2 ] || usage
+    index=$(space_index "$1") || fail 2 "unknown space $1"
+    call drv_open_in "$1" "$index" "$2"
     ;;
 esac

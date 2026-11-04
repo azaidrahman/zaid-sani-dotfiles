@@ -87,10 +87,10 @@ hyper:
     -: "!CTOSz" # alfred zuno search
 
   -:
-    -: "!CTOShyphen" # alfred arc bookmarks
+    -: "!CTOShyphen" # browser bookmarks
 
   =:
-    -: "!CTOSequal_sign" # alfred arc opentabs
+    -: "!CTOSequal_sign" # browser tabs
 
   \:
     -: "!CTOSbackslash" # alfred pin bookmarks

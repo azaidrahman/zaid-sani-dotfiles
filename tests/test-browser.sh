@@ -21,12 +21,23 @@ if [ -d "$repo_root/dot_config/browser/lib" ]; then
   cp -R "$repo_root/dot_config/browser/lib" "$home/lib"
 fi
 
-cat > "$home/config.sh" <<'EOF'
+cat > "$home/config.sh" <<EOF
 BROWSER_DEFAULT=fake
 BROWSER_SPACES="Work Research Zaid YouTube Fail"
 BROWSER_TABS='gchat|Work|https://chat.google.com
 gmail|Work|https://mail.google.com/mail/u/0
 gmail@fake|Work|https://example.com/u/1'
+BROWSER_BOOKMARK_TAGS='Work|browser/work
+Zaid|browser/personal'
+BROWSER_BOOKMARKS="$TMP/pinplus.json"
+EOF
+
+# A bookmark cache in the shape of the Pin Plus Alfred workflow: the tags of
+# a bookmark are the subtitle of its "alt" modifier.
+cat > "$TMP/pinplus.json" <<'EOF'
+[{"title": "Work board", "arg": "https://example.com/board", "mods": {"alt": {"subtitle": "browser/work tools"}}},
+ {"title": "Home recipes", "arg": "https://example.com/recipes", "mods": {"alt": {"subtitle": "cooking browser/personal"}}},
+ {"title": "Untagged page", "arg": "https://example.com/other", "mods": {"alt": {"subtitle": "[No tags]"}}}]
 EOF
 
 cat > "$home/drivers/fake.sh" <<'EOF'
@@ -38,14 +49,18 @@ drv_space() {
 }
 drv_tab() { echo "tab $*" >> "$STUB_LOG"; }
 drv_space_window() { echo "space-window $*" >> "$STUB_LOG"; }
+drv_current_space() { echo Work; }
+drv_open_in() { echo "open-in $*" >> "$STUB_LOG"; }
 EOF
 
 cat > "$TMP/bin/notifier" <<'EOF'
 #!/bin/sh
 echo "notify $*" >> "$STUB_LOG"
 EOF
+# The bookmark script only reads a file, so it runs for real.
 cat > "$TMP/bin/osascript" <<'EOF'
 #!/bin/sh
+case "$*" in *bookmarks.js*) exec /usr/bin/osascript "$@" ;; esac
 echo "osascript $*" >> "$STUB_LOG"
 EOF
 chmod +x "$TMP/bin/notifier" "$TMP/bin/osascript"
@@ -93,5 +108,7 @@ run "driver override" 0 "log=tab gmail Work https://example.com/u/1" notify - ta
 run "unknown tab" 2 "unknown tab nope" "log=tab" - tab nope
 run "use" 0 "state=fake;;osascript -l JavaScript $home/lib/set-default.js com.example.fake" notify gone use fake
 run "tabs not supported" 0 'fake cannot list tabs;;"valid":false' notify - tabs
+run "bookmarks of all spaces" 0 'Work board;;Home recipes;;"arg":"https://example.com/board";;"variables":{"space":"Zaid"}' "Untagged page" - bookmarks
+run "open a URL in a space" 0 "log=open-in Zaid 3 https://example.com/recipes" notify - open-in Zaid https://example.com/recipes
 
 exit "$fail"

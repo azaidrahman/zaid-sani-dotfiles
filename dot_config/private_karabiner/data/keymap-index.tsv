@@ -19,6 +19,8 @@ app	⌥R	⇧1	win(work)	sh:$HOME/.local/bin/browser space-window Work
 app	⌥R	⇧2	win(zaid)	sh:$HOME/.local/bin/browser space-window Zaid
 app	⌥R	⇧3	win(research)	sh:$HOME/.local/bin/browser space-window Research
 app	⌥R	⇧4	win(youtube)	sh:$HOME/.local/bin/browser space-window YouTube
+app	⌥R	5	web(study)	sh:$HOME/.local/bin/browser space Study
+app	⌥R	⇧5	win(study)	sh:$HOME/.local/bin/browser space-window Study
 app	⌥R	k	KM	Keyboard Maestro
 app	⌥R	l	gmail	sh:$HOME/.local/bin/browser tab gmail
 app	⌥R	⇧l	gmail(work)	sh:$HOME/.local/bin/browser tab gmail-work
@@ -123,8 +125,8 @@ hyper	⇪	f	expose	!Tup_arrow
 hyper	⇪	c	alfred clip	!CTOSc
 hyper	⇪	s	alfred snippet	!CTOSs
 hyper	⇪	z	alfred zuno search	!CTOSz
-hyper	⇪	-	alfred arc bookmarks	!CTOShyphen
-hyper	⇪	=	alfred arc opentabs	!CTOSequal_sign
+hyper	⇪	-	browser bookmarks	!CTOShyphen
+hyper	⇪	=	browser tabs	!CTOSequal_sign
 hyper	⇪	\	alfred pin bookmarks	!CTOSbackslash
 hyper	⇪	e	alfred open windows	!CTOSe
 hyper	⇪	r	alfred rex tabs	!CTOSt

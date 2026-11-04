@@ -27,6 +27,8 @@ app:
   - ⇧2 | win(zaid) | sh:$HOME/.local/bin/browser space-window Zaid
   - ⇧3 | win(research) | sh:$HOME/.local/bin/browser space-window Research
   - ⇧4 | win(youtube) | sh:$HOME/.local/bin/browser space-window YouTube
+  - 5 | web(study) | sh:$HOME/.local/bin/browser space Study
+  - ⇧5 | win(study) | sh:$HOME/.local/bin/browser space-window Study
   - k | KM | Keyboard Maestro
   - l | gmail | sh:$HOME/.local/bin/browser tab gmail
   - L | gmail(work) | sh:$HOME/.local/bin/browser tab gmail-work
