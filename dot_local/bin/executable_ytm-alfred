@@ -12,6 +12,10 @@
 #   fwd 45    seek forward 45 seconds
 #   back 20   seek back 20 seconds
 #
+# If no control matches the words, one row offers a search for a song. Enter
+# on that row changes the query to "yts <words>". The keyword "yts" runs
+# ytm-search.
+#
 # The arg of each row is a ytm command. The action of the workflow runs it.
 # The workflow is in the Alfred sync folder. It holds only info.plist and the
 # icons. This script and ytm are in chezmoi.
@@ -96,7 +100,10 @@ jq -c --arg q "$query" --arg thumb "$thumb" '
         "dislike"; if $s.disliked then "disliked" else "dislike" end; "thumbs down"),
     row("Shuffle"; "Shuffle the queue"; "shuffle"; "shuffle"; "mix random"),
     row("Repeat"; "Change the repeat mode"; "repeat"; "repeat"; "loop"),
-    row("Open the player"; "Show the player of the menu bar icon"; "tray"; "player"; "tray mini window")
+    row("Open the player"; "Show the player of the menu bar icon"; "tray"; "player"; "tray mini window"),
+    # Enter on a row that is not valid puts the autocomplete text in Alfred.
+    {uid: "search", title: "Search for a song", subtitle: "Type yts and the name of a song",
+     autocomplete: "yts ", valid: false, icon: {path: "icons/search.png"}, match: "find song"}
   ] as $controls |
 
   # A query with a number makes one row with that value.
@@ -130,6 +137,8 @@ jq -c --arg q "$query" --arg thumb "$thumb" '
   | map(del(.match)) as $items
   | {rerun: 1, skipknowledge: true,
      items: (if ($items | length) > 0 then $items
-             else [{title: "No control matches “\($q)”", subtitle: "Try play, next, vol 30, or fwd 45", valid: false, icon: {path: "icons/warn.png"}}]
+             else ($q | gsub("^ +| +$"; "")) as $words
+               | [{uid: "search", title: "Search for “\($words)”", subtitle: "No control matches. Press Enter to search for a song",
+                   autocomplete: "yts \($words)", valid: false, icon: {path: "icons/search.png"}}]
              end)}
 ' <<<"$data"
