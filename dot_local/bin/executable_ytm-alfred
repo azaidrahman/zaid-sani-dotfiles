@@ -27,7 +27,7 @@ cache="${alfred_workflow_cache:-$HOME/Library/Caches/com.zaid.ytm}"
 # One row that tells why there are no controls. With an arg, Enter runs it.
 message() {
   jq -cn --arg t "$1" --arg s "$2" --arg a "${3:-}" \
-    '{rerun: 1, items: [{title: $t, subtitle: $s, arg: $a, valid: ($a != ""), icon: {path: "icons/warn.png"}}]}'
+    '{rerun: 1, skipknowledge: true, items: [{uid: "message", title: $t, subtitle: $s, arg: $a, valid: ($a != ""), icon: {path: "icons/warn.png"}}]}'
 }
 
 if ! data="$("$ytm" json 2>&1)"; then
@@ -68,8 +68,10 @@ jq -c --arg q "$query" --arg thumb "$thumb" '
   def segments($n; $c): [range($n)] | map($c) | join("");
   def bar: ((($s.percentage // 0) / 10) | floor | if . > 10 then 10 else . end) as $n
     | segments($n; "━") + "●" + segments(10 - $n; "─");
+  # The uid keeps the selection on the same row when Alfred runs the script
+  # again each second. Without a uid, the selection goes back to the top.
   def row($title; $sub; $arg; $icon; $match):
-    {title: $title, subtitle: $sub, arg: $arg, icon: {path: "icons/\($icon).png"}, match: $match};
+    {uid: $arg, title: $title, subtitle: $sub, arg: $arg, icon: {path: "icons/\($icon).png"}, match: $match};
 
   ($q | ascii_downcase | gsub("^ +| +$"; "")) as $query |
   ($query | [splits(" +")] | map(select(length > 0))) as $words |
@@ -113,9 +115,10 @@ jq -c --arg q "$query" --arg thumb "$thumb" '
     [$controls[] | select(matches)]
   else
     (if $t == null then
-       [{title: "Nothing is loaded", subtitle: "Press Enter to open the player", arg: "tray", icon: {path: "icon.png"}}]
+       [{uid: "now", title: "Nothing is loaded", subtitle: "Press Enter to open the player", arg: "tray", icon: {path: "icon.png"}}]
      else
-       [{title: ($t.video.title // "Unknown track"),
+       [{uid: "now",
+         title: ($t.video.title // "Unknown track"),
          subtitle: ([($t.video.author // empty),
                      ((if $s.playing then "▶" else "⏸" end) + "  " + ($s.progress | mmss) + " " + bar + " " + ($s.duration | mmss)),
                      ($vol // empty),
