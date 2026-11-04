@@ -68,17 +68,23 @@ viv_focus_main() {
 }
 
 # viv_show <position>: focus the main window, and show the workspace at the
-# position (1 is the first workspace). Send the keys as soon as Vivaldi is
-# the frontmost application. If it does not become frontmost in 1 second,
-# stop, so that the keys never go to a different application.
+# position (1 is the first workspace).
 viv_show() {
+  viv_focus_main || return 1
+  viv_key "$1"
+}
+
+# viv_key <position>: send the shortcut for the workspace at the position to
+# the focused Vivaldi window. Send it as soon as Vivaldi is the frontmost
+# application. If Vivaldi does not become frontmost in 1 second, stop, so
+# that the keys never go to a different application.
+viv_key() {
   local digit=$(($1 + 1)) code
   if [ "$digit" -gt 9 ]; then
     echo "no shortcut for workspace $1" >&2
     return 1
   fi
   code=$(echo "$viv_digit_codes" | cut -d' ' -f"$digit")
-  viv_focus_main || return 1
   osascript - "$code" <<'EOF'
 on run argv
   tell application "System Events"
@@ -112,6 +118,30 @@ drv_space() {
     return 1
   fi
   viv_show "$pos"
+}
+
+# drv_space_window <name> <index>: show the workspace in a new window. A
+# workspace can be open in only one window. If it is already open in a
+# window, Vivaldi focuses that window instead, and the new window stays
+# empty. Then close the new window: this driver made it, and it is empty.
+drv_space_window() {
+  local pos before new focused
+  pos=$(viv_position "$1")
+  if [ "$pos" -eq 0 ]; then
+    echo "Vivaldi has no workspace $1" >&2
+    return 1
+  fi
+  before=$(aero_ids | tr '\n' ' ')
+  osascript -e 'tell application "Vivaldi" to make new window' > /dev/null || return 1
+  new=$(aero_wait_new "$before") || return 1
+  aero_focus "$new" || return 1
+  viv_key "$pos" || return 1
+  sleep 0.4
+  focused=$("$AEROSPACE_BIN" list-windows --focused --format '%{window-id}')
+  if [ "$focused" != "$new" ]; then
+    "$AEROSPACE_BIN" close --window-id "$new"
+    aero_focus "$focused"
+  fi
 }
 
 # viv_focus_tab <tab id> <position>: show the workspace at the position, if it

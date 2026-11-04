@@ -2,6 +2,7 @@
 # Format: key | label | app name (or !GokuCommand)
 #
 # Uppercase key = shifted variant (right_option + shift + key)
+# ⇧ before a key that has no uppercase = shifted variant, for example ⇧1
 # Prefix app with ! to use a raw goku command instead of open -a
 
 app:
@@ -22,6 +23,10 @@ app:
   - G | safari | Safari
   - 3 | web(research) | sh:$HOME/.local/bin/browser space Research
   - 4 | web(youtube) | sh:$HOME/.local/bin/browser space YouTube
+  - ⇧1 | win(work) | sh:$HOME/.local/bin/browser space-window Work
+  - ⇧2 | win(zaid) | sh:$HOME/.local/bin/browser space-window Zaid
+  - ⇧3 | win(research) | sh:$HOME/.local/bin/browser space-window Research
+  - ⇧4 | win(youtube) | sh:$HOME/.local/bin/browser space-window YouTube
   - k | KM | Keyboard Maestro
   - l | gmail | sh:$HOME/.local/bin/browser tab gmail
   - L | gmail(work) | sh:$HOME/.local/bin/browser tab gmail-work

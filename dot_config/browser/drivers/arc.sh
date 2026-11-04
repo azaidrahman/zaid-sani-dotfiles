@@ -41,6 +41,12 @@ drv_space() {
   "$arc_scripts/arc-space.sh" "$1"
 }
 
+# drv_space_window <name> <index>: arc-space.sh already opens a new window
+# when no window shows the space.
+drv_space_window() {
+  drv_space "$@"
+}
+
 # drv_tab <name> <space> <url prefix>
 drv_tab() {
   local title

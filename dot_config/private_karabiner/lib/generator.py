@@ -15,9 +15,22 @@ LAYERS = {
 
 # -- App-launch rules ---------------------------------------------------------
 
+def shifted_base(key):
+    """Return the unshifted key of a shifted key, or None.
+
+    An uppercase letter ("W") is a shifted letter. "⇧" before a key ("⇧1")
+    is the shifted variant of keys that have no uppercase, such as digits.
+    """
+    if key.isalpha() and key.isupper():
+        return key.lower()
+    if len(key) == 2 and key[0] == '⇧':
+        return key[1]
+    return None
+
+
 def make_rule(key, label, app):
-    is_shifted = key.isupper() and key.isalpha()
-    from_key = f":!S{key.lower()}" if is_shifted else f":{GOKU_NAMES.get(key, key)}"
+    base = shifted_base(key)
+    from_key = f":!S{GOKU_NAMES.get(base, base)}" if base else f":{GOKU_NAMES.get(key, key)}"
     if app and app.startswith('!'):
         to_part = f":{app}"
     elif app and app.startswith('sh:'):
@@ -38,16 +51,22 @@ def extract_edn_keys(existing_block):
         return active, commented
     for line in existing_block.split('\n'):
         stripped = line.strip()
-        m = re.match(r'\[:(!S)?([a-z])\s', stripped)
+        m = re.match(r'\[:(!S)?([a-z0-9])\s', stripped)
         if m:
-            key = m.group(2).upper() if m.group(1) == '!S' else m.group(2)
-            active[key] = stripped
+            active[edn_key(m)] = stripped
             continue
-        m = re.match(r';+\s*\[:(!S)?([a-z])\s', stripped)
+        m = re.match(r';+\s*\[:(!S)?([a-z0-9])\s', stripped)
         if m:
-            key = m.group(2).upper() if m.group(1) == '!S' else m.group(2)
-            commented[key] = stripped.lstrip('; ')
+            commented[edn_key(m)] = stripped.lstrip('; ')
     return active, commented
+
+
+def edn_key(m):
+    """Return the YAML key of an EDN rule match: "w", "W", "1", or "⇧1"."""
+    key = m.group(2)
+    if m.group(1) != '!S':
+        return key
+    return key.upper() if key.isalpha() else f'⇧{key}'
 
 
 def generate_app_rules(entries, existing_block):
@@ -59,7 +78,7 @@ def generate_app_rules(entries, existing_block):
         key, label, app = parse_entry(entry)
         new_keys.add(key)
         rule = make_rule(key, label, app)
-        if key.isupper() and key.isalpha():
+        if shifted_base(key):
             shifted.append((key, rule))
         else:
             unshifted.append((key, rule))
@@ -74,7 +93,7 @@ def generate_app_rules(entries, existing_block):
         if key not in new_keys:
             warnings.append(f"  COMMENTING OUT: '{key}' active in EDN but missing from YAML -> {rule_line}")
             entry = (key, f"    ; {rule_line}")
-            if key.isupper() and key.isalpha():
+            if shifted_base(key):
                 removed_shifted.append(entry)
             else:
                 removed_unshifted.append(entry)
@@ -82,7 +101,7 @@ def generate_app_rules(entries, existing_block):
     for key, rule_line in commented.items():
         if key not in new_keys:
             entry = (key, f"    ; {rule_line}")
-            if key.isupper() and key.isalpha():
+            if shifted_base(key):
                 removed_shifted.append(entry)
             else:
                 removed_unshifted.append(entry)

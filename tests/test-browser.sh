@@ -37,6 +37,7 @@ drv_space() {
   echo "space $*" >> "$STUB_LOG"
 }
 drv_tab() { echo "tab $*" >> "$STUB_LOG"; }
+drv_space_window() { echo "space-window $*" >> "$STUB_LOG"; }
 EOF
 
 cat > "$TMP/bin/notifier" <<'EOF'
@@ -87,6 +88,7 @@ run "failed action" 1 "fake space failed: boom" - - space Fail
 run "unknown driver" 2 "unknown driver gone" "log=space" gone space Work
 run "space index" 0 "log=space YouTube 4" notify - space YouTube
 run "unknown space" 2 "unknown space Nope" "log=space" - space Nope
+run "space in its own window" 0 "log=space-window Zaid 3" notify - space-window Zaid
 run "driver override" 0 "log=tab gmail Work https://example.com/u/1" notify - tab gmail
 run "unknown tab" 2 "unknown tab nope" "log=tab" - tab nope
 run "use" 0 "state=fake;;osascript -l JavaScript $home/lib/set-default.js com.example.fake" notify gone use fake

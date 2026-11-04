@@ -15,6 +15,10 @@ app	⌥R	g	iPhone	iPhone Mirroring
 app	⌥R	⇧g	safari	Safari
 app	⌥R	3	web(research)	sh:$HOME/.local/bin/browser space Research
 app	⌥R	4	web(youtube)	sh:$HOME/.local/bin/browser space YouTube
+app	⌥R	⇧1	win(work)	sh:$HOME/.local/bin/browser space-window Work
+app	⌥R	⇧2	win(zaid)	sh:$HOME/.local/bin/browser space-window Zaid
+app	⌥R	⇧3	win(research)	sh:$HOME/.local/bin/browser space-window Research
+app	⌥R	⇧4	win(youtube)	sh:$HOME/.local/bin/browser space-window YouTube
 app	⌥R	k	KM	Keyboard Maestro
 app	⌥R	l	gmail	sh:$HOME/.local/bin/browser tab gmail
 app	⌥R	⇧l	gmail(work)	sh:$HOME/.local/bin/browser tab gmail-work

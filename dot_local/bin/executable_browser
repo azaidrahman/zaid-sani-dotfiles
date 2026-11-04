@@ -3,6 +3,7 @@
 #
 # Usage:
 #   browser space <name>            show a space, for example Work
+#   browser space-window <name>     show a space in its own window
 #   browser tab <name>              focus a named tab (see config.sh)
 #   browser tabs                    print the open tabs as Alfred JSON
 #   browser focus-tab <win> <tab>   focus a tab that "browser tabs" printed
@@ -14,7 +15,8 @@
 #
 # Each browser has a driver: $BROWSER_HOME/drivers/<name>.sh. A driver sets
 # DRIVER_APP and DRIVER_BUNDLE, and defines one function for each action that
-# it can do: drv_space, drv_tab, drv_tabs, drv_focus_tab, and drv_focus_url.
+# it can do: drv_space, drv_space_window, drv_tab, drv_tabs, drv_focus_tab,
+# and drv_focus_url.
 # If the driver cannot do an action, or the action fails, the command shows a
 # notification. "browser tabs" shows the error as an Alfred item instead,
 # because Alfred runs it at each key press.
@@ -61,7 +63,7 @@ fail() {
 }
 
 usage() {
-  sed -n '3,14s/^# \{0,1\}//p' "$0" >&2
+  sed -n '3,15s/^# \{0,1\}//p' "$0" >&2
   fail 2 "unknown action: ${action:-none}"
 }
 
@@ -157,7 +159,7 @@ case "$action" in
     echo "browser: now using $1"
     exit 0
     ;;
-  space | tab | tabs | focus-tab | open) ;;
+  space | space-window | tab | tabs | focus-tab | open) ;;
   *) usage ;;
 esac
 
@@ -168,6 +170,11 @@ case "$action" in
     [ $# -eq 1 ] || usage
     index=$(space_index "$1") || fail 2 "unknown space $1"
     call drv_space "$1" "$index"
+    ;;
+  space-window)
+    [ $# -eq 1 ] || usage
+    index=$(space_index "$1") || fail 2 "unknown space $1"
+    call drv_space_window "$1" "$index"
     ;;
   tab)
     [ $# -eq 1 ] || usage

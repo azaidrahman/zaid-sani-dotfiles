@@ -61,6 +61,7 @@ app:
   # key | label | app name
   - w | WA | Whatsapp
   - W | messages | Messages    # uppercase = shift+key
+  - ⇧1 | win(work) | sh:...    # ⇧ = shift, for keys without uppercase
   - \ | switch | !Cgrave_accent_and_tilde  # !Command = goku key combo
 ```
 
