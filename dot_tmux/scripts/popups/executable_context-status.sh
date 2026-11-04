@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The context section of the prefix+u status center: the gcloud account,
-# project and login session, and the kube current-context and its namespace.
-# claude-usage.sh sources this file and draws context_section above the usage
+# project and login session, the kube current-context and its namespace, and
+# the op-sa window of this Mac. claude-usage.sh sources this file and draws context_section above the usage
 # view. Run alone, the file draws the section in its own screen. With
 # --tmux-alert, it prints a red alert for the tmux status line when the gcloud
 # session has ended.
@@ -27,8 +27,14 @@ c_red=$'\033[31m'; c_yellow=$'\033[33m'; c_green=$'\033[32m'
 # reads it, so the value is fixed here. The environment wins.
 GCLOUD_SESSION_HOURS=${GCLOUD_SESSION_HOURS:-16}
 
-# SESSION_WARN_SECS : under this much time left, the session line turns yellow.
+# SESSION_WARN_SECS : under this much time left, the line of the gcloud session
+# or of the op-sa window turns yellow.
 SESSION_WARN_SECS=7200
+
+# OP_SA_HELPER : the helper that holds the op-sa window (see ~/.local/bin/op-sa).
+# Its ttl command prints only the seconds that are left, never a secret. A test
+# sets the variable to a fake helper.
+OP_SA_HELPER=${OP_SA_HELPER:-$HOME/.config/op-sa-window/bin/op-sa-window}
 
 # LOGIN_SCAN_DAYS : how many day folders of the gcloud logs to read. gcloud
 # makes a folder only on a day that it runs, so 3 folders cover two full
@@ -245,6 +251,31 @@ render_kube() {
   printf '  %-9s%s%s%s\n' '' "$c_dim" "$1" "$c_reset"
 }
 
+# op_sa_left : the seconds that are left in the op-sa window. Nothing when the
+# window is closed, or when the helper does not run. The helper answers at
+# once: a closed window has no helper socket, or an empty helper.
+op_sa_left() {
+  local left
+  left=$("$OP_SA_HELPER" ttl 2>/dev/null) || return 0
+  [[ $left =~ ^[0-9]+$ ]] && printf '%s' "$left"
+}
+
+# render_op_sa <seconds left> : the op-sa window. An empty value means that the
+# window is closed. The window is on this Mac only, so a pane on another Mac
+# shows the window of that Mac.
+render_op_sa() {
+  local left=$1 col=$c_green
+  if [ -z "$left" ]; then
+    printf '  %s%-9s%s%-9s%s✗ closed · run op-sa unlock%s\n' \
+      "$c_bold" op-sa "$c_reset" window "$c_red" "$c_reset"
+    return
+  fi
+  (( left < SESSION_WARN_SECS )) && col=$c_yellow
+  printf '  %s%-9s%s%-9s%s✓ %s left%s %s· ends %s%s\n' \
+    "$c_bold" op-sa "$c_reset" window "$col" "$(left_of "$left")" "$c_reset" \
+    "$c_dim" "$(clock_of "$(( $(ctx_now) + left ))")" "$c_reset"
+}
+
 gcloud_dir() { printf '%s' "${GCLOUD_CONFIG_DIR:-$HOME/.config/gcloud}"; }
 
 # active_config_name <gcloud_config_dir> : the name of the active gcloud
@@ -260,7 +291,8 @@ active_gcloud_blob() {
   parse_gcloud_config "$(cat "$1/configurations/config_$(active_config_name "$1")" 2>/dev/null)"
 }
 
-# context_section : read the gcloud and kube files, and draw both sections.
+# context_section : read the gcloud and kube files and the op-sa window, and
+# draw the three sections.
 context_section() {
   local gconf_dir gblob
   gconf_dir=$(gcloud_dir)
@@ -272,6 +304,8 @@ context_section() {
   ktext=$(cat "$kpath" 2>/dev/null)
   kctx=$(parse_kube_context "$ktext")
   render_kube "$kctx" "$(parse_kube_namespace "$ktext" "$kctx")"
+
+  render_op_sa "$(op_sa_left)"
 }
 
 # tmux_alert : a red alert for the tmux status line when the active account

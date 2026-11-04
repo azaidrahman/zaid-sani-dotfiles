@@ -364,11 +364,11 @@ check "the popup width is derived, not fixed" "149" "$(( ROW_FIXED_W + BAR_CAP +
 
 # The combined popup is as wide as a quota row and as tall as both sections,
 # the host row and the context section: 2 quota rows * 2 + 3 models + 17 + 4
-# for the host row and its rule + 8 for the context section.
+# for the host row and its rule + 9 for the context section.
 tmp=$(mktemp -d)
 printf 'QUOTA\ta\t1\t-\t-\nQUOTA\tb\t2\t-\t-\nMODEL\t1\tm1\nMODEL\t2\tm2\nMODEL\t3\tm3\n' \
   > "$tmp/claude-usage.agents.cache"
-check "the combined popup sizes from both record kinds" "149x36" \
+check "the combined popup sizes from both record kinds" "149x37" \
   "$(resolve_provider() { printf agents; }; TMPDIR="$tmp" size_for '%0')"
 rm -rf "$tmp"
 

@@ -907,8 +907,8 @@ USAGE_POPUP_W=$(( ROW_FIXED_W + BAR_CAP + 2 ))   # fits a full-cap bar plus its 
 COST_POPUP_W=90      # fits a full-cap 45-char bar (see the -42 offset in render_cost)
 # The host row and the 3 rows of the rule under it.
 HOST_POPUP_H=4
-# The context section: 4 gcloud rows and 4 kube rows.
-CONTEXT_POPUP_H=8
+# The context section: 4 gcloud rows, 4 kube rows and 1 op-sa row.
+CONTEXT_POPUP_H=9
 
 # rows_in_cache <provider> <record> <fallback> : how many records of one kind
 # the cached blob holds.

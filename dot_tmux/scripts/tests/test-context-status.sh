@@ -127,6 +127,22 @@ out_empty=$(render_kube "" | strip)
 check "render kube fallback when no context" "1" \
   "$(printf '%s\n' "$out_empty" | grep -c 'no current-context')"
 
+# --- op_sa_left and render_op_sa -------------------------------------------
+# The output of the helper counts only when the helper exits 0 and prints
+# digits. The open window is checked end to end in the main section below.
+while IFS='|' read -r label status output; do
+  check "$label" "" \
+    "$(fake_helper() { printf '%s' "$output"; return "$status"; }; OP_SA_HELPER=fake_helper op_sa_left)"
+done <<'EOF'
+a helper that fails gives no time|3|60
+junk from the helper gives no time|0|oops
+EOF
+
+check "under two hours left the op-sa line turns yellow" "1" \
+  "$(render_op_sa "$HOUR" | grep -c $'\033\\[33m✓ 1h 0m left')"
+check "a closed window asks for op-sa unlock" "1" \
+  "$(render_op_sa "" | strip | grep -c '^  op-sa    window   ✗ closed · run op-sa unlock$')"
+
 # --- main(): end-to-end with fixture config dirs, no real gcloud/kube ------
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -153,11 +169,19 @@ current-context: gke_myproj_us-central1_gtech-svc-obs-prd
 kind: Config
 EOF
 
+# A fake op-sa helper with 9 hours left in the window. Each run of main below
+# uses it, so no test asks the real helper.
+printf '#!/bin/sh\n[ "$1" = ttl ] && printf %s\n' "$(( 9 * HOUR ))" > "$TMP/op-sa-window"
+chmod +x "$TMP/op-sa-window"
+export OP_SA_HELPER="$TMP/op-sa-window"
+
 out=$(printf 'x' | GCLOUD_CONFIG_DIR="$TMP/gcloud" KUBECONFIG="$TMP/kubeconfig" bash "$SCRIPT" | strip)
 check "main shows gcloud account"  "1" "$(printf '%s\n' "$out" | grep -c 'jane.doe@example.com')"
 check "main shows gcloud project"  "1" "$(printf '%s\n' "$out" | grep -c 'my-project-123')"
 check "main shows kube context"    "1" "$(printf '%s\n' "$out" | grep -c 'gke_myproj_us-central1_gtech-svc-obs-prd')"
 check "main shows kube namespace"  "1" "$(printf '%s\n' "$out" | grep -c 'ns       argocd$')"
+check "main shows the op-sa window" "1" \
+  "$(printf '%s\n' "$out" | grep -c '^  op-sa    window   ✓ 9h 0m left · ends ')"
 check "main shows close hint"      "1" "$(printf '%s\n' "$out" | grep -c '\[any key to close\]')"
 
 # fake_login <HH:MM:SS> : what `gcloud auth login` leaves behind at that time
