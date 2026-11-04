@@ -1,0 +1,137 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["ytmusicapi>=1.10"]
+# ///
+"""ytm-search: search YouTube Music for songs.
+
+Usage:
+  ytm-search <words>            Show one song on each line.
+  ytm-search --alfred <words>   Show the songs as Alfred script filter JSON.
+
+The search does not use the app. It sends the words to YouTube Music with
+ytmusicapi, with no account. To play a song, run "ytm play <video-id>".
+
+The Alfred workflow "YouTube Music" runs this script for the keyword "yts".
+Enter plays the song. Cmd+Enter adds the song to the end of the queue.
+"""
+import json
+import os
+import sys
+import time
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+MAX_SONGS = 15
+THUMB_DAYS = 7
+
+
+def search(query):
+    from ytmusicapi import YTMusic
+
+    songs = []
+    for r in YTMusic().search(query, filter="songs"):
+        vid = r.get("videoId")
+        if not vid or r.get("resultType") != "song":
+            continue
+        thumbs = r.get("thumbnails") or []
+        # Alfred shows a small icon. The 120 px image is sharp enough.
+        thumb = next((t["url"] for t in thumbs if t.get("width", 0) >= 120), None)
+        songs.append({
+            "videoId": vid,
+            "title": r.get("title") or "Unknown song",
+            "artists": ", ".join(a["name"] for a in r.get("artists") or [] if a.get("name")),
+            "album": (r.get("album") or {}).get("name") or "",
+            "duration": r.get("duration") or "",
+            "thumb": thumb or (thumbs[-1]["url"] if thumbs else None),
+        })
+        if len(songs) == MAX_SONGS:
+            break
+    return songs
+
+
+def cache_dir():
+    root = os.environ.get("alfred_workflow_cache") or str(Path.home() / "Library/Caches/com.zaid.ytm")
+    path = Path(root) / "search"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def fetch_thumb(url, dest):
+    if dest.exists():
+        return
+    tmp = dest.with_suffix(".tmp")
+    try:
+        with urllib.request.urlopen(url, timeout=3) as resp:
+            tmp.write_bytes(resp.read())
+        tmp.replace(dest)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+
+
+def save_thumbs(songs):
+    """Get the album art of each song, in parallel. Keep it for some days."""
+    folder = cache_dir()
+    old = time.time() - THUMB_DAYS * 86400
+    for f in folder.glob("*.jpg"):
+        if f.stat().st_mtime < old:
+            f.unlink(missing_ok=True)
+    jobs = [(s["thumb"], folder / f"{s['videoId']}.jpg") for s in songs if s["thumb"]]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(lambda job: fetch_thumb(*job), jobs))
+    for s in songs:
+        path = folder / f"{s['videoId']}.jpg"
+        s["icon"] = str(path) if path.exists() else "icon.png"
+
+
+def message(title, subtitle):
+    return {"title": title, "subtitle": subtitle, "valid": False, "icon": {"path": "icons/warn.png"}}
+
+
+def alfred(query):
+    if not query:
+        items = [{"title": "Search YouTube Music", "subtitle": "Type the name of a song or an artist",
+                  "valid": False, "icon": {"path": "icon.png"}}]
+    else:
+        try:
+            songs = search(query)
+        except Exception as err:  # The network or YouTube Music can fail in many ways.
+            songs = None
+            items = [message("The search failed", str(err)[:120] or type(err).__name__)]
+        if songs is not None:
+            save_thumbs(songs)
+            items = [{
+                "title": s["title"],
+                "subtitle": "  ·  ".join(x for x in (s["artists"], s["album"], s["duration"]) if x),
+                "arg": f"play {s['videoId']}",
+                "icon": {"path": s["icon"]},
+                "quicklookurl": f"https://music.youtube.com/watch?v={s['videoId']}",
+                "text": {"copy": f"https://music.youtube.com/watch?v={s['videoId']}",
+                         "largetype": f"{s['title']} — {s['artists']}"},
+                "mods": {"cmd": {"arg": f"queue {s['videoId']}",
+                                 "subtitle": "Add the song to the end of the queue"}},
+            } for s in songs] or [message(f"No songs match “{query}”", "Try other words")]
+    # Keep the order of YouTube Music. Alfred must not sort the songs again.
+    print(json.dumps({"skipknowledge": True, "items": items}))
+
+
+def main():
+    args = sys.argv[1:]
+    as_alfred = bool(args) and args[0] == "--alfred"
+    if as_alfred:
+        args = args[1:]
+    query = " ".join(args).strip()
+    if as_alfred:
+        alfred(query)
+        return
+    if not query:
+        print(__doc__.strip(), file=sys.stderr)
+        sys.exit(2)
+    for s in search(query):
+        extra = ", ".join(x for x in (s["album"], s["duration"]) if x)
+        print(f"{s['videoId']}  {s['title']} — {s['artists']}" + (f"  ({extra})" if extra else ""))
+
+
+if __name__ == "__main__":
+    main()
