@@ -1,26 +1,47 @@
 import AppKit
 
-// Small HUD that shows the volume of YouTube Music for Desktop.
+// Small HUD that shows a change in YouTube Music for Desktop.
 //
-// Usage: ytm-hud <0-100>
-// The `ytm` script starts it after each volume change. The HUD stays for a
-// short time below the menu bar, at the center of the screen, then it goes.
+// Usage:
+//   ytm-hud volume <0-100>
+//   ytm-hud seek <delta> <position> <duration>    (all in seconds)
+// The `ytm` script starts it after each volume change and each seek. The HUD
+// stays for a short time below the menu bar, at the center of the screen,
+// then it goes.
 //
 // Only one HUD is on the screen. The first process holds a lock. A new
-// process finds the lock, sends its volume to the first process, and exits.
-// Thus quick key presses update one HUD and do not stack HUDs.
+// process finds the lock, sends its arguments to the first process, and
+// exits. Thus quick key presses update one HUD and do not stack HUDs.
 
-let notificationName = Notification.Name("com.zaid.ytm-hud.volume")
+let notificationName = Notification.Name("com.zaid.ytm-hud.update")
 let visibleTime: TimeInterval = 1.2
 let fadeTime: TimeInterval = 0.25
 
-func parseLevel(_ text: String?) -> Int? {
-    guard let text, let value = Int(text) else { return nil }
-    return max(0, min(100, value))
+enum Reading {
+    case volume(Int)
+    case seek(delta: Int, position: Int, duration: Int)
 }
 
-guard let firstLevel = parseLevel(CommandLine.arguments.dropFirst().first) else {
-    FileHandle.standardError.write("usage: ytm-hud <0-100>\n".data(using: .utf8)!)
+func parse(_ words: [String]) -> Reading? {
+    let numbers = words.dropFirst().compactMap { Int($0) }
+    guard numbers.count == words.count - 1 else { return nil }
+    switch (words.first, numbers.count) {
+    case ("volume", 1):
+        return .volume(max(0, min(100, numbers[0])))
+    case ("seek", 3):
+        let duration = max(0, numbers[2])
+        var position = max(0, numbers[1])
+        if duration > 0 { position = min(duration, position) }
+        return .seek(delta: numbers[0], position: position, duration: duration)
+    default:
+        return nil
+    }
+}
+
+let firstWords = Array(CommandLine.arguments.dropFirst())
+guard let firstReading = parse(firstWords) else {
+    FileHandle.standardError.write(
+        "usage: ytm-hud volume <0-100> | ytm-hud seek <delta> <position> <duration>\n".data(using: .utf8)!)
     exit(2)
 }
 
@@ -32,7 +53,7 @@ func takeLock() -> Bool { flock(lockFD, LOCK_EX | LOCK_NB) == 0 }
 
 if !takeLock() {
     DistributedNotificationCenter.default().postNotificationName(
-        notificationName, object: String(firstLevel), userInfo: nil, deliverImmediately: true)
+        notificationName, object: firstWords.joined(separator: " "), userInfo: nil, deliverImmediately: true)
     exit(0)
 }
 
@@ -69,18 +90,17 @@ fill.backgroundColor = NSColor.white.cgColor
 fill.cornerRadius = barHeight / 2
 track.layer?.addSublayer(fill)
 
-let percentLabel = NSTextField(labelWithString: "")
-percentLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
-percentLabel.textColor = .white
-percentLabel.alignment = .right
-percentLabel.frame = NSRect(x: barX + barWidth + 4, y: 9, width: width - barX - barWidth - 18, height: 18)
+let valueLabel = NSTextField(labelWithString: "")
+valueLabel.textColor = .white
+valueLabel.alignment = .right
+valueLabel.frame = NSRect(x: barX + barWidth + 4, y: 9, width: width - barX - barWidth - 18, height: 18)
 
 view.addSubview(icon)
 view.addSubview(titleLabel)
 view.addSubview(track)
-view.addSubview(percentLabel)
+view.addSubview(valueLabel)
 
-func symbolName(_ level: Int) -> String {
+func volumeSymbol(_ level: Int) -> String {
     switch level {
     case 0: return "speaker.slash.fill"
     case ..<34: return "speaker.wave.1.fill"
@@ -89,10 +109,38 @@ func symbolName(_ level: Int) -> String {
     }
 }
 
-func show(_ level: Int) {
-    icon.image = NSImage(systemSymbolName: symbolName(level), accessibilityDescription: "Volume")
-    percentLabel.stringValue = "\(level)%"
-    fill.frame = CGRect(x: 0, y: 0, width: barWidth * CGFloat(level) / 100, height: barHeight)
+// 83 -> "1:23", 3723 -> "1:02:03"
+func clock(_ seconds: Int) -> String {
+    let h = seconds / 3600, m = seconds / 60 % 60, s = seconds % 60
+    return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
+}
+
+// Make the font smaller until the text fits, so "+120s" does not get cut.
+func setValue(_ text: String) {
+    valueLabel.stringValue = text
+    var size: CGFloat = 13
+    repeat {
+        valueLabel.font = .monospacedDigitSystemFont(ofSize: size, weight: .medium)
+        size -= 1
+    } while size >= 9 && valueLabel.attributedStringValue.size().width > valueLabel.frame.width - 4
+}
+
+func show(_ reading: Reading) {
+    let fraction: CGFloat
+    switch reading {
+    case .volume(let level):
+        icon.image = NSImage(systemSymbolName: volumeSymbol(level), accessibilityDescription: "Volume")
+        titleLabel.stringValue = "YouTube Music"
+        setValue("\(level)%")
+        fraction = CGFloat(level) / 100
+    case .seek(let delta, let position, let duration):
+        let name = delta < 0 ? "gobackward" : "goforward"
+        icon.image = NSImage(systemSymbolName: name, accessibilityDescription: "Seek")
+        titleLabel.stringValue = duration > 0 ? "\(clock(position)) / \(clock(duration))" : clock(position)
+        setValue((delta < 0 ? "\u{2212}" : "+") + "\(abs(delta))s")
+        fraction = duration > 0 ? CGFloat(position) / CGFloat(duration) : 0
+    }
+    fill.frame = CGRect(x: 0, y: 0, width: barWidth * fraction, height: barHeight)
 }
 
 let w = NSPanel(
@@ -123,7 +171,7 @@ func scheduleHide() {
     hideTimer?.invalidate()
     hideTimer = Timer.scheduledTimer(withTimeInterval: visibleTime, repeats: false) { _ in
         // Release the lock first. A process that starts during the fade then
-        // shows its own HUD, so no volume change is lost.
+        // shows its own HUD, so no change is lost.
         flock(lockFD, LOCK_UN)
         fading = true
         NSAnimationContext.runAnimationGroup({ context in
@@ -136,31 +184,32 @@ func scheduleHide() {
 }
 
 // A selector observer runs on the main thread, as the run loop delivers it.
-final class VolumeObserver: NSObject {
+final class UpdateObserver: NSObject {
     @objc func received(_ note: Notification) {
-        guard let level = parseLevel(note.object as? String) else { return }
+        guard let text = note.object as? String,
+              let reading = parse(text.split(separator: " ").map(String.init)) else { return }
         if fading {
             // Another process can own the lock now. Then that process shows
-            // the volume, and this HUD continues to fade.
+            // the change, and this HUD continues to fade.
             guard takeLock() else { return }
             fading = false
             w.alphaValue = 1
         }
         CATransaction.begin()
         CATransaction.setAnimationDuration(0.12)
-        show(level)
+        show(reading)
         CATransaction.commit()
         scheduleHide()
     }
 }
 
-let observer = VolumeObserver()
+let observer = UpdateObserver()
 DistributedNotificationCenter.default().addObserver(
-    observer, selector: #selector(VolumeObserver.received(_:)), name: notificationName, object: nil)
+    observer, selector: #selector(UpdateObserver.received(_:)), name: notificationName, object: nil)
 
 CATransaction.begin()
 CATransaction.setDisableActions(true)
-show(firstLevel)
+show(firstReading)
 CATransaction.commit()
 w.orderFrontRegardless()
 scheduleHide()
