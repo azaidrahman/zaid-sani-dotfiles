@@ -33,9 +33,11 @@ app	⌥R	r	rex	Rex Beta
 app	⌥R	m	ytm	YouTube Music for Desktop
 workspace	⌥L	1	ws1	workspace 1
 workspace	⌥L	2	ws2	workspace 2
-workspace	⌥L	q	ws3	workspace 3
-workspace	⌥L	w	ws4	workspace 4
-workspace	⌥L	e	ws5	workspace 5
+workspace	⌥L	3	ws3	workspace 3
+workspace	⌥L	4	ws4	workspace 4
+workspace	⌥L	q	ws5	workspace 5
+workspace	⌥L	w	ws6	workspace 6
+workspace	⌥L	e	ws7	workspace 7
 workspace	⌥L	h	←	focus --boundaries-action wrap-around-the-workspace left
 workspace	⌥L	j	↓	focus --boundaries-action wrap-around-the-workspace down
 workspace	⌥L	k	↑	focus --boundaries-action wrap-around-the-workspace up
@@ -50,9 +52,11 @@ workspace	⌥L	-	-size	resize smart -70
 workspace	⌥L	=	+size	resize smart +70
 workspace	⌥L	⇧1	→ws1	move-node-to-workspace 1 --focus-follows-window
 workspace	⌥L	⇧2	→ws2	move-node-to-workspace 2 --focus-follows-window
-workspace	⌥L	⇧q	→ws3	move-node-to-workspace 3 --focus-follows-window
-workspace	⌥L	⇧w	→ws4	move-node-to-workspace 4 --focus-follows-window
-workspace	⌥L	⇧e	→ws5	move-node-to-workspace 5 --focus-follows-window
+workspace	⌥L	⇧3	→ws3	move-node-to-workspace 3 --focus-follows-window
+workspace	⌥L	⇧4	→ws4	move-node-to-workspace 4 --focus-follows-window
+workspace	⌥L	⇧q	→ws5	move-node-to-workspace 5 --focus-follows-window
+workspace	⌥L	⇧w	→ws6	move-node-to-workspace 6 --focus-follows-window
+workspace	⌥L	⇧e	→ws7	move-node-to-workspace 7 --focus-follows-window
 workspace	⌥L	⇧h	mv←	move left
 workspace	⌥L	⇧j	mv↓	move down
 workspace	⌥L	⇧k	mv↑	move up
@@ -71,14 +75,14 @@ l1	⇧⌥R	2	capture-text	opt+F18 (via KM/Alfred)
 l1	⇧⌥R	3	full-screen	ctrl+cmd+F18 (via KM/Alfred)
 l1	⇧⌥R	4	capture-area	ctrl+opt+F18 (via KM/Alfred)
 l1	⇧⌥R	5	record	cmd+opt+F18 (via KM/Alfred)
-l1	⇧⌥R	,	soundsource	cmd+F20 (via KM/Alfred)
+l1	⇧⌥R	k	soundsource	!Cf20
 l1	⇧⌥R	space	yt play/pause	sh:~/.local/bin/ytm toggle
 l1	⇧⌥R	[	yt prev	sh:~/.local/bin/ytm prev
 l1	⇧⌥R	]	yt next	sh:~/.local/bin/ytm next
 l1	⇧⌥R	;	yt -10s	sh:~/.local/bin/ytm back
 l1	⇧⌥R	'	yt +10s	sh:~/.local/bin/ytm fwd
-l1	⇧⌥R	-	yt vol-	sh:~/.local/bin/ytm vol-down
-l1	⇧⌥R	=	yt vol+	sh:~/.local/bin/ytm vol-up
+l1	⇧⌥R	,	yt vol-	sh:~/.local/bin/ytm vol-down
+l1	⇧⌥R	.	yt vol+	sh:~/.local/bin/ytm vol-up
 l1	⇧⌥R	u	yt like	sh:~/.local/bin/ytm like
 l1	⇧⌥R	d	yt dislike	sh:~/.local/bin/ytm dislike
 l1	⇧⌥R	r	yt repeat	sh:~/.local/bin/ytm repeat
