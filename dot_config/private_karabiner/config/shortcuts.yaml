@@ -1,6 +1,13 @@
 # Shortcut layer definitions
 # Format: key | label | description
 #
+# The third field can also be a direct action. A direct action runs
+# before the F-key rule of the same key:
+#   open:App            opens the app by name
+#   open-id:bundle.id   opens the app by bundle ID
+#   sh:command          runs a shell command (use full paths)
+#   !gokuCombo          sends the key combo
+#
 # F-key combos are auto-assigned by position — adding new entries
 # does NOT reshuffle existing assignments.  To see the mapping,
 # run generate-help.py and check the printed table.
@@ -25,6 +32,19 @@ l1:
   - 4 | capture-area
   - 5 | record
   - , | soundsource
+  # YouTube Music: ~/.local/bin/ytm calls the local API of the app.
+  - space | yt play/pause | sh:~/.local/bin/ytm toggle
+  - [ | yt prev | sh:~/.local/bin/ytm prev
+  - ] | yt next | sh:~/.local/bin/ytm next
+  - ; | yt -10s | sh:~/.local/bin/ytm back
+  - ' | yt +10s | sh:~/.local/bin/ytm fwd
+  - - | yt vol- | sh:~/.local/bin/ytm vol-down
+  - = | yt vol+ | sh:~/.local/bin/ytm vol-up
+  - u | yt like | sh:~/.local/bin/ytm like
+  - d | yt dislike | sh:~/.local/bin/ytm dislike
+  - r | yt repeat | sh:~/.local/bin/ytm repeat
+  - m | yt shuffle | sh:~/.local/bin/ytm shuffle
+  - y | yt player | sh:~/.local/bin/ytm tray
 
 l2:
   - o | 1p | 1Password (alt)

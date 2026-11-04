@@ -111,6 +111,7 @@ def direct_to(action):
 
     open:App          -> open -a (by app name)
     open-id:bundle.id -> open -b (by bundle id; works when the app name differs per Mac)
+    sh:command        -> a shell command (Karabiner runs it with /bin/sh and a minimal PATH)
     !gokuCombo        -> the combo itself
     """
     if not action:
@@ -119,6 +120,9 @@ def direct_to(action):
         return f'[:open "{action[len("open:"):]}"]'
     if action.startswith('open-id:'):
         return f'[:open-id "{action[len("open-id:"):]}"]'
+    if action.startswith('sh:'):
+        cmd = action[len('sh:'):].strip().replace('\\', '\\\\').replace('"', '\\"')
+        return f'"{cmd}"'
     if action.startswith('!'):
         return f':{action}'
     return None
@@ -247,7 +251,7 @@ def generate_shortcut_direct_rules(shortcut_sections):
             if not to_str:
                 continue
             w = 28 if len(gk) > 1 else 10
-            lines.append(f'    [{from_str:<{w}s}{to_str:<20s}:{condition}]   ;; {ln}+{key} → {action}')
+            lines.append(f'    [{from_str:<{w}s}{to_str:<19s} :{condition}]   ;; {ln}+{key} → {action}')
 
     header = ';; BEGIN SHORTCUT-DIRECT (auto-generated from config/shortcuts.yaml)'
     footer = ';; END SHORTCUT-DIRECT'
