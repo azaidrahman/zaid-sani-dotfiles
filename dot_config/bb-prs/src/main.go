@@ -6,8 +6,8 @@
 // process, and the child lives on after the screen closes. With
 // "--ai-review <repo> <id> [--again]", it runs the background reviewer on one
 // PR. The screen starts that child in the same way. With "--warm", it keeps
-// the cache of the open list warm. The LaunchAgent com.zaid.bb-prs-warm runs
-// it on a timer.
+// the cache of the open lists that the screen used warm. The LaunchAgent
+// com.zaid.bb-prs-warm runs it on a timer.
 package main
 
 import (
@@ -97,13 +97,15 @@ Mouse:
   bb-prs gets the drag.
 
 Background:
-  bb-prs --warm  refresh the open list of the workspace, and load the data of
-                 its PRs into the cache, so that each PR shows at once. The
-                 LaunchAgent com.zaid.bb-prs-warm runs it every 15 minutes. It
-                 makes no call when the Mac is idle for 15 minutes or more, or
-                 for 30 minutes after a rate limit. If the list is younger than
-                 10 minutes, it loads only the data of the PRs. It writes one
-                 line to stderr (~/Library/Logs/bb-prs-warm.log)
+  bb-prs --warm  refresh each open list of the workspace that bb-prs showed on
+                 this Mac in the last 8 hours, and load the data of their PRs
+                 into the cache, so that the list and each PR show at once.
+                 The LaunchAgent com.zaid.bb-prs-warm runs it every 9 minutes.
+                 It makes no call when the user is idle on this Mac for 15
+                 minutes or more (no key, mouse, or terminal input), or for 30
+                 minutes after a rate limit. If each list is younger than 5
+                 minutes, it loads only the data of the PRs. It writes one line
+                 to stderr (~/Library/Logs/bb-prs-warm.log)
 
 Environment:
   BB_WORKSPACE      the workspace to use outside a Bitbucket repo
@@ -215,7 +217,10 @@ const idleTimeout = 10 * time.Second
 
 // runWarm is the run of the LaunchAgent com.zaid.bb-prs-warm. It runs in the
 // home directory, not in a repo, and it writes one line to stderr. launchd
-// sends stderr to the log file of the agent.
+// sends stderr to the log file of the agent. The idle time is the smaller of
+// two times: the time since the last key or mouse event on this Mac, and the
+// time since the last input on a terminal of the user. The second time sees
+// a user who works on this Mac over SSH from the other Mac.
 func runWarm() int {
 	// On a stop signal, cancel the context, so that the run releases the lock.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -240,8 +245,16 @@ func runWarm() int {
 	idle := func(ctx context.Context) (time.Duration, bool) {
 		ctx, cancel := context.WithTimeout(ctx, idleTimeout)
 		defer cancel()
-		secs, ok := browser.LocalIdle(ctx, browser.Default)
-		return time.Duration(secs) * time.Second, ok
+		secs, hidOK := browser.LocalIdle(ctx, browser.Default)
+		hid := time.Duration(secs) * time.Second
+		tty, ttyOK := browser.TTYIdle("/dev", os.Getuid(), time.Now())
+		switch {
+		case hidOK && ttyOK:
+			return min(hid, tty), true
+		case hidOK:
+			return hid, true
+		}
+		return tty, ttyOK
 	}
 	return report(refresh.Warm(ctx, env, idle))
 }
@@ -376,7 +389,11 @@ func runUI() int {
 			}
 			return refresh.Spawn(self, wd, args...)
 		},
-		Review: func(url string) *exec.Cmd { return exec.Command("tuicr", "pr", url) },
+		// Only the screen records a use. The refresh child and the warm run
+		// do not. A failed record is not fatal: then the warm run can skip
+		// the list.
+		MarkUsed: func() { _ = paths.MarkUsed(env.Prompt) },
+		Review:   func(url string) *exec.Cmd { return exec.Command("tuicr", "pr", url) },
 		ReviewConfig: func() (review.Config, error) {
 			return review.Load(review.ConfigPath())
 		},

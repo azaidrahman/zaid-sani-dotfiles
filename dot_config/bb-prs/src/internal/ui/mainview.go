@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/charmbracelet/glamour"
 	gansi "github.com/charmbracelet/glamour/ansi"
@@ -554,7 +555,8 @@ func renderOverview(o overview, width int) []string {
 		count(magenta, o.Behind, "are behind their destination"),
 		"",
 	}
-	return append(lines, wrap("", "The list opens from the cache. A refresh runs when the list is older than 3 minutes, or when you press r.", dimStyle, width)...)
+	text := fmt.Sprintf("The list opens from the cache. A refresh runs when the list is older than %d minutes, or when you press r.", int(freshAge/time.Minute))
+	return append(lines, wrap("", text, dimStyle, width)...)
 }
 
 // tildeHome writes the home directory at the start of dir as "~".

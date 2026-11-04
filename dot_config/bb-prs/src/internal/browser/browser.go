@@ -6,9 +6,13 @@ package browser
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 )
 
 // Exec runs one command and returns its standard output.
@@ -151,6 +155,34 @@ func LocalIdle(ctx context.Context, run Exec) (int64, bool) {
 		return ns / 1_000_000_000, true
 	}
 	return 0, false
+}
+
+// TTYIdle returns the time since the last input on a terminal of the user
+// uid. It reads the newest access time of the files <dir>/ttys* that uid
+// owns. On macOS, the access time of a pty changes when a program reads input
+// from it, and the IDLE column of w uses the same time. Thus TTYIdle sees a
+// user who types in an SSH session or in a terminal pane, and HIDIdleTime
+// does not see that user. It is false if no such file has an access time.
+func TTYIdle(dir string, uid int, now time.Time) (time.Duration, bool) {
+	paths, _ := filepath.Glob(filepath.Join(dir, "ttys*"))
+	var newest time.Time
+	for _, p := range paths {
+		info, err := os.Stat(p)
+		if err != nil {
+			continue
+		}
+		st, ok := info.Sys().(*syscall.Stat_t)
+		if !ok || int(st.Uid) != uid {
+			continue
+		}
+		if at := accessTime(st); at.After(newest) {
+			newest = at
+		}
+	}
+	if newest.IsZero() {
+		return 0, false
+	}
+	return max(0, now.Sub(newest)), true
 }
 
 // peerIdle returns the idle time of the peer, in seconds.

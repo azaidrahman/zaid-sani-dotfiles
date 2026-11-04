@@ -714,10 +714,11 @@ func (m *Model) onReview(msg reviewMsg) {
 	actions.LogReview(m.d.Actions, msg.pr)
 	m.dropViews(msg.pr)
 	m.loadActions()
-	// The review can change the PR, so refresh the list. An automatic
-	// refresh of a fresh list makes no calls.
+	// The review can change the PR, for example its approval. Thus refresh
+	// the shown list now, also if it is fresh, as after an action.
 	if m.list != "log" {
-		m.autoRefresh(m.list)
+		m.logRefresh(m.list)
+		m.spawn(m.list, false)
 	}
 	if msg.err != nil {
 		m.setFlash(fmt.Sprintf("tuicr failed for #%d: %v", msg.pr.ID, msg.err), red)

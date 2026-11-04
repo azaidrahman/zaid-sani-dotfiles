@@ -162,42 +162,85 @@ func TestRunKeepsLastGoodList(t *testing.T) {
 	}
 }
 
-func TestRunAutoSkipsFreshList(t *testing.T) {
-	env, log := testEnv(t, "[]", 0)
-	path := env.Paths.ListFile(env.Prompt, "open")
-	if err := store.SaveList(path, store.ListCache{Saved: time.Now()}); err != nil {
-		t.Fatal(err)
+// The decisions of Run about the list file. Before Run, the list file holds
+// the PRs 10 and 11. The inbox gives PR 7. In a row with a lock, another
+// refresh holds the lock for 300ms, and it does not write the list. In the
+// row with an action, an action writes the list without PR 10 while the
+// inbox calls run.
+func TestRunDecisions(t *testing.T) {
+	cases := []struct {
+		name   string
+		auto   bool
+		age    time.Duration // the age of the list file
+		locked bool
+		action bool
+		calls  bool  // Run makes the inbox calls
+		want   []int // the PRs of the list file after Run
+	}{
+		{name: "auto, a list of 9 minutes: no call", auto: true, age: 9 * time.Minute, want: []int{10, 11}},
+		{name: "auto, a lock: wait, then no call", auto: true, age: time.Hour, locked: true, want: []int{10, 11}},
+		// The user asks for data from after an action. The refresh that
+		// holds the lock can have started before the action.
+		{name: "not auto, a lock: wait, then refresh", age: time.Hour, locked: true, calls: true, want: []int{7}},
+		{name: "an action changes the list file while the calls run: the refresh does not write the file",
+			age: time.Hour, action: true, calls: true, want: []int{11}},
 	}
-	if err := Run(context.Background(), env, "open", true); err != nil {
-		t.Fatal(err)
-	}
-	if got := readLog(t, log); got != "" {
-		t.Errorf("twg ran: %q", got)
-	}
-}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			env, log := testEnv(t, "", 0)
+			path := env.Paths.ListFile(env.Prompt, "open")
+			action := ""
+			if c.action {
+				action = `echo '{"prs":[{"repo":"ws/cur","id":11,"role":"open"}],"saved":"2026-11-01T10:00:00Z"}' > '` + path + `'; `
+			}
+			writeScript(t, env, log, `echo "$*" >> "$log"
+case "$2" in
+inbox) `+action+`echo '{"currentUser":{"uuid":"u"},"items":[{"id":7,"repo":"ws/cur","updatedOn":"u"}]}' ;;
+*) echo '[]' ;;
+esac`)
+			at := time.Now().Add(-c.age)
+			old := []bb.PR{{Repo: "ws/cur", ID: 10, Role: bb.Open}, {Repo: "ws/cur", ID: 11, Role: bb.Open}}
+			if err := store.SaveList(path, store.ListCache{PRs: old, Saved: at}); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chtimes(path, at, at); err != nil {
+				t.Fatal(err)
+			}
+			released := make(chan time.Time, 1)
+			if c.locked {
+				release, ok, err := store.TryLock(path, time.Minute)
+				if err != nil || !ok {
+					t.Fatalf("TryLock: ok=%v err=%v", ok, err)
+				}
+				go func() {
+					time.Sleep(300 * time.Millisecond)
+					released <- time.Now()
+					release()
+				}()
+			}
 
-func TestRunWaitsForLock(t *testing.T) {
-	env, log := testEnv(t, "[]", 0)
-	path := env.Paths.ListFile(env.Prompt, "open")
-	release, ok, err := store.TryLock(path, time.Minute)
-	if err != nil || !ok {
-		t.Fatalf("TryLock: ok=%v err=%v", ok, err)
-	}
-	released := make(chan time.Time, 1)
-	go func() {
-		time.Sleep(300 * time.Millisecond)
-		released <- time.Now()
-		release()
-	}()
-	if err := Run(context.Background(), env, "open", false); err != nil {
-		t.Fatal(err)
-	}
-	done := time.Now()
-	if done.Before(<-released) {
-		t.Error("Run returned before the lock went away")
-	}
-	if got := readLog(t, log); got != "" {
-		t.Errorf("twg ran: %q", got)
+			if err := Run(context.Background(), env, "open", c.auto); err != nil {
+				t.Fatal(err)
+			}
+
+			if c.locked && time.Now().Before(<-released) {
+				t.Error("Run returned before the lock went away")
+			}
+			if calls := strings.Contains(readLog(t, log), "bitbucket inbox "); calls != c.calls {
+				t.Errorf("inbox calls: %t, want %t:\n%s", calls, c.calls, readLog(t, log))
+			}
+			got, err := store.LoadList(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var ids []int
+			for _, p := range got.PRs {
+				ids = append(ids, p.ID)
+			}
+			if !slices.Equal(ids, c.want) {
+				t.Errorf("PRs of the list file = %v, want %v", ids, c.want)
+			}
+		})
 	}
 }
 
@@ -457,69 +500,114 @@ echo '{}'`,
 	}
 }
 
-// The decisions of the warm run, with a fake idle time, a fake clock, and a
-// fake twg. The rows also check the thresholds: an idle time of 14 minutes,
-// a list of 20 minutes, and a marker of 40 minutes do not stop the run.
+// The decisions of the warm run, with fake uses, a fake idle time, a fake
+// clock, and a fake twg. The workspace is ws. The rows also check the
+// thresholds: a use of 7 hours, an idle time of 14 minutes, a list of 6
+// minutes, and a marker of 40 minutes do not stop the run.
 func TestWarm(t *testing.T) {
 	const limit = `printf 'ok: false\nerror:\n  message: "Bitbucket API error: 429"\n'; exit 1`
 	const views = `case "$3" in diff) echo 'diff --git a/x b/x' ;; *) echo '[]' ;; esac`
-	listPRs := func(n int) []bb.PR {
-		var prs []bb.PR
-		for i := range n {
-			prs = append(prs, bb.PR{Repo: "ws/app", ID: i + 1, Role: bb.Review, UpdatedRaw: "u"})
+	const inboxPR = `echo '{"currentUser":{"uuid":"u"},"items":[{"id":7,"repo":"ws/app","updatedOn":"u"}]}'`
+	prs := func(ids ...int) []bb.PR {
+		var out []bb.PR
+		for _, id := range ids {
+			out = append(out, bb.PR{Repo: "ws/app", ID: id, Role: bb.Review, UpdatedRaw: "u"})
 		}
-		return prs
+		return out
 	}
+	// list is one open list file. The prompt ws/app or ws/other names the
+	// list of that repo.
+	type list struct {
+		age    time.Duration // the age of the file; 0 for no file
+		prs    []bb.PR
+		locked bool // another refresh holds the lock of the file
+	}
+	ws := map[string]time.Duration{"ws": time.Hour}
+	both := map[string]time.Duration{"ws": time.Hour, "ws/app": time.Hour}
 	cases := []struct {
 		name   string
+		used   map[string]time.Duration // the age of the last use, by prompt
 		idle   time.Duration
 		marker time.Duration // the age of the backoff marker; 0 for none
-		list   time.Duration // the age of the list file; 0 for none
-		prs    int           // the PRs of the list file
-		locked bool          // another refresh holds the lock of the list file
-		// inRepo makes the list file the list of the repo ws/app, as when
-		// bb-prs runs in that repo. The inbox calls load each list of ws.
-		inRepo bool
-		// The fake twg: the output of the inbox calls and of the preview calls.
-		inbox, preview string
-		wantLine       string // the start of the line
-		wantOK         bool
-		// The numbers of inbox calls and of preview calls, from min to max.
-		// Two inbox calls run at the same time, so after a rate limit the
-		// second call can start or not.
-		inboxes, previews [2]int
-		wantMarker        bool // the run writes a new marker
+		lists  map[string]list
+		// The fake twg: the output of the inbox calls, of the repo query, and
+		// of the preview calls. An empty query gives no PR.
+		inbox, query, preview string
+		wantLine              string // the start of the line
+		wantOK                bool
+		// The numbers of inbox calls, of repo queries, and of preview calls,
+		// from min to max. Two inbox calls run at the same time, so after a
+		// rate limit the second call can start or not.
+		inboxes, queries, previews [2]int
+		wantMarker                 bool     // the run writes a new marker
+		saved                      []string // the prompts of the list files that the run writes
 	}{
-		{name: "idle: no call", idle: 20 * time.Minute, wantLine: "idle for 20m: no calls", wantOK: true},
-		{name: "a rate limit 5 minutes ago: no call", marker: 5 * time.Minute, wantLine: "backoff", wantOK: true},
-		{name: "a refresh holds the lock: no call", locked: true, wantLine: "busy", wantOK: true},
-		{name: "a refresh of a repo of the workspace holds its lock: no call", locked: true, inRepo: true, wantLine: "busy", wantOK: true},
-		{name: "a fresh list of a repo of the workspace: the prefetch only", list: 5 * time.Minute, inRepo: true, prs: 1, preview: views,
-			wantLine: "fresh list (5m old): 1 PR, prefetched 4 views", wantOK: true, previews: [2]int{6, 6}},
-		{name: "a fresh list: the prefetch only", list: 5 * time.Minute, prs: 1, preview: views,
-			wantLine: "fresh list (5m old): 1 PR, prefetched 4 views", wantOK: true, previews: [2]int{6, 6}},
-		{name: "an old marker and a fresh list: the prefetch runs", marker: 40 * time.Minute, list: 5 * time.Minute, prs: 1,
-			preview: views, wantLine: "fresh list", wantOK: true, previews: [2]int{6, 6}},
-		{name: "active, and an old list: refresh and prefetch", idle: 14 * time.Minute, list: 20 * time.Minute, prs: 1,
-			inbox: `echo '{"currentUser":{"uuid":"u"},"items":[{"id":7,"repo":"ws/app","updatedOn":"u"}]}'`, preview: views,
-			wantLine: "refreshed the open list: 1 PR, prefetched 4 views", wantOK: true, inboxes: [2]int{2, 2}, previews: [2]int{6, 6}},
-		{name: "a rate limit in the refresh: the marker, and no prefetch", inbox: limit, preview: views,
-			wantLine: "failed: rate limit", inboxes: [2]int{1, 2}, wantMarker: true},
+		// wsx is another workspace, not a repo of ws.
+		{name: "no use of the workspace in 8 hours: no call",
+			used:     map[string]time.Duration{"ws": 9 * time.Hour, "wsx": time.Hour, "wsx/app": time.Minute},
+			wantLine: "not used here in 8h: no calls", wantOK: true},
+		{name: "idle: no call", used: ws, idle: 20 * time.Minute, wantLine: "idle for 20m: no calls", wantOK: true},
+		{name: "a rate limit 5 minutes ago: no call", used: ws, marker: 5 * time.Minute, wantLine: "backoff", wantOK: true},
+		{name: "a refresh holds the lock: no call", used: ws, lists: map[string]list{"ws": {locked: true}},
+			wantLine: "busy", wantOK: true},
+		{name: "a refresh of another list of the workspace holds its lock: no call", used: ws,
+			lists: map[string]list{"ws/other": {locked: true}}, wantLine: "busy", wantOK: true},
+		{name: "a refresh holds the lock of the second list: no call, and the run releases the first lock", used: both,
+			lists: map[string]list{"ws/app": {locked: true}}, wantLine: "busy", wantOK: true},
+		// PR 1 is in both lists.
+		{name: "fresh lists: the prefetch of each PR of the lists, one time", used: both,
+			lists:    map[string]list{"ws": {age: 4 * time.Minute, prs: prs(1)}, "ws/app": {age: 3 * time.Minute, prs: prs(1, 2)}},
+			preview:  views,
+			wantLine: "fresh 2 lists (ws, ws/app), 4m old: 2 PRs, prefetched 8 views", wantOK: true, previews: [2]int{12, 12}},
+		{name: "an old marker and a fresh list: the prefetch runs", used: ws, marker: 40 * time.Minute,
+			lists: map[string]list{"ws": {age: 4 * time.Minute, prs: prs(1)}}, preview: views,
+			wantLine: "fresh 1 list (ws), 4m old: 1 PR, prefetched 4 views", wantOK: true, previews: [2]int{6, 6}},
+		{name: "active, a use of 7 hours, and a list of 6 minutes: refresh and prefetch",
+			used: map[string]time.Duration{"ws": 7 * time.Hour}, idle: 14 * time.Minute,
+			lists: map[string]list{"ws": {age: 6 * time.Minute, prs: prs(1)}}, inbox: inboxPR, preview: views,
+			wantLine: "refreshed 1 list (ws): 1 PR, prefetched 4 views", wantOK: true,
+			inboxes: [2]int{2, 2}, previews: [2]int{6, 6}, saved: []string{"ws"}},
+		{name: "only the list of a repo was used: no refresh of the list of the workspace",
+			used: map[string]time.Duration{"ws/app": time.Hour}, inbox: inboxPR, preview: views,
+			wantLine: "refreshed 1 list (ws/app): 1 PR, prefetched 4 views", wantOK: true,
+			inboxes: [2]int{2, 2}, queries: [2]int{1, 1}, previews: [2]int{6, 6}, saved: []string{"ws/app"}},
+		// The slow inbox makes the loads of the two lists wait for the
+		// same calls at the same time.
+		{name: "one old list: both lists refresh, and each inbox call runs one time", used: both,
+			lists: map[string]list{"ws": {age: 4 * time.Minute, prs: prs(1)}, "ws/app": {age: 6 * time.Minute, prs: prs(1)}},
+			inbox: "sleep 0.3; " + inboxPR, preview: views,
+			wantLine: "refreshed 2 lists (ws, ws/app): 1 PR, prefetched 4 views", wantOK: true,
+			inboxes: [2]int{2, 2}, queries: [2]int{1, 1}, previews: [2]int{6, 6}, saved: []string{"ws", "ws/app"}},
+		{name: "a rate limit in the refresh: the marker, and no prefetch", used: ws, inbox: limit, preview: views,
+			wantLine: "failed: rate limit", inboxes: [2]int{1, 2}, wantMarker: true, saved: []string{"ws"}},
 		// 429 is in the number of the PR, not a status.
-		{name: "a failure that names PR #1429: no marker", preview: views,
+		{name: "a failure that names PR #1429: no marker", used: ws, preview: views,
 			inbox:    `printf 'ok: false\nerror:\n  message: "pull request #1429 not found"\n'; exit 1`,
-			wantLine: "failed: could not load the review inbox: pull request #1429 not found", inboxes: [2]int{2, 2}},
+			wantLine: "refreshed 1 list (ws): 0 PRs, prefetched 0 views, failed: could not load the review inbox: pull request #1429 not found",
+			inboxes:  [2]int{2, 2}, saved: []string{"ws"}},
+		// For example, the repo of a used list is gone. Its query fails on
+		// each run, and the other lists must stay warm.
+		{name: "a failed list: the prefetch of the PRs that loaded, and the error", used: both,
+			inbox: inboxPR, query: `echo 'repository not found'; exit 1`, preview: views,
+			wantLine: "refreshed 2 lists (ws, ws/app): 1 PR, prefetched 4 views, failed: could not load the open PRs of ws/app: repository not found",
+			inboxes:  [2]int{2, 2}, queries: [2]int{1, 1}, previews: [2]int{6, 6}, saved: []string{"ws", "ws/app"}},
 		// 5 PRs need 30 preview calls. The prefetch stops at the first
 		// failure: the loads that run at that time end, and no other starts.
-		{name: "a rate limit in the prefetch: the marker, and the prefetch stops", list: 5 * time.Minute, prs: 5, preview: limit,
-			wantLine: "fresh list (5m old): 5 PRs, failed: rate limit", wantMarker: true, previews: [2]int{1, 12}},
+		{name: "a rate limit in the prefetch: the marker, and the prefetch stops", used: ws,
+			lists: map[string]list{"ws": {age: 4 * time.Minute, prs: prs(1, 2, 3, 4, 5)}}, preview: limit,
+			wantLine: "fresh 1 list (ws), 4m old: 5 PRs, failed: rate limit", wantMarker: true, previews: [2]int{1, 12}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			env, log := testEnv(t, "", 0)
+			query := c.query
+			if query == "" {
+				query = `echo '[]'`
+			}
 			writeScript(t, env, log, `echo "$*" >> "$log"
-case "$2" in
-inbox) `+c.inbox+` ;;
+case "$2 $3" in
+"inbox "*) `+c.inbox+` ;;
+"pull-requests query") `+query+` ;;
 *) `+c.preview+` ;;
 esac`)
 			now := time.Now()
@@ -529,16 +617,25 @@ esac`)
 					t.Fatal(err)
 				}
 			}
-			// The warm run refreshes the list of the workspace, with no repo.
-			path := env.Paths.ListFile("ws", "open")
-			if c.inRepo {
-				path = env.Paths.ListFile("ws/app", "open")
-			}
-			if c.list > 0 {
-				if err := store.SaveList(path, store.ListCache{PRs: listPRs(c.prs), Saved: now.Add(-c.list)}); err != nil {
+			for prompt, d := range c.used {
+				if err := env.Paths.MarkUsed(prompt); err != nil {
 					t.Fatal(err)
 				}
-				age(path, c.list)
+				age(filepath.Join(env.Paths.State, "used", strings.ReplaceAll(prompt, "/", "_")), d)
+			}
+			for prompt, l := range c.lists {
+				path := env.Paths.ListFile(prompt, "open")
+				if l.age > 0 {
+					if err := store.SaveList(path, store.ListCache{PRs: l.prs, Saved: now.Add(-l.age)}); err != nil {
+						t.Fatal(err)
+					}
+					age(path, l.age)
+				}
+				if l.locked {
+					if _, ok, err := store.TryLock(path, time.Minute); err != nil || !ok {
+						t.Fatalf("TryLock: %t, %v", ok, err)
+					}
+				}
 			}
 			marker := env.Paths.WarmBackoff()
 			if c.marker > 0 {
@@ -547,11 +644,6 @@ esac`)
 				}
 				age(marker, c.marker)
 			}
-			if c.locked {
-				if _, ok, err := store.TryLock(path, time.Minute); err != nil || !ok {
-					t.Fatalf("TryLock: %t, %v", ok, err)
-				}
-			}
 
 			line, ok := Warm(context.Background(), env, func(context.Context) (time.Duration, bool) { return c.idle, true })
 
@@ -559,13 +651,25 @@ esac`)
 				t.Errorf("Warm = %q, %t; want the start %q, %t", line, ok, c.wantLine, c.wantOK)
 			}
 			calls := readLog(t, log)
-			inbox, previews := strings.Count(calls, "bitbucket inbox "), strings.Count(calls, "bitbucket pull-requests ")
-			if inbox < c.inboxes[0] || inbox > c.inboxes[1] || previews < c.previews[0] || previews > c.previews[1] {
-				t.Errorf("calls =\n%s\nwant %v inbox calls and %v preview calls", calls, c.inboxes, c.previews)
+			inbox, queries := strings.Count(calls, "bitbucket inbox "), strings.Count(calls, "bitbucket pull-requests query ")
+			previews := strings.Count(calls, "bitbucket pull-requests ") - queries
+			if inbox < c.inboxes[0] || inbox > c.inboxes[1] || queries < c.queries[0] || queries > c.queries[1] ||
+				previews < c.previews[0] || previews > c.previews[1] {
+				t.Errorf("calls =\n%s\nwant %v inbox calls, %v repo queries, and %v preview calls", calls, c.inboxes, c.queries, c.previews)
 			}
 			info, err := os.Stat(marker)
 			if fresh := err == nil && now.Sub(info.ModTime()) < time.Minute; fresh != c.wantMarker {
 				t.Errorf("a new marker: %t, want %t", fresh, c.wantMarker)
+			}
+			for _, prompt := range []string{"ws", "ws/app", "ws/other"} {
+				path := env.Paths.ListFile(prompt, "open")
+				info, err := os.Stat(path)
+				if written := err == nil && now.Sub(info.ModTime()) < time.Minute; written != slices.Contains(c.saved, prompt) {
+					t.Errorf("the run wrote the list of %s: %t, want %t", prompt, written, !written)
+				}
+				if store.Locked(path) && !c.lists[prompt].locked {
+					t.Errorf("the run left the lock of the list of %s", prompt)
+				}
 			}
 		})
 	}

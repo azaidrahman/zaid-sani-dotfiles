@@ -96,6 +96,35 @@ func TestLock(t *testing.T) {
 	}
 }
 
+// The time of a use is the modification time of its file. A use at the
+// limit counts, and a new mark moves an old use to now.
+func TestUsed(t *testing.T) {
+	p := Paths{Cache: t.TempDir(), State: t.TempDir()}
+	if got := p.UsedSince(time.Time{}); got != nil {
+		t.Errorf("UsedSince with no marks = %q, want none", got)
+	}
+	now := time.Now().Truncate(time.Second)
+	for prompt, age := range map[string]time.Duration{"ws/b": 0, "ws": time.Hour, "ws/a": 9 * time.Hour} {
+		if err := p.MarkUsed(prompt); err != nil {
+			t.Fatal(err)
+		}
+		at := now.Add(-age)
+		if err := os.Chtimes(filepath.Join(p.State, "used", strings.ReplaceAll(prompt, "/", "_")), at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	since := now.Add(-time.Hour)
+	if got, want := p.UsedSince(since), []string{"ws", "ws/b"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("UsedSince = %q, want %q", got, want)
+	}
+	if err := p.MarkUsed("ws/a"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := p.UsedSince(since), []string{"ws", "ws/a", "ws/b"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("UsedSince after a new mark = %q, want %q", got, want)
+	}
+}
+
 func TestListRoundTrip(t *testing.T) {
 	p := Paths{Cache: t.TempDir(), State: t.TempDir()}
 	path := p.ListFile("ws/cur", "open")

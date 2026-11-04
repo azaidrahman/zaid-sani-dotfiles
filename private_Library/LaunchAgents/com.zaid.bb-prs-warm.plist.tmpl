@@ -1,15 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  bb-prs-warm keeps the cache of bb-prs warm, so that bb-prs shows each PR at
-  once, also on a first visit. Every 15 minutes, launchd runs "bb-prs --warm".
-  The run refreshes the open list of the workspace and loads the data of its
-  PRs into ~/.cache/bb-prs. The cache is on the disk of this Mac, so each Mac
-  runs its own agent. A run makes no call when the Mac is idle for 15 minutes
-  or more, or for 30 minutes after a rate limit of Bitbucket. Each run writes
-  one line to the log file below. twg is in ~/.local/bin, and ioreg is in
-  /usr/sbin, so PATH has both. run_onchange_after_load-bb-prs-warm.sh loads
-  this agent.
+  bb-prs-warm keeps the cache of bb-prs warm, so that bb-prs shows the list
+  and each PR at once, also on a first visit. Every 9 minutes, launchd runs
+  "bb-prs --warm". The run refreshes each open list of the workspace that
+  bb-prs showed on this Mac in the last 8 hours, and loads the data of their
+  PRs into ~/.cache/bb-prs. bb-prs treats a list younger than 10 minutes as
+  fresh, so a list that the run keeps warm needs no refresh when bb-prs
+  opens. The cache is on the disk of this Mac, so each Mac runs its own
+  agent. A run makes no call when the user is idle on this Mac for 15
+  minutes or more (no key, mouse, or terminal input), or for 30 minutes
+  after a rate limit of Bitbucket. Each run writes one line to the log file
+  below. twg is in ~/.local/bin, and ioreg is in /usr/sbin, so PATH has
+  both. run_onchange_after_load-bb-prs-warm.sh loads this agent.
 -->
 <plist version="1.0">
 <dict>
@@ -21,7 +24,7 @@
     <string>--warm</string>
   </array>
   <key>StartInterval</key>
-  <integer>900</integer>
+  <integer>540</integer>
   <key>RunAtLoad</key>
   <false/>
   <key>ProcessType</key>

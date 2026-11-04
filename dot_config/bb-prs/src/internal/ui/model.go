@@ -33,6 +33,10 @@ type Deps struct {
 	Log     *cmdlog.Log
 	// Spawn starts a detached refresh of the list "open" or "closed".
 	Spawn func(list string, auto bool) error
+	// MarkUsed records a use of the list of the screen, for the warm run
+	// (store.Paths.MarkUsed). The screen calls it at the start, and again
+	// each markEvery while it stays open. Nil means no record.
+	MarkUsed func()
 	// Review returns the command that reviews the PR at url.
 	Review func(url string) *exec.Cmd
 	// PRConflicts runs "git <args>" with g, which records the command. The
@@ -69,10 +73,15 @@ const (
 	// once.
 	reviewsEvery = time.Second
 	flashFor     = 4 * time.Second
-	freshAge     = 3 * time.Minute // the same age as the automatic refresh
-	maxActions   = 300
-	openTimeout  = 30 * time.Second
-	popupGuard   = 400 * time.Millisecond
+	freshAge     = 10 * time.Minute // the same age as the automatic refresh
+	// markEvery is the time between two records of a use of the list. The
+	// warm run refreshes a list that the screen used in the last 8 hours. A
+	// screen can stay open all day. Then the warm run is the only refresh of
+	// its list on a timer.
+	markEvery   = 10 * time.Minute
+	maxActions  = 300
+	openTimeout = 30 * time.Second
+	popupGuard  = 400 * time.Millisecond
 )
 
 // The panels that can have focus.
@@ -334,8 +343,10 @@ type Model struct {
 	reviewsAt time.Time
 	newStarts map[string]newStart
 	opening   map[string]bool
-	cwd       string
-	start     tea.Cmd
+	// usedAt is the time of the last record of a use (see Deps.MarkUsed).
+	usedAt time.Time
+	cwd    string
+	start  tea.Cmd
 }
 
 // New loads the cached lists and the log of actions. It also starts the
@@ -360,6 +371,7 @@ func New(d Deps) Model {
 	m.loadActions()
 	_, _ = m.loadReviewer()
 	m.syncReviews(time.Now())
+	m.markUsed(time.Now())
 	m.autoRefresh("open")
 	m.syncShown()
 	// The cursor starts on its PR: the first loads do not wait.
@@ -455,7 +467,18 @@ func (m *Model) onTick(now time.Time) tea.Cmd {
 	if now.Sub(m.reviewsAt) >= reviewsEvery {
 		m.syncReviews(now)
 	}
+	if now.Sub(m.usedAt) >= markEvery {
+		m.markUsed(now)
+	}
 	return tea.Batch(append(cmds, m.ensureView(), m.tick())...)
+}
+
+// markUsed records a use of the list of the screen at the time now.
+func (m *Model) markUsed(now time.Time) {
+	m.usedAt = now
+	if m.d.MarkUsed != nil {
+		m.d.MarkUsed()
+	}
 }
 
 func (m *Model) listFile(list string) string {
@@ -471,6 +494,7 @@ func modTime(path string) time.Time {
 }
 
 // loadList reads the file of a list again. The cursor stays on the same PR.
+// If a reload of the open list brings new PRs, the bar tells their number.
 // For the open list, it returns a command that counts the commits behind.
 func (m *Model) loadList(list string) tea.Cmd {
 	path := m.listFile(list)
@@ -478,12 +502,24 @@ func (m *Model) loadList(list string) tea.Cmd {
 	if list == m.list {
 		keep = m.currentKey()
 	}
+	prev := m.caches[list]
 	c, err := store.LoadList(path)
 	if err != nil {
-		c = m.caches[list]
+		c = prev
 		c.Errors = []string{"could not read the list file: " + err.Error()}
 	}
 	m.caches[list] = c
+	// The PRs are new only against a list that loaded. A first refresh that
+	// failed saves no PRs, but it has errors and a time.
+	loaded := !prev.Saved.IsZero() && (len(prev.PRs) > 0 || len(prev.Errors) == 0)
+	if list == "open" && loaded {
+		switch n := newPRs(prev.PRs, c.PRs); {
+		case n == 1:
+			m.setFlash("1 new PR", green)
+		case n > 1:
+			m.setFlash(fmt.Sprintf("%d new PRs", n), green)
+		}
+	}
 	m.mtimes[list] = modTime(path)
 	if keep != "" {
 		for i, p := range m.prRows() {
@@ -502,6 +538,21 @@ func (m *Model) loadList(list string) tea.Cmd {
 		return nil
 	}
 	return countBehind(m.d.Env.Dir, m.d.Env.Repo, c.PRs, m.mtimes[list])
+}
+
+// newPRs returns the number of PRs of next whose key is not in prev.
+func newPRs(prev, next []bb.PR) int {
+	old := map[string]bool{}
+	for _, p := range prev {
+		old[p.Key()] = true
+	}
+	n := 0
+	for _, p := range next {
+		if !old[p.Key()] {
+			n++
+		}
+	}
+	return n
 }
 
 // countBehind counts the commits behind for each PR of repo, with git in dir.
@@ -529,7 +580,8 @@ func (m *Model) loadActions() {
 // that is fresh, and the command log tells it.
 func (m *Model) autoRefresh(list string) {
 	if store.Fresh(m.listFile(list), freshAge) {
-		m.d.Log.Begin(strings.ToUpper(list[:1]) + list[1:] + " list is fresh (less than 3 minutes). No calls.")
+		m.d.Log.Begin(fmt.Sprintf("%s%s list is fresh (less than %d minutes). No calls.",
+			strings.ToUpper(list[:1]), list[1:], int(freshAge/time.Minute)))
 	} else {
 		m.logRefresh(list)
 	}
