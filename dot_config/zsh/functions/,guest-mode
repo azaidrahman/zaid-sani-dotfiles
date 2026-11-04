@@ -2,7 +2,6 @@
 #               you can watch something or let another person use the Mac.
 #
 #               The function stops these things:
-#                 - borders            (window border highlight)
 #                 - Keyboard Maestro Engine
 #                 - SoundSource
 #                 - AeroSpace          (tiling stops, windows keep their place)
@@ -23,9 +22,6 @@
 emulate -L zsh
 setopt local_options
 
-local borders_bin=/opt/homebrew/opt/borders/bin/borders
-local borders_agent="$HOME/Library/LaunchAgents/homebrew.mxcl.borders.plist"
-local borders_label="gui/$(id -u)/homebrew.mxcl.borders"
 local aerospace_bin=/opt/homebrew/bin/aerospace
 local karabiner_cli="/Library/Application Support/org.pqrs/Karabiner-Elements/bin/karabiner_cli"
 local karabiner_json="$HOME/.config/karabiner/karabiner.json"
@@ -75,22 +71,6 @@ PY
 	mkdir -p "$state_dir"
 	: >"$state_file"
 	print "Guest mode: turning things off"
-
-	if pgrep -x borders >/dev/null; then
-		# launchd restarts borders after a plain kill, so unload the agent.
-		if launchctl print "$borders_label" >/dev/null 2>&1; then
-			.guest-mode-put borders launchd
-			launchctl bootout "$borders_label" 2>/dev/null
-			.guest-mode-log "borders: off (launch agent unloaded)"
-		else
-			.guest-mode-put borders process
-			killall borders 2>/dev/null
-			.guest-mode-log "borders: off"
-		fi
-	else
-		.guest-mode-put borders 0
-		.guest-mode-log "borders: was already off"
-	fi
 
 	if pgrep -f "Keyboard Maestro Engine" >/dev/null; then
 		.guest-mode-put km 1
@@ -160,22 +140,6 @@ PY
 		.guest-mode-log "Keyboard Maestro Engine: on"
 	fi
 
-	case $(.guest-mode-get borders 0) in
-	launchd)
-		launchctl bootstrap "gui/$(id -u)" "$borders_agent" 2>/dev/null
-		sleep 0.5
-		.guest-mode-log "borders: on (launch agent loaded)"
-		;;
-	process | 1)
-		"$borders_bin" >/dev/null 2>&1 &
-		sleep 0.3
-		.guest-mode-log "borders: on"
-		;;
-	esac
-	if pgrep -x borders >/dev/null && [[ -x "$HOME/.config/borders/border-focus.sh" ]]; then
-		"$HOME/.config/borders/border-focus.sh"
-	fi
-
 	rm -f "$state_file"
 	print "Done."
 }
@@ -190,11 +154,6 @@ if [[ ${1:-} == --restore ]]; then
 	# With no state file, assume that everything ran before.
 	if [[ ! -f $state_file ]]; then
 		: >"$state_file"
-		if launchctl print "$borders_label" >/dev/null 2>&1; then
-			.guest-mode-put borders 0
-		else
-			.guest-mode-put borders launchd
-		fi
 		.guest-mode-put km 1
 		.guest-mode-put soundsource 1
 		.guest-mode-put aerospace 1

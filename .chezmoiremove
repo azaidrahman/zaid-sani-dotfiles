@@ -87,3 +87,8 @@ tests/test-omp.zsh
 .config/rex/last_tab.lua
 .config/rex/scripts/last-tab-watcher.lua
 .config/rex/scripts/tab-feed.lua
+# JankyBorders is not used now. The old scripts are in archive/borders/.
+.config/borders/bordersrc
+.config/borders/border-focus.sh
+.config/borders/border-toggle.sh
+.config/borders

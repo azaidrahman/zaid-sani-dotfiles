@@ -11,21 +11,13 @@ enable-normalization-flatten-containers = false
 enable-normalization-opposite-orientation-for-nested-containers = false
 after-login-command = []
 on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
-on-focus-changed = [
-    'move-mouse window-lazy-center',
-    'exec-and-forget ~/.config/borders/border-focus.sh',
-]
+on-focus-changed = ['move-mouse window-lazy-center']
 
 
 # You can use it to add commands that run after AeroSpace startup.
 # 'after-startup-command' is run after 'after-login-command'
 # Available commands : https://nikitabobko.github.io/AeroSpace/commands
-# JankyBorders detects an already running process. AeroSpace restarts do not
-# start a second one. The options come from ~/.config/borders/bordersrc.
-after-startup-command = [
-    'exec-and-forget /opt/homebrew/opt/borders/bin/borders',
-    'exec-and-forget ~/.config/borders/border-focus.sh',
-]
+after-startup-command = []
 
 # exec-on-workspace-change = [
 #     '/bin/bash',
