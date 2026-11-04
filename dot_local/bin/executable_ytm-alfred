@@ -40,7 +40,7 @@ if ! data="$("$ytm" json 2>&1)"; then
   elif [[ $data == *"error: 401"* ]]; then
     message "The API refused the token" 'Run "ytm pair", or make a client in Settings > Authentication'
   else
-    message "The Local API does not answer" "Turn on Settings > Local API. If it is on, restart YouTube Music."
+    message "The Local API does not answer" "Press Enter to restart YouTube Music. If it still fails, turn on Settings > Local API." restart
   fi
   exit 0
 fi
