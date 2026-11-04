@@ -2,9 +2,11 @@ workspace:
   # key | label | aerospace command  (opt+key)
   - 1 | ws1 | workspace 1
   - 2 | ws2 | workspace 2
-  - q | ws3 | workspace 3
-  - w | ws4 | workspace 4
-  - e | ws5 | workspace 5
+  - 3 | ws3 | workspace 3
+  - 4 | ws4 | workspace 4
+  - q | ws5 | workspace 5
+  - w | ws6 | workspace 6
+  - e | ws7 | workspace 7
   - h | ← | focus --boundaries-action wrap-around-the-workspace left
   - j | ↓ | focus --boundaries-action wrap-around-the-workspace down
   - k | ↑ | focus --boundaries-action wrap-around-the-workspace up
@@ -22,9 +24,11 @@ workspace-shift:
   # key | label | aerospace command  (opt+shift+key)
   - 1 | →ws1 | move-node-to-workspace 1 --focus-follows-window
   - 2 | →ws2 | move-node-to-workspace 2 --focus-follows-window
-  - q | →ws3 | move-node-to-workspace 3 --focus-follows-window
-  - w | →ws4 | move-node-to-workspace 4 --focus-follows-window
-  - e | →ws5 | move-node-to-workspace 5 --focus-follows-window
+  - 3 | →ws3 | move-node-to-workspace 3 --focus-follows-window
+  - 4 | →ws4 | move-node-to-workspace 4 --focus-follows-window
+  - q | →ws5 | move-node-to-workspace 5 --focus-follows-window
+  - w | →ws6 | move-node-to-workspace 6 --focus-follows-window
+  - e | →ws7 | move-node-to-workspace 7 --focus-follows-window
   - h | mv← | move left
   - j | mv↓ | move down
   - k | mv↑ | move up

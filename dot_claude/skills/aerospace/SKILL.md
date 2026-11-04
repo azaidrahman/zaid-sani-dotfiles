@@ -33,7 +33,7 @@ run = 'layout floating'
 if.app-name-regex-substring = 'IINA'
 run = [
     'layout floating',
-    'move-node-to-workspace 4',
+    'move-node-to-workspace 6',
 ]
 ```
 
@@ -66,11 +66,13 @@ aerospace reload-config                              # make the config live
 
 | WS | Purpose |
 |----|---------|
-| 1 | Terminal / apps |
-| 2 | Work browser / work apps |
-| 3 | Personal / secondary browser |
-| 4 | Secondary apps |
-| 5 | Main / blank (place to do splits) |
+| 1 | Left monitor: terminal / apps |
+| 2 | Left monitor: work browser / work apps |
+| 3 | Left monitor: free |
+| 4 | Left monitor: free |
+| 5 | Right monitor: personal / secondary browser |
+| 6 | Right monitor: secondary apps |
+| 7 | Right monitor: main / blank (place to do splits) |
 
 ## Common mistakes
 
