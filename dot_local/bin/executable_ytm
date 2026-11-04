@@ -21,6 +21,9 @@ token_file="${XDG_DATA_HOME:-$HOME/.local/share}/ytm/token"
 app_id="ytmcli"
 bundle_id="net.venipa.ytmdesktop"
 process_name="YouTube Music for Desktop"
+# This pattern finds the main process only. The helpers are in
+# Contents/Frameworks. Tests set YTM_APP_PATTERN to find a fake app.
+app_pattern="${YTM_APP_PATTERN:-${process_name}.app/Contents/MacOS/}"
 hud_bin="$HOME/.config/karabiner/scripts/ytm-hud"
 
 usage() {
@@ -44,6 +47,8 @@ Usage: ytm <command>
   json                Show the track and the player state as one JSON object.
   thumb <file>        Save the album art of the current track to a file.
   tray                Open or close the player of the menu bar icon.
+  restart             Stop YouTube Music and open it again. Use this when
+                      the Local API does not answer.
   pair                Get an API token. Approve the request in the app.
 EOF
 }
@@ -144,12 +149,44 @@ now_playing() {
 #
 # The caller needs the Accessibility permission. Karabiner has it.
 tray() {
-  if ! pgrep -qf "${process_name}.app/Contents/MacOS/"; then
+  if ! pgrep -qf "$app_pattern"; then
     open -b "$bundle_id"
     return
   fi
   # A lookup by name is faster than a lookup by bundle ID (10 ms, not 80 ms).
   osascript -e "tell application \"System Events\" to tell process \"${process_name}\" to click menu bar item 1 of menu bar 2" >/dev/null
+}
+
+# app_stopped SECONDS
+# Wait until the main process stops. Return 1 if it runs after SECONDS.
+app_stopped() {
+  local i
+  for ((i = 0; i < $1 * 10; i++)); do
+    if ! pgrep -qf "$app_pattern"; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  return 1
+}
+
+# If "minimize to tray" is on, a quit request only hides the app in the tray.
+# This includes Cmd+Q, an AppleScript quit, and SIGTERM. Only Quit in the menu
+# of the tray icon stops the app, and the icon gives no action to open that
+# menu. Thus SIGKILL stops the app if SIGTERM does not. SIGKILL skips the
+# cleanup of the app.
+restart() {
+  if pgrep -qf "$app_pattern"; then
+    pkill -TERM -f "$app_pattern" || true
+    if ! app_stopped 3; then
+      pkill -KILL -f "$app_pattern" || true
+      if ! app_stopped 5; then
+        echo "ytm: YouTube Music did not stop" >&2
+        exit 1
+      fi
+    fi
+  fi
+  open -b "$bundle_id"
 }
 
 pair() {
@@ -227,6 +264,7 @@ case "${1:-}" in
     api GET /track/thumbnail >"$2"
     ;;
   tray) tray ;;
+  restart) restart ;;
   pair) pair ;;
   -h | --help | help) usage ;;
   *)
