@@ -2,31 +2,38 @@
 # Format: key | label | app name (or !GokuCommand)
 #
 # Uppercase key = shifted variant (right_option + shift + key)
+# ⇧ before a key that has no uppercase = shifted variant, for example ⇧1
 # Prefix app with ! to use a raw goku command instead of open -a
 
 app:
   - w | WA | Whatsapp
   - W | messages | Messages
   - e | obsidian | Obsidian
-  - 1 | arc(work) | sh:$HOME/.config/karabiner/scripts/arc-space.sh Work
-  - 2 | arc(zaid) | sh:$HOME/.config/karabiner/scripts/arc-space.sh Zaid
+  - 1 | web(work) | sh:$HOME/.local/bin/browser space Work
+  - 2 | web(zaid) | sh:$HOME/.local/bin/browser space Zaid
   - t | ghostty | sh:$HOME/.config/karabiner/scripts/ghostty-window.sh
   - i | IINA | IINA
   - I | ino | Inoreader
   - j | jira | Jira
-  - p | gchat | sh:$HOME/.config/karabiner/scripts/arc-tab.sh Work GCHAT
+  - p | gchat | sh:$HOME/.local/bin/browser tab gchat
   - s | slack | Slack
   - f | cal | Calendar
   - F | alfred | Alfred Preferences
   - g | iPhone | iPhone Mirroring
   - G | safari | Safari
-  - 3 | arc(research) | sh:$HOME/.config/karabiner/scripts/arc-space.sh Research
+  - 3 | web(research) | sh:$HOME/.local/bin/browser space Research
+  - 4 | web(youtube) | sh:$HOME/.local/bin/browser space YouTube
+  - ⇧1 | win(work) | sh:$HOME/.local/bin/browser space-window Work
+  - ⇧2 | win(zaid) | sh:$HOME/.local/bin/browser space-window Zaid
+  - ⇧3 | win(research) | sh:$HOME/.local/bin/browser space-window Research
+  - ⇧4 | win(youtube) | sh:$HOME/.local/bin/browser space-window YouTube
   - k | KM | Keyboard Maestro
-  - l | gmail(gmd) | sh:$HOME/.config/karabiner/scripts/arc-tab.sh Work 'GMAIL GMD'
+  - l | gmail | sh:$HOME/.local/bin/browser tab gmail
+  - L | gmail(work) | sh:$HOME/.local/bin/browser tab gmail-work
   - \ | switch | !Cgrave_accent_and_tilde
   - v | chrome | Google Chrome
   - b | telegram | Telegram
-  - n | todoist | sh:$HOME/.config/karabiner/scripts/arc-float-tab.sh https://todoistenhanced.julesbertolino.fr
+  - 9 | todoist | sh:$HOME/.local/bin/browser open https://todoistenhanced.julesbertolino.fr https://todoistenhanced.julesbertolino.fr
   - o | todoist(app) | Todoist
   - x | mixlet | Mixlet
   - 0 | claude | Claude

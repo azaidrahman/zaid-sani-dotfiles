@@ -103,7 +103,7 @@ run = 'layout floating'
 # Browser
 [[on-window-detected]]
 if.app-name-regex-substring = 'Vivaldi'
-run = 'move-node-to-workspace 2'
+run = 'move-node-to-workspace 1'
 [[on-window-detected]]
 if.app-name-regex-substring = 'Arc'
 run = 'move-node-to-workspace 1'

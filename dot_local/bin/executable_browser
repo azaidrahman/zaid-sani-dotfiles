@@ -1,0 +1,199 @@
+#!/bin/bash
+# Send a browser action to the driver of the active browser.
+#
+# Usage:
+#   browser space <name>            show a space, for example Work
+#   browser space-window <name>     show a space in its own window
+#   browser tab <name>              focus a named tab (see config.sh)
+#   browser tabs                    print the open tabs as Alfred JSON
+#   browser focus-tab <win> <tab>   focus a tab that "browser tabs" printed
+#   browser open <url> [<prefix>]   open the URL; if a tab URL starts with
+#                                   the prefix, focus that tab instead
+#   browser use <driver>            use the driver, and make its browser
+#                                   the default browser
+#   browser current                 print the name of the active driver
+#
+# Each browser has a driver: $BROWSER_HOME/drivers/<name>.sh. A driver sets
+# DRIVER_APP and DRIVER_BUNDLE, and defines one function for each action that
+# it can do: drv_space, drv_space_window, drv_tab, drv_tabs, drv_focus_tab,
+# and drv_focus_url.
+# If the driver cannot do an action, or the action fails, the command shows a
+# notification. "browser tabs" shows the error as an Alfred item instead,
+# because Alfred runs it at each key press.
+#
+# The active driver is $BROWSER_DRIVER if it is set, else the one in the
+# state file, else BROWSER_DEFAULT from config.sh.
+#
+# Exit status: 0 success, 1 the action failed, 2 the action, the driver, the
+# space, or the tab is not known or not supported.
+#
+# Karabiner runs this command with /bin/sh and a minimal PATH. Thus the
+# command must work with bash 3.2, and it uses full paths for Homebrew tools.
+set -u
+
+BROWSER_HOME="${BROWSER_HOME:-$HOME/.config/browser}"
+BROWSER_NOTIFIER="${BROWSER_NOTIFIER:-/opt/homebrew/bin/terminal-notifier}"
+AEROSPACE_BIN="${AEROSPACE_BIN:-/opt/homebrew/bin/aerospace}"
+state_file="${XDG_STATE_HOME:-$HOME/.local/state}/browser/current"
+BROWSER_DRIVER_NAME=""
+
+action="${1:-}"
+[ $# -gt 0 ] && shift
+
+# notify_error <message>: show the message in a notification and on stderr.
+notify_error() {
+  echo "browser: $1" >&2
+  "$BROWSER_NOTIFIER" -title browser -message "$1" -group browser-error \
+    >/dev/null 2>&1 || true
+}
+
+# json_string <text>: print the text as a JSON string.
+json_string() {
+  printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+}
+
+# fail <status> <message>: report the error and stop.
+fail() {
+  if [ "$action" = tabs ]; then
+    printf '{"items":[{"title":%s,"valid":false}]}\n' "$(json_string "$2")"
+    exit 0
+  fi
+  notify_error "$2"
+  exit "$1"
+}
+
+usage() {
+  sed -n '3,15s/^# \{0,1\}//p' "$0" >&2
+  fail 2 "unknown action: ${action:-none}"
+}
+
+# space_index <name>: print the position of the space, starting at 1.
+space_index() {
+  local i=1 s
+  for s in $BROWSER_SPACES; do
+    if [ "$s" = "$1" ]; then echo "$i"; return 0; fi
+    i=$((i + 1))
+  done
+  return 1
+}
+
+# named_tab <name>: print "<space>|<URL prefix>" of the named tab for the
+# active driver.
+named_tab() {
+  local line name general=""
+  while IFS= read -r line; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    case "$line" in '' | '#'*) continue ;; esac
+    name=${line%%|*}
+    if [ "$name" = "$1@$BROWSER_DRIVER_NAME" ]; then
+      echo "${line#*|}"
+      return 0
+    fi
+    [ "$name" = "$1" ] && [ -z "$general" ] && general=${line#*|}
+  done <<EOF
+$BROWSER_TABS
+EOF
+  [ -n "$general" ] && echo "$general"
+}
+
+active_driver() {
+  if [ -n "${BROWSER_DRIVER:-}" ]; then
+    echo "$BROWSER_DRIVER"
+  elif [ -s "$state_file" ]; then
+    head -n 1 "$state_file"
+  else
+    echo "$BROWSER_DEFAULT"
+  fi
+}
+
+# load_driver <name>: source the shared functions and the driver.
+load_driver() {
+  BROWSER_DRIVER_NAME=$1
+  local file="$BROWSER_HOME/drivers/$1.sh"
+  case "$1" in '' | */*) fail 2 "unknown driver $1" ;; esac
+  [ -f "$file" ] || fail 2 "unknown driver $1"
+  if [ -f "$BROWSER_HOME/lib/aerospace.sh" ]; then
+    # shellcheck source=dot_config/browser/lib/aerospace.sh
+    . "$BROWSER_HOME/lib/aerospace.sh"
+  fi
+  # shellcheck source=/dev/null
+  . "$file"
+  [ -n "${DRIVER_BUNDLE:-}" ] || fail 2 "driver $1 does not set DRIVER_BUNDLE"
+}
+
+# call <function> <arguments>: run a driver function. Report a function that
+# the driver does not have, or a function that fails.
+call() {
+  local fn=$1 err status=0 line what=$action
+  shift
+  [ "$action" = tabs ] && what="list tabs"
+  declare -F "$fn" > /dev/null || fail 2 "$BROWSER_DRIVER_NAME cannot $what"
+  err=$(mktemp "${TMPDIR:-/tmp}/browser.XXXXXX")
+  "$fn" "$@" 2> "$err" || status=$?
+  line=$(grep -v '^[[:space:]]*$' "$err" | tail -n 1)
+  [ "$status" -eq 0 ] && cat "$err" >&2
+  rm -f "$err"
+  [ "$status" -eq 0 ] || fail 1 "$BROWSER_DRIVER_NAME $action failed${line:+: $line}"
+}
+
+if [ ! -f "$BROWSER_HOME/config.sh" ]; then
+  fail 2 "no configuration: $BROWSER_HOME/config.sh"
+fi
+# shellcheck source=dot_config/browser/config.sh
+. "$BROWSER_HOME/config.sh"
+
+case "$action" in
+  current)
+    active_driver
+    exit 0
+    ;;
+  use)
+    [ $# -eq 1 ] || usage
+    load_driver "$1"
+    mkdir -p "$(dirname "$state_file")"
+    printf '%s\n' "$1" > "$state_file"
+    if ! osascript -l JavaScript "$BROWSER_HOME/lib/set-default.js" \
+      "$DRIVER_BUNDLE" > /dev/null 2>&1; then
+      fail 1 "could not set the default browser"
+    fi
+    echo "browser: now using $1"
+    exit 0
+    ;;
+  space | space-window | tab | tabs | focus-tab | open) ;;
+  *) usage ;;
+esac
+
+load_driver "$(active_driver)"
+
+case "$action" in
+  space)
+    [ $# -eq 1 ] || usage
+    index=$(space_index "$1") || fail 2 "unknown space $1"
+    call drv_space "$1" "$index"
+    ;;
+  space-window)
+    [ $# -eq 1 ] || usage
+    index=$(space_index "$1") || fail 2 "unknown space $1"
+    call drv_space_window "$1" "$index"
+    ;;
+  tab)
+    [ $# -eq 1 ] || usage
+    entry=$(named_tab "$1") || fail 2 "unknown tab $1"
+    call drv_tab "$1" "${entry%%|*}" "${entry#*|}"
+    ;;
+  tabs)
+    call drv_tabs
+    ;;
+  focus-tab)
+    [ $# -eq 2 ] || usage
+    call drv_focus_tab "$1" "$2"
+    ;;
+  open)
+    [ $# -ge 1 ] && [ $# -le 2 ] || usage
+    if [ -n "${2:-}" ] && declare -F drv_focus_url > /dev/null; then
+      call drv_focus_url "$2" "$1"
+    else
+      open -b "$DRIVER_BUNDLE" "$1" || fail 1 "could not open $1 in $DRIVER_APP"
+    fi
+    ;;
+esac
