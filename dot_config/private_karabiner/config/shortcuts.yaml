@@ -31,15 +31,16 @@ l1:
   - 3 | full-screen
   - 4 | capture-area
   - 5 | record
-  - , | soundsource
+  # SoundSource listens for cmd+F20. That is the F-key of the comma key.
+  - k | soundsource | !Cf20
   # YouTube Music: ~/.local/bin/ytm calls the local API of the app.
   - space | yt play/pause | sh:~/.local/bin/ytm toggle
   - [ | yt prev | sh:~/.local/bin/ytm prev
   - ] | yt next | sh:~/.local/bin/ytm next
   - ; | yt -10s | sh:~/.local/bin/ytm back
   - ' | yt +10s | sh:~/.local/bin/ytm fwd
-  - - | yt vol- | sh:~/.local/bin/ytm vol-down
-  - = | yt vol+ | sh:~/.local/bin/ytm vol-up
+  - , | yt vol- | sh:~/.local/bin/ytm vol-down
+  - . | yt vol+ | sh:~/.local/bin/ytm vol-up
   - u | yt like | sh:~/.local/bin/ytm like
   - d | yt dislike | sh:~/.local/bin/ytm dislike
   - r | yt repeat | sh:~/.local/bin/ytm repeat
