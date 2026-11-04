@@ -116,6 +116,9 @@ hyper:
   "8":
     -: "!CTOS8" # alfred menu bar search
 
+  m:
+    -: "!CTOSm" # alfred youtube music
+
   "0":
     -: "!QWER0" # ice bar
 

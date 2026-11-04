@@ -1,0 +1,135 @@
+#!/bin/bash
+# ytm-alfred: the script filter of the "YouTube Music" Alfred workflow.
+#
+# Alfred runs this script for the keyword "yt". The script prints Alfred JSON.
+# If the query is empty, the first row shows the current track. The other rows
+# are the controls. Alfred runs the script again each second, so the progress
+# stays current.
+#
+# Words in the query select the controls, for example "yt nex" for the next
+# track. These queries make one row with a value:
+#   vol 30    set the volume to 30 percent
+#   fwd 45    seek forward 45 seconds
+#   back 20   seek back 20 seconds
+#
+# The arg of each row is a ytm command. The action of the workflow runs it.
+# The workflow is in the Alfred sync folder. It holds only info.plist and the
+# icons. This script and ytm are in chezmoi.
+set -uo pipefail
+
+# Alfred runs scripts with a minimal PATH.
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+ytm="${YTM_BIN:-$HOME/.local/bin/ytm}"
+query="${1:-}"
+cache="${alfred_workflow_cache:-$HOME/Library/Caches/com.zaid.ytm}"
+
+# One row that tells why there are no controls. With an arg, Enter runs it.
+message() {
+  jq -cn --arg t "$1" --arg s "$2" --arg a "${3:-}" \
+    '{rerun: 1, skipknowledge: true, items: [{uid: "message", title: $t, subtitle: $s, arg: $a, valid: ($a != ""), icon: {path: "icons/warn.png"}}]}'
+}
+
+if ! data="$("$ytm" json 2>&1)"; then
+  if ! pgrep -qf 'YouTube Music for Desktop.app/Contents/MacOS/'; then
+    message "YouTube Music is not running" "Press Enter to open it" tray
+  elif [[ $data == *"error: 401"* ]]; then
+    message "The API refused the token" 'Run "ytm pair", or make a client in Settings > Authentication'
+  else
+    message "The Local API does not answer" "Turn on Settings > Local API. If it is on, restart YouTube Music."
+  fi
+  exit 0
+fi
+
+# Keep the album art of the current track only. Get it one time for each track.
+thumb=""
+id="$(jq -r '.state.id // empty' <<<"$data")"
+if [[ $id =~ ^[A-Za-z0-9_-]+$ ]]; then
+  mkdir -p "$cache"
+  thumb="$cache/$id.jpg"
+  if [[ ! -s $thumb ]]; then
+    rm -f "$cache"/*.jpg
+    if "$ytm" thumb "$thumb.tmp" 2>/dev/null; then
+      mv "$thumb.tmp" "$thumb"
+    else
+      rm -f "$thumb.tmp"
+      thumb=""
+    fi
+  fi
+fi
+
+jq -c --arg q "$query" --arg thumb "$thumb" '
+  .state as $s | .track as $t |
+  (if .volume == null then "" else "Now \(.volume) percent. " end) as $now |
+  (if .volume == null then null else "vol \(.volume)%" end) as $vol |
+
+  def mmss: (. // 0 | floor) as $x
+    | "\($x / 60 | floor):\($x % 60 | tostring | if length < 2 then "0" + . else . end)";
+  def segments($n; $c): [range($n)] | map($c) | join("");
+  def bar: ((($s.percentage // 0) / 10) | floor | if . > 10 then 10 else . end) as $n
+    | segments($n; "━") + "●" + segments(10 - $n; "─");
+  # The uid keeps the selection on the same row when Alfred runs the script
+  # again each second. Without a uid, the selection goes back to the top.
+  def row($title; $sub; $arg; $icon; $match):
+    {uid: $arg, title: $title, subtitle: $sub, arg: $arg, icon: {path: "icons/\($icon).png"}, match: $match};
+
+  ($q | ascii_downcase | gsub("^ +| +$"; "")) as $query |
+  ($query | [splits(" +")] | map(select(length > 0))) as $words |
+
+  def matches: (.title + " " + .match | ascii_downcase | [splits("[^a-z0-9]+")]) as $tw
+    | all($words[]; . as $w | any($tw[]; startswith($w)));
+
+  [
+    row(if $s.playing then "Pause" else "Play" end; "Play or pause the track";
+        "toggle"; if $s.playing then "pause" else "play" end; "toggle"),
+    row("Next track"; "Go to the next track"; "next"; "next"; "skip"),
+    row("Previous track"; "Go to the previous track"; "prev"; "prev"; "last"),
+    row("Seek forward 10 seconds"; "Type “fwd 45” to seek 45 seconds"; "fwd"; "fwd"; "fwd skip"),
+    row("Seek back 10 seconds"; "Type “back 20” to seek 20 seconds"; "back"; "back"; "rewind"),
+    row("Volume up"; "\($now)Add 5 percent. Type “vol 30” to set 30 percent"; "vol-up"; "volup"; "vol louder"),
+    row("Volume down"; "\($now)Remove 5 percent. Type “vol 30” to set 30 percent"; "vol-down"; "voldown"; "vol quieter"),
+    row(if $s.liked then "Remove the like" else "Like" end;
+        if $s.liked then "You liked this track" else "Give the track a thumbs up" end;
+        "like"; if $s.liked then "liked" else "like" end; "thumbs up heart love"),
+    row(if $s.disliked then "Remove the dislike" else "Dislike" end;
+        if $s.disliked then "You disliked this track" else "Give the track a thumbs down" end;
+        "dislike"; if $s.disliked then "disliked" else "dislike" end; "thumbs down"),
+    row("Shuffle"; "Shuffle the queue"; "shuffle"; "shuffle"; "mix random"),
+    row("Repeat"; "Change the repeat mode"; "repeat"; "repeat"; "loop"),
+    row("Open the player"; "Show the player of the menu bar icon"; "tray"; "player"; "tray mini window")
+  ] as $controls |
+
+  # A query with a number makes one row with that value.
+  ($query | capture("^(?<cmd>vol|volume|fwd|forward|back|rewind) *(?<n>[0-9]+)$") // null) as $c |
+
+  if $c != null then
+    ($c.n | tonumber) as $n |
+    if ($c.cmd | test("^vol")) then
+      if $n <= 100 then [row("Set the volume to \($n) percent"; "Press Enter to set it"; "vol \($n)"; "volup"; "")]
+      else [{title: "The volume must be 0 to 100", subtitle: "Type a lower number", valid: false, icon: {path: "icons/warn.png"}}]
+      end
+    elif ($c.cmd | test("^f")) then [row("Seek forward \($n) seconds"; "Press Enter to seek"; "fwd \($n)"; "fwd"; "")]
+    else [row("Seek back \($n) seconds"; "Press Enter to seek"; "back \($n)"; "back"; "")]
+    end
+  elif ($words | length) > 0 then
+    [$controls[] | select(matches)]
+  else
+    (if $t == null then
+       [{uid: "now", title: "Nothing is loaded", subtitle: "Press Enter to open the player", arg: "tray", icon: {path: "icon.png"}}]
+     else
+       [{uid: "now",
+         title: ($t.video.title // "Unknown track"),
+         subtitle: ([($t.video.author // empty),
+                     ((if $s.playing then "▶" else "⏸" end) + "  " + ($s.progress | mmss) + " " + bar + " " + ($s.duration | mmss)),
+                     ($vol // empty),
+                     (if $s.liked then "♥" elif $s.disliked then "✗" else empty end)] | join("   ")),
+         arg: "toggle",
+         icon: {path: (if $thumb != "" then $thumb else "icon.png" end)}}]
+     end) + $controls
+  end
+  | map(del(.match)) as $items
+  | {rerun: 1, skipknowledge: true,
+     items: (if ($items | length) > 0 then $items
+             else [{title: "No control matches “\($q)”", subtitle: "Try play, next, vol 30, or fwd 45", valid: false, icon: {path: "icons/warn.png"}}]
+             end)}
+' <<<"$data"

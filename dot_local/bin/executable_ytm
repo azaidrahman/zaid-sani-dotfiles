@@ -1,0 +1,181 @@
+#!/bin/bash
+# ytm: control YouTube Music for Desktop (YTMDesktop2) through its local API.
+#
+# Turn on the API in the app: Settings > Local API > Enable API.
+# The Karabiner l1 layer calls this script. The keys are in
+# dot_config/private_karabiner/config/shortcuts.yaml.
+#
+# If the API requires a token, run "ytm pair" one time. The token goes to
+# ${XDG_DATA_HOME:-~/.local/share}/ytm/token with mode 0600.
+set -euo pipefail
+
+# Karabiner runs shell commands with a minimal PATH.
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+base="http://127.0.0.1:${YTM_PORT:-13091}"
+token_file="${XDG_DATA_HOME:-$HOME/.local/share}/ytm/token"
+app_id="ytmcli"
+bundle_id="net.venipa.ytmdesktop"
+process_name="YouTube Music for Desktop"
+
+usage() {
+  cat <<'EOF'
+Usage: ytm <command>
+
+  toggle              Play or pause.
+  play | pause
+  next | prev
+  fwd [sec]           Seek forward. The default is 10 seconds.
+  back [sec]          Seek back. The default is 10 seconds.
+  vol-up | vol-down   Change the volume by 5 percent.
+  vol [0-100]         Set the volume. Without a number, show the volume.
+  like | dislike      Toggle the like or the dislike of the current track.
+  shuffle | repeat
+  now                 Show the current track.
+  state               Show the player state as JSON.
+  json                Show the track and the player state as one JSON object.
+  thumb <file>        Save the album art of the current track to a file.
+  tray                Open or close the player of the menu bar icon.
+  pair                Get an API token. Approve the request in the app.
+EOF
+}
+
+# api METHOD PATH [JSON_BODY]
+# The token goes through a file descriptor, so it does not show in ps.
+api() {
+  local args=(-fsS -m "${YTM_TIMEOUT:-3}" -X "$1" "${base}$2")
+  if [[ $# -ge 3 ]]; then
+    args+=(-H 'Content-Type: application/json' --data "$3")
+  fi
+  if [[ -r $token_file ]]; then
+    curl "${args[@]}" -H @<(printf 'Authorization: Bearer %s\n' "$(<"$token_file")")
+  else
+    curl "${args[@]}"
+  fi
+}
+
+# Send one player action and drop the reply.
+track() { api POST "/track/$1" "${@:2}" >/dev/null; }
+
+# A volume request without a number does not change the volume. The reply
+# gives the volume (0 to 100).
+volume() {
+  api POST /track/volume | jq -r 'if (.volume | type) == "number" then .volume | round else "null" end'
+}
+
+seconds_ms() {
+  local sec="${1:-10}"
+  if [[ ! $sec =~ ^[0-9]+$ ]]; then
+    echo "ytm: seconds must be a whole number: $sec" >&2
+    exit 2
+  fi
+  echo $((sec * 1000))
+}
+
+# The API sets the like state. It does not toggle it, so read the state first.
+toggle_flag() {
+  local route="$1" field="$2" now
+  now="$(api GET /track/state | jq -r ".${field}")"
+  if [[ $now == true ]]; then
+    track "$route" false
+  else
+    track "$route" true
+  fi
+}
+
+now_playing() {
+  local info state vol
+  info="$(api GET /track)"
+  state="$(api GET /track/state)"
+  vol="$(volume)"
+  jq -rn --argjson i "$info" --argjson s "$state" --arg vol "$vol" '
+    def mmss: (. // 0 | floor) as $t | "\($t / 60 | floor):\($t % 60 | tostring | if length < 2 then "0" + . else . end)";
+    if $i == null then "nothing loaded" else
+      (if $s.playing then "▶" else "⏸" end) + " "
+      + $i.video.title + " — " + $i.video.author
+      + "  " + ($s.progress | mmss) + " / " + ($s.duration | mmss)
+      + "  vol " + $vol + "%"
+      + (if $s.liked then "  ♥" elif $s.disliked then "  ✗" else "" end)
+    end'
+}
+
+# The API cannot open the tray player. A click on the menu bar icon toggles it.
+# AXPress works also when Ice hides the icon, or when the menu bar is hidden.
+# The app puts the player below the icon. When Ice hides the icon, that is the
+# top-left corner of the screen.
+#
+# The caller needs the Accessibility permission. Karabiner has it.
+tray() {
+  if ! pgrep -qf "${process_name}.app/Contents/MacOS/"; then
+    open -b "$bundle_id"
+    return
+  fi
+  # A lookup by name is faster than a lookup by bundle ID (10 ms, not 80 ms).
+  osascript -e "tell application \"System Events\" to tell process \"${process_name}\" to click menu bar item 1 of menu bar 2" >/dev/null
+}
+
+pair() {
+  local code token
+  code="$(api POST /auth/requestcode \
+    "{\"appId\":\"${app_id}\",\"appName\":\"ytm CLI\",\"appVersion\":\"1.0.0\"}" | jq -r .code)"
+  echo "Approve \"ytm CLI\" in YouTube Music within 30 seconds. The code is ${code}."
+  token="$(YTM_TIMEOUT=40 api POST /auth/request \
+    "{\"appId\":\"${app_id}\",\"code\":\"${code}\"}" | jq -r .token)"
+  if [[ -z $token || $token == null ]]; then
+    echo "ytm: no token came back" >&2
+    exit 1
+  fi
+  mkdir -p "$(dirname "$token_file")"
+  (umask 077 && printf '%s\n' "$token" >"$token_file")
+  echo "Saved the token to ${token_file}."
+}
+
+case "${1:-}" in
+  toggle) track toggle-play-state ;;
+  play | pause | next | prev | shuffle | repeat) track "$1" ;;
+  fwd | back)
+    # An assignment keeps the exit status of seconds_ms, so set -e stops here.
+    ms="$(seconds_ms "${2:-}")"
+    if [[ $1 == fwd ]]; then route=forward; else route=backward; fi
+    track "$route" "{\"time\":${ms}}"
+    ;;
+  vol-up) track volume-up ;;
+  vol-down) track volume-down ;;
+  vol)
+    if [[ -z ${2:-} ]]; then
+      echo "$(volume)%"
+      exit 0
+    fi
+    if [[ ! $2 =~ ^[0-9]+$ ]] || (($2 > 100)); then
+      echo "ytm: the volume must be 0 to 100" >&2
+      exit 2
+    fi
+    track volume "{\"volume\":$2}"
+    ;;
+  like) toggle_flag like liked ;;
+  dislike) toggle_flag dislike disliked ;;
+  now) now_playing ;;
+  state) api GET /track/state | jq . ;;
+  json)
+    # Assignments keep the exit status of curl, so set -e stops on an error.
+    info="$(api GET /track)"
+    state="$(api GET /track/state)"
+    vol="$(volume)"
+    jq -cn --argjson track "$info" --argjson state "$state" --argjson volume "$vol" \
+      '{track: $track, state: $state, volume: $volume}'
+    ;;
+  thumb)
+    if [[ -z ${2:-} ]]; then
+      echo "ytm: thumb needs a file" >&2
+      exit 2
+    fi
+    api GET /track/thumbnail >"$2"
+    ;;
+  tray) tray ;;
+  pair) pair ;;
+  -h | --help | help) usage ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
