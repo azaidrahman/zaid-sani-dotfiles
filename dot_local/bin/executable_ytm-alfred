@@ -12,9 +12,9 @@
 #   fwd 45    seek forward 45 seconds
 #   back 20   seek back 20 seconds
 #
-# If no control matches the words, one row offers a search for a song. Enter
-# on that row changes the query to "yts <words>". The keyword "yts" runs
-# ytm-search.
+# If no control matches the words, one row offers a search for a song. Its
+# arg is "search <words>". The action of the workflow then opens Alfred again
+# with "yts <words>". The keyword "yts" runs ytm-search.
 #
 # The arg of each row is a ytm command. The action of the workflow runs it.
 # The workflow is in the Alfred sync folder. It holds only info.plist and the
@@ -76,6 +76,14 @@ jq -c --arg q "$query" --arg thumb "$thumb" '
   # again each second. Without a uid, the selection goes back to the top.
   def row($title; $sub; $arg; $icon; $match):
     {uid: $arg, title: $title, subtitle: $sub, arg: $arg, icon: {path: "icons/\($icon).png"}, match: $match};
+  # The action of the workflow opens Alfred again with "yts <words>". An
+  # autocomplete cannot do it: in the list of the hotkey, the text stays here.
+  def search_row($w):
+    {uid: "search",
+     title: (if $w == "" then "Search for a song" else "Search for “\($w)”" end),
+     subtitle: (if $w == "" then "Press Enter, then type the name of a song or an artist"
+                else "Press Enter to search YouTube Music" end),
+     arg: ("search " + $w | rtrimstr(" ")), icon: {path: "icons/search.png"}, match: "find song"};
 
   ($q | ascii_downcase | gsub("^ +| +$"; "")) as $query |
   ($query | [splits(" +")] | map(select(length > 0))) as $words |
@@ -101,15 +109,18 @@ jq -c --arg q "$query" --arg thumb "$thumb" '
     row("Shuffle"; "Shuffle the queue"; "shuffle"; "shuffle"; "mix random"),
     row("Repeat"; "Change the repeat mode"; "repeat"; "repeat"; "loop"),
     row("Open the player"; "Show the player of the menu bar icon"; "tray"; "player"; "tray mini window"),
-    # Enter on a row that is not valid puts the autocomplete text in Alfred.
-    {uid: "search", title: "Search for a song", subtitle: "Type yts and the name of a song",
-     autocomplete: "yts ", valid: false, icon: {path: "icons/search.png"}, match: "find song"}
+    search_row("")
   ] as $controls |
+
+  # Hyper+m opens this list with no keyword. Thus "yts <words>" can come here.
+  ($q | gsub("^ +| +$"; "") | capture("^[Yy][Tt][Ss](?: +(?<w>.*))?$") // null) as $yts |
 
   # A query with a number makes one row with that value.
   ($query | capture("^(?<cmd>vol|volume|fwd|forward|back|rewind) *(?<n>[0-9]+)$") // null) as $c |
 
-  if $c != null then
+  if $yts != null then
+    [search_row($yts.w // "")]
+  elif $c != null then
     ($c.n | tonumber) as $n |
     if ($c.cmd | test("^vol")) then
       if $n <= 100 then [row("Set the volume to \($n) percent"; "Press Enter to set it"; "vol \($n)"; "volup"; "")]
@@ -137,8 +148,7 @@ jq -c --arg q "$query" --arg thumb "$thumb" '
   | map(del(.match)) as $items
   | {rerun: 1, skipknowledge: true,
      items: (if ($items | length) > 0 then $items
-             else ($q | gsub("^ +| +$"; "")) as $words
-               | [{uid: "search", title: "Search for “\($words)”", subtitle: "No control matches. Press Enter to search for a song",
-                   autocomplete: "yts \($words)", valid: false, icon: {path: "icons/search.png"}}]
+             else [search_row($q | gsub("^ +| +$"; "")) | del(.match)
+                   | .subtitle = "No control matches. Press Enter to search for a song"]
              end)}
 ' <<<"$data"
