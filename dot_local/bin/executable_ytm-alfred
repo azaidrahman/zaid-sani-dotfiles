@@ -109,7 +109,11 @@ jq -c --arg q "$query" --arg thumb "$thumb" '
     row("Shuffle"; "Shuffle the queue"; "shuffle"; "shuffle"; "mix random"),
     row("Repeat"; "Change the repeat mode"; "repeat"; "repeat"; "loop"),
     row("Open the player"; "Show the player of the menu bar icon"; "tray"; "player"; "tray mini window"),
-    search_row("")
+    search_row(""),
+    # The title does not say "YouTube Music". With those words, a song query
+    # such as "music" would match this row and hide the search row.
+    row("Restart the app"; "Stop YouTube Music and open it again. Use this if the controls do not work";
+        "restart"; "restart"; "reboot relaunch reload fix")
   ] as $controls |
 
   # Hyper+m opens this list with no keyword. Thus "yts <words>" can come here.

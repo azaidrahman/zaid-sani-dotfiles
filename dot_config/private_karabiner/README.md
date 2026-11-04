@@ -25,7 +25,7 @@ Goku-based Karabiner-Elements config managed by chezmoi.
 │   ├── awake-hud.swift    # Keep-awake badge (run by ~/.local/bin/awake)
 │   ├── help-hud.swift
 │   ├── time-hud.swift
-│   └── ytm-hud.swift      # YouTube Music volume HUD (run by ~/.local/bin/ytm)
+│   └── ytm-hud.swift      # YouTube Music volume and seek HUD (run by ~/.local/bin/ytm)
 └── data/
     └── fkey-pool.json     # Persistent F-key slot assignments
 ```
