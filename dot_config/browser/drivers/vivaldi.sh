@@ -111,6 +111,12 @@ viv_position() {
     awk -v want="\"name\":\"$1\"" '$0 == want { print NR; found = 1; exit } END { if (!found) print 0 }'
 }
 
+# drv_no_space: show the tabs that are in no workspace. The key for position 0
+# is ⌃⇧1.
+drv_no_space() {
+  viv_show 0
+}
+
 # drv_space <name> <index>
 drv_space() {
   local pos

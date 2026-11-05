@@ -29,6 +29,7 @@ app:
   - ⇧4 | win(youtube) | sh:$HOME/.local/bin/browser space-window YouTube
   - 5 | web(study) | sh:$HOME/.local/bin/browser space Study
   - ⇧5 | win(study) | sh:$HOME/.local/bin/browser space-window Study
+  - ` | web(none) | sh:$HOME/.local/bin/browser no-space
   - k | KM | Keyboard Maestro
   - l | gmail | sh:$HOME/.local/bin/browser tab gmail
   - L | gmail(work) | sh:$HOME/.local/bin/browser tab gmail-work

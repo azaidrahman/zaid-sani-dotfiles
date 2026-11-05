@@ -45,7 +45,7 @@
 
 ;; BEGIN HELP-TEXT (auto-generated from config/help-text.yaml)
  :tos {:show-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
-                              :text "w:WA, W:messages, e:obsidian, r:rex, t:ghostty, i:IINA, I:ino, o:todoist(app), p:gchat, \\:switch, s:slack, f:cal, F:alfred, g:iPhone, G:safari, j:jira, k:KM, l:gmail, L:gmail(work), x:mixlet, v:chrome, b:telegram, m:ytm, 0:claude, 1:web(work), 2:web(zaid), 3:web(research), 4:web(youtube), 5:web(study), 9:todoist, ⇧1:win(work), ⇧2:win(zaid), ⇧3:win(research), ⇧4:win(youtube), ⇧5:win(study)"}}
+                              :text "w:WA, W:messages, e:obsidian, r:rex, t:ghostty, i:IINA, I:ino, o:todoist(app), p:gchat, \\:switch, s:slack, f:cal, F:alfred, g:iPhone, G:safari, j:jira, k:KM, l:gmail, L:gmail(work), x:mixlet, v:chrome, b:telegram, m:ytm, 0:claude, 1:web(work), 2:web(zaid), 3:web(research), 4:web(youtube), 5:web(study), 9:todoist, `:web(none), ⇧1:win(work), ⇧2:win(zaid), ⇧3:win(research), ⇧4:win(youtube), ⇧5:win(study)"}}
        :clear-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
                                :text ""}}
        :show-ws-help {:noti {:id "org.pqrs.notificaion_message_workspace"
@@ -161,6 +161,7 @@
     [:4 "$HOME/.local/bin/browser space YouTube":app-launch]
     [:5 "$HOME/.local/bin/browser space Study":app-launch]
     [:9 "$HOME/.local/bin/browser open --float https://todoistenhanced.julesbertolino.fr https://todoistenhanced.julesbertolino.fr":app-launch]
+    [:grave_accent_and_tilde "$HOME/.local/bin/browser no-space":app-launch]
     ; [:y [:open "Sioyek"]                  :app-launch]
     ; [:u [:open "Conductor"]               :app-launch]
     ; [:d [:open "T3 Code (Alpha)"]         :app-launch]

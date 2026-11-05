@@ -180,6 +180,9 @@ BROWSER_DRIVER=vivaldi STUB_FOCUSED=10 STUB_TITLES='10|Mail - Vivaldi' STUB_EMPT
 BROWSER_DRIVER=vivaldi STUB_FOCUSED=20 STUB_TITLES='10|Mail - Vivaldi' STUB_EMPTY=yes \
   run "own window: keep the new window when it shows an empty workspace" 0 "key 20" close - \
   space-window Zaid
+BROWSER_DRIVER=vivaldi STUB_TITLES='10|Mail - Vivaldi' \
+  run "no space: ⌃⇧1 (key code 18) shows the tabs in no workspace" 0 \
+  "aerospace focus --window-id 10;;key 18" - - no-space
 BROWSER_DRIVER=vivaldi STUB_TITLES=$'11|Other - Vivaldi\n10|Inbox | Gmail - Vivaldi' \
   STUB_FRONT_TITLE='Inbox | Gmail' \
   run "front window: a title with |" 0 "aerospace focus --window-id 10" "window-id 11" - space Work
