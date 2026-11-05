@@ -39,6 +39,14 @@ export GOKU_EDN_CONFIG_FILE="$HOME/.config/karabiner/karabiner.edn"
 export TODOIST_OP_REF="op://Personal Development/Todoist.API/credential"
 
 # === Claude Code phone notifications ===
+# The Telegram push is off. The hook reads the name of the session and the topic
+# from tmux. In Rex, tmux gives no values, so each push says only "unknown". Rex
+# will have an iOS app, and that app can replace the push.
+#
+# Remove this line to turn the push on again. The settings below stay as they
+# are, so the push comes back with the same behavior.
+export CLAUDE_PUSH_DISABLE=1
+
 # Send every notification to the phone, and do not wait until you leave the Mac.
 # ~/.claude/hooks/notify-tmux.sh sends to the phone only when you are away. This
 # turns that gate off, because you want the phone to ring for a finished turn as
