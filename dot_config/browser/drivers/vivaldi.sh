@@ -51,7 +51,9 @@ viv_main_window() {
   fi
   if [ "$(printf '%s\n' "$list" | wc -l)" -gt 1 ]; then
     title=$(osascript -e 'tell application "Vivaldi" to get title of active tab of window 1')
-    id=$(printf '%s\n' "$list" | awk -F'|' -v t="$title - Vivaldi" '$2 == t { print $1; exit }')
+    # Split each line at the first "|" only: a title can contain "|".
+    id=$(printf '%s\n' "$list" | awk -v t="$title - Vivaldi" '
+      { i = index($0, "|"); if (substr($0, i + 1) == t) { print substr($0, 1, i - 1); exit } }')
     if [ -n "$id" ]; then
       echo "$id"
       return 0
@@ -122,25 +124,43 @@ drv_space() {
 
 # drv_space_window <name> <index>: show the workspace in a new window. A
 # workspace can be open in only one window. If it is already open in a
-# window, Vivaldi focuses that window instead, and the new window stays
-# empty. Then close the new window: this driver made it, and it is empty.
+# window, Vivaldi focuses that window instead, and the new window keeps only
+# its start page. Then close the new window. Close it by its Vivaldi id, and
+# only if it still has only its start page: never close a window that holds
+# tabs of the user.
 drv_space_window() {
-  local pos before new focused
+  local pos before win new
   pos=$(viv_position "$1")
   if [ "$pos" -eq 0 ]; then
     echo "Vivaldi has no workspace $1" >&2
     return 1
   fi
+  # If Vivaldi is not running, "make new window" starts it, and Vivaldi also
+  # opens its last session. Start it first, so that the new window is the
+  # only window that is new.
+  if ! pgrep -x Vivaldi > /dev/null; then
+    viv_focus_main || return 1
+  fi
   before=$(aero_ids | tr '\n' ' ')
-  osascript -e 'tell application "Vivaldi" to make new window' > /dev/null || return 1
+  win=$(osascript -e 'tell application "Vivaldi" to get id of (make new window)') || return 1
   new=$(aero_wait_new "$before") || return 1
   aero_focus "$new" || return 1
   viv_key "$pos" || return 1
   sleep 0.4
-  focused=$("$AEROSPACE_BIN" list-windows --focused --format '%{window-id}')
-  if [ "$focused" != "$new" ]; then
-    "$AEROSPACE_BIN" close --window-id "$new"
-    aero_focus "$focused"
+  if [ "$(viv_js window-empty "$win")" = yes ]; then
+    osascript - "$win" <<'EOF'
+on run argv
+  set wId to item 1 of argv
+  tell application "Vivaldi"
+    repeat with w in windows
+      if (id of w as text) is wId then
+        close w
+        return
+      end if
+    end repeat
+  end tell
+end run
+EOF
   fi
 }
 

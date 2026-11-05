@@ -4,6 +4,8 @@
 // Commands:
 //   position <workspace>       print the position of the workspace (1 is the
 //                              first), or 0 if Vivaldi has no such workspace
+//   window-empty <window id>   print "yes" if the window has only one tab,
+//                              and that tab is a start page or a blank page
 //   find <prefix> [<space>]    print "<tab id><TAB><position>" of the first
 //                              tab whose URL starts with the prefix, or
 //                              nothing. The position is of the workspace of
@@ -121,6 +123,24 @@ function sameAccountFree(url) {
     .replace(/[?&]$/, '');
 }
 
+// urlStartsWith: true if the URL starts with the prefix at a URL boundary.
+// Then the repository ".../api" does not match a tab of ".../api-gateway",
+// and the pull request ".../12" does not match ".../123".
+function urlStartsWith(url, prefix) {
+  if (!url.startsWith(prefix)) return false;
+  if (url.length === prefix.length || /[/?#&=]$/.test(prefix)) return true;
+  return '/?#&'.includes(url[prefix.length]);
+}
+
+// firstMatch: the first item whose URL is the prefix, else the first item
+// whose URL starts with the prefix at a URL boundary. norm changes each URL
+// before the compare.
+function firstMatch(items, prefix, norm) {
+  const want = norm(prefix);
+  return items.find((t) => norm(t.url) === want) ||
+    items.find((t) => urlStartsWith(norm(t.url), want));
+}
+
 // Tabs that the tab list does not show.
 function isHidden(url) {
   return url === 'about:blank' || url.startsWith('chrome://vivaldi-webui/startpage') ||
@@ -156,19 +176,24 @@ function run(argv) {
       return String(positionOfName(readWorkspaces(prefsPath), arg));
     case 'find': {
       const ws = readWorkspaces(prefsPath);
-      const tab = allTabs().find((t) => t.url.startsWith(arg));
+      const tab = firstMatch(allTabs(), arg, (u) => u);
       if (!tab) return '';
       const pos = positionOfTab(ws, sessionWorkspaces(prefsPath), tab) ||
         (arg2 ? positionOfName(ws, arg2) : 0);
       return `${tab.id}\t${pos}`;
     }
+    case 'window-empty': {
+      const w = Application('Vivaldi').windows().find((x) => String(x.id()) === String(arg));
+      if (!w) return 'no';
+      const urls = w.tabs.url();
+      return urls.length === 1 && isHidden(urls[0]) ? 'yes' : 'no';
+    }
     case 'find-in': {
       const ws = readWorkspaces(prefsPath);
       const session = sessionWorkspaces(prefsPath);
-      const want = sameAccountFree(arg);
       const pos = Number(arg2);
-      const tab = allTabs().find((t) => positionOfTab(ws, session, t) === pos &&
-        sameAccountFree(t.url).startsWith(want));
+      const inSpace = allTabs().filter((t) => positionOfTab(ws, session, t) === pos);
+      const tab = firstMatch(inSpace, arg, sameAccountFree);
       return tab ? tab.id : '';
     }
     case 'tab-position':
