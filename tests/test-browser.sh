@@ -170,11 +170,16 @@ BROWSER_DRIVER=arc run "open --float: Arc opens the URL in a floating window" 0 
   open --float https://example.com/todo https://example.com/todo
 
 # The Vivaldi driver. Zaid is the second workspace, so its key is ⌃⇧3
-# (key code 20). The focus went to window 10, not to the new window 20.
+# (key code 20). Window 10 is the main window, and window 20 is the new
+# window. STUB_FOCUSED is the window that has the focus after the key.
 BROWSER_DRIVER=vivaldi STUB_FOCUSED=10 STUB_TITLES='10|Mail - Vivaldi' STUB_EMPTY=no \
   run "own window: keep the new window when it has tabs" 0 "key 20" close - space-window Zaid
 BROWSER_DRIVER=vivaldi STUB_FOCUSED=10 STUB_TITLES='10|Mail - Vivaldi' STUB_EMPTY=yes \
-  run "own window: close the new window when it is empty" 0 "key 20;;close 777" - - space-window Zaid
+  run "own window: close the new window when Vivaldi focused a different window" 0 \
+  "key 20;;close 777" - - space-window Zaid
+BROWSER_DRIVER=vivaldi STUB_FOCUSED=20 STUB_TITLES='10|Mail - Vivaldi' STUB_EMPTY=yes \
+  run "own window: keep the new window when it shows an empty workspace" 0 "key 20" close - \
+  space-window Zaid
 BROWSER_DRIVER=vivaldi STUB_TITLES=$'11|Other - Vivaldi\n10|Inbox | Gmail - Vivaldi' \
   STUB_FRONT_TITLE='Inbox | Gmail' \
   run "front window: a title with |" 0 "aerospace focus --window-id 10" "window-id 11" - space Work

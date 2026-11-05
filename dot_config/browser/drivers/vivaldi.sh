@@ -122,12 +122,16 @@ drv_space() {
   viv_show "$pos"
 }
 
-# drv_space_window <name> <index>: show the workspace in a new window. A
-# workspace can be open in only one window. If it is already open in a
-# window, Vivaldi focuses that window instead, and the new window keeps only
-# its start page. Then close the new window. Close it by its Vivaldi id, and
-# only if it still has only its start page: never close a window that holds
-# tabs of the user.
+# drv_space_window <name> <index>: show the workspace in a new window. After
+# the key, one of two things occurs:
+# - The new window keeps the focus and shows the workspace. Keep the window.
+#   If the workspace has no tabs in the new window, the window shows only a
+#   start page. Keep it also then: the user asked for that window.
+# - Vivaldi focuses a different window that shows the workspace. The new
+#   window then keeps only its start page. Close the new window. Close it by
+#   its Vivaldi id, and only if it still has only its start page: never close
+#   a window that holds tabs of the user.
+# Thus the focus, not the tabs, tells if the new window shows the workspace.
 drv_space_window() {
   local pos before win new
   pos=$(viv_position "$1")
@@ -147,6 +151,9 @@ drv_space_window() {
   aero_focus "$new" || return 1
   viv_key "$pos" || return 1
   sleep 0.4
+  if [ "$("$AEROSPACE_BIN" list-windows --focused --format '%{window-id}')" = "$new" ]; then
+    return 0
+  fi
   if [ "$(viv_js window-empty "$win")" = yes ]; then
     osascript - "$win" <<'EOF'
 on run argv
