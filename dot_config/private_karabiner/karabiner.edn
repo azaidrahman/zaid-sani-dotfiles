@@ -152,7 +152,7 @@
     [:x [:open "Mixlet"]                  :app-launch]
     [:v [:open "Google Chrome"]           :app-launch]
     [:b [:open "Telegram"]                :app-launch]
-    [:n "$HOME/.local/bin/browser open https://todoistenhanced.julesbertolino.fr https://todoistenhanced.julesbertolino.fr":app-launch]
+    [:n "$HOME/.local/bin/browser open --float https://todoistenhanced.julesbertolino.fr https://todoistenhanced.julesbertolino.fr":app-launch]
     [:m [:open "YouTube Music for Desktop"]:app-launch]
     [:0 [:open "Claude"]                  :app-launch]
     [:1 "$HOME/.local/bin/browser space Work":app-launch]

@@ -54,8 +54,10 @@ drv_current_space() { echo Work; }
 drv_open_in() { echo "open-in $*" >> "$STUB_LOG"; }
 EOF
 
-# The real Vivaldi driver, with Vivaldi settings that have two workspaces.
-cp "$repo_root/dot_config/browser/drivers/vivaldi.sh" "$repo_root/dot_config/browser/drivers/vivaldi.js" "$home/drivers/"
+# The real Vivaldi and Arc drivers, with Vivaldi settings that have two
+# workspaces, and a stub for the Arc script that floats a window.
+cp "$repo_root/dot_config/browser/drivers/vivaldi.sh" "$repo_root/dot_config/browser/drivers/vivaldi.js" \
+  "$repo_root/dot_config/browser/drivers/arc.sh" "$home/drivers/"
 echo '{"vivaldi":{"workspaces":{"list":[{"id":1,"name":"Work"},{"id":2,"name":"Zaid"}],"link_routes":[]}}}' > "$TMP/viv-prefs.json"
 
 cat > "$TMP/bin/notifier" <<'EOF'
@@ -98,7 +100,18 @@ case "$1" in
 esac
 EOF
 printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/pgrep"
-chmod +x "$TMP/bin/notifier" "$TMP/bin/osascript" "$TMP/bin/aerospace" "$TMP/bin/pgrep"
+# open: never open a real URL or application.
+cat > "$TMP/bin/open" <<'EOF'
+#!/bin/sh
+echo "open $*" >> "$STUB_LOG"
+EOF
+mkdir -p "$TMP/home/.config/karabiner/scripts"
+cat > "$TMP/home/.config/karabiner/scripts/arc-float-tab.sh" <<'EOF'
+#!/bin/sh
+echo "float-tab $*" >> "$STUB_LOG"
+EOF
+chmod +x "$TMP/bin/notifier" "$TMP/bin/osascript" "$TMP/bin/aerospace" "$TMP/bin/pgrep" \
+  "$TMP/bin/open" "$TMP/home/.config/karabiner/scripts/arc-float-tab.sh"
 
 # run <label> <status> <expect> <forbid> <state> <args...>
 #   status  the expected exit status
@@ -151,6 +164,10 @@ run "use" 0 "state=fake;;osascript -l JavaScript $home/lib/set-default.js com.ex
 run "tabs not supported" 0 'fake cannot list tabs;;"valid":false' notify - tabs
 run "bookmarks of all spaces" 0 'Work board;;Home recipes;;"arg":"https://example.com/board";;"variables":{"space":"Zaid"}' "Untagged page" - bookmarks
 run "open a URL in a space" 0 "log=open-in Zaid 3 https://example.com/recipes" notify - open-in Zaid https://example.com/recipes
+run "open --float: a driver that cannot float opens the URL" 0 "log=open -b com.example.fake https://example.com/todo" notify - \
+  open --float https://example.com/todo https://example.com/todo
+BROWSER_DRIVER=arc run "open --float: Arc opens the URL in a floating window" 0 "log=float-tab https://example.com/todo" notify - \
+  open --float https://example.com/todo https://example.com/todo
 
 # The Vivaldi driver. Zaid is the second workspace, so its key is ⌃⇧3
 # (key code 20). The focus went to window 10, not to the new window 20.

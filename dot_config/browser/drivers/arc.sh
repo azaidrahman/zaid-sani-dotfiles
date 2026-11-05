@@ -8,6 +8,11 @@
 #
 # Arc finds tabs by their custom titles, not by URL. Thus this driver has no
 # drv_focus_url, and "browser open" always opens a new tab in Arc.
+#
+# Only this driver can float a window. "browser open --float" uses
+# arc-float-tab.sh. The Keyboard Maestro macro for ⌥⌘\ ("Arc: Move Current
+# Tab to New Window") runs only when Arc is the frontmost application. It
+# calls arc-float-window.sh.
 
 DRIVER_APP=Arc
 DRIVER_BUNDLE=company.thebrowser.Browser
@@ -46,6 +51,12 @@ drv_space() {
 drv_open_in() {
   drv_space "$1" "$2" || return 1
   open -b "$DRIVER_BUNDLE" "$3"
+}
+
+# drv_float <url>: open the URL in a new floating Arc window. If a window that
+# arc-float-tab.sh made is still open, the script focuses that window.
+drv_float() {
+  "$arc_scripts/arc-float-tab.sh" "$1"
 }
 
 # drv_space_window <name> <index>: arc-space.sh already opens a new window

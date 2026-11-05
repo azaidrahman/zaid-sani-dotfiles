@@ -9,8 +9,12 @@
 #   browser bookmarks               print the Pinboard bookmarks of all
 #                                   spaces as Alfred JSON, current first
 #   browser focus-tab <win> <tab>   focus a tab that "browser tabs" printed
-#   browser open <url> [<prefix>]   open the URL; if a tab URL starts with
-#                                   the prefix, focus that tab instead
+#   browser open [--float] <url> [<prefix>]
+#                                   open the URL; if a tab URL starts with
+#                                   the prefix, focus that tab instead.
+#                                   --float: if the driver can float a
+#                                   window (Arc), open the URL in a
+#                                   floating window
 #   browser open-in <space> <url>   show the space, then focus the tab of
 #                                   the URL in it, or open the URL there
 #   browser use <driver>            use the driver, and make its browser
@@ -20,7 +24,7 @@
 # Each browser has a driver: $BROWSER_HOME/drivers/<name>.sh. A driver sets
 # DRIVER_APP and DRIVER_BUNDLE, and defines one function for each action that
 # it can do: drv_space, drv_space_window, drv_tab, drv_tabs, drv_focus_tab,
-# drv_focus_url, drv_open_in, and drv_current_space.
+# drv_focus_url, drv_open_in, drv_float, and drv_current_space.
 # If the driver cannot do an action, or the action fails, the command shows a
 # notification. "browser tabs" and "browser bookmarks" show the error as an
 # Alfred item instead, because Alfred runs them at each key press.
@@ -67,7 +71,7 @@ fail() {
 }
 
 usage() {
-  sed -n '3,19s/^# \{0,1\}//p' "$0" >&2
+  sed -n '3,23s/^# \{0,1\}//p' "$0" >&2
   fail 2 "unknown action: ${action:-none}"
 }
 
@@ -203,8 +207,15 @@ case "$action" in
     call drv_focus_tab "$1" "$2"
     ;;
   open)
+    float=no
+    if [ "${1:-}" = --float ]; then
+      float=yes
+      shift
+    fi
     [ $# -ge 1 ] && [ $# -le 2 ] || usage
-    if [ -n "${2:-}" ] && declare -F drv_focus_url > /dev/null; then
+    if [ "$float" = yes ] && declare -F drv_float > /dev/null; then
+      call drv_float "$1"
+    elif [ -n "${2:-}" ] && declare -F drv_focus_url > /dev/null; then
       call drv_focus_url "$2" "$1"
     else
       open -b "$DRIVER_BUNDLE" "$1" || fail 1 "could not open $1 in $DRIVER_APP"
