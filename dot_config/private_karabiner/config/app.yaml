@@ -35,7 +35,7 @@ app:
   - \ | switch | !Cgrave_accent_and_tilde
   - v | chrome | Google Chrome
   - b | telegram | Telegram
-  - n | todoist | sh:$HOME/.local/bin/browser open --float https://todoistenhanced.julesbertolino.fr https://todoistenhanced.julesbertolino.fr
+  - 9 | todoist | sh:$HOME/.local/bin/browser open --float https://todoistenhanced.julesbertolino.fr https://todoistenhanced.julesbertolino.fr
   - o | todoist(app) | Todoist
   - x | mixlet | Mixlet
   - 0 | claude | Claude

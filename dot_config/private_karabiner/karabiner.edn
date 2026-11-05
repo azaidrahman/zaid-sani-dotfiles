@@ -45,15 +45,15 @@
 
 ;; BEGIN HELP-TEXT (auto-generated from config/help-text.yaml)
  :tos {:show-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
-                              :text "w:WA, W:messages, e:obsidian, r:rex, t:ghostty, i:IINA, I:ino, o:todoist(app), p:gchat, \\:switch, s:slack, f:cal, F:alfred, g:iPhone, G:safari, j:jira, k:KM, l:gmail, L:gmail(work), x:mixlet, v:chrome, b:telegram, n:todoist, m:ytm, 0:claude, 1:web(work), 2:web(zaid), 3:web(research), 4:web(youtube), 5:web(study), ⇧1:win(work), ⇧2:win(zaid), ⇧3:win(research), ⇧4:win(youtube), ⇧5:win(study)"}}
+                              :text "w:WA, W:messages, e:obsidian, r:rex, t:ghostty, i:IINA, I:ino, o:todoist(app), p:gchat, \\:switch, s:slack, f:cal, F:alfred, g:iPhone, G:safari, j:jira, k:KM, l:gmail, L:gmail(work), x:mixlet, v:chrome, b:telegram, m:ytm, 0:claude, 1:web(work), 2:web(zaid), 3:web(research), 4:web(youtube), 5:web(study), 9:todoist, ⇧1:win(work), ⇧2:win(zaid), ⇧3:win(research), ⇧4:win(youtube), ⇧5:win(study)"}}
        :clear-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
                                :text ""}}
        :show-ws-help {:noti {:id "org.pqrs.notificaion_message_workspace"
-                             :text "q:ws3/→ws3, w:ws4/→ws4, e:ws5/→ws5, o:back, p:full/nfull, f:float, h:←/mv←, j:↓/mv↓, k:↑/mv↑, l:→/mv→, -:-size, 0:tile, 1:ws1/→ws1, 2:ws2/→ws2, 8:vacc, 9:hacc, =:+size"}}
+                             :text "q:ws5/→ws5, w:ws6/→ws6, e:ws7/→ws7, o:back, p:full/nfull, f:float, h:←/mv←, j:↓/mv↓, k:↑/mv↑, l:→/mv→, -:-size, 0:tile, 1:ws1/→ws1, 2:ws2/→ws2, 3:ws3/→ws3, 4:ws4/→ws4, 8:vacc, 9:hacc, =:+size"}}
        :clear-ws-help {:noti {:id "org.pqrs.notificaion_message_workspace"
                               :text ""}}
        :show-l1-help {:noti {:id "org.pqrs.notificaion_message_layer1"
-                             :text "w:punch, o:1p, p:dot, s:cleanshotx, g:gemini, l:todoist, x:codex, c:claude, ,:soundsource, 1:pin-screen, 2:capture-text, 3:full-screen, 4:capture-area, 5:record\nr:yt repeat, y:yt player, u:yt like, [:yt prev, ]:yt next, d:yt dislike, ;:yt -10s, ':yt +10s, m:yt shuffle, -:yt vol-, =:yt vol+, space:yt play/pause"}}
+                             :text "w:punch, o:1p, p:dot, s:cleanshotx, g:gemini, l:todoist, x:codex, c:claude, 1:pin-screen, 2:capture-text, 3:full-screen, 4:capture-area, 5:record\nk:soundsource\nr:yt repeat, y:yt player, u:yt like, [:yt prev, ]:yt next, d:yt dislike, ;:yt -10s, ':yt +10s, m:yt shuffle, ,:yt vol-, .:yt vol+, space:yt play/pause"}}
        :clear-l1-help {:noti {:id "org.pqrs.notificaion_message_layer1"
                               :text ""}}
        :show-l2-help {:noti {:id "org.pqrs.notificaion_message_layer2"
@@ -103,13 +103,14 @@
     [:!TSslash [:key-search]]
 
 ;; BEGIN SHORTCUT-DIRECT (auto-generated from config/shortcuts.yaml)
+    [:!Sk      :!Cf20              :shortcut-l1]   ;; l1+k → !Cf20
     [:!Sspacebar                 "~/.local/bin/ytm toggle" :shortcut-l1]   ;; l1+space → sh:~/.local/bin/ytm toggle
     [:!Sopen_bracket             "~/.local/bin/ytm prev" :shortcut-l1]   ;; l1+[ → sh:~/.local/bin/ytm prev
     [:!Sclose_bracket            "~/.local/bin/ytm next" :shortcut-l1]   ;; l1+] → sh:~/.local/bin/ytm next
     [:!Ssemicolon                "~/.local/bin/ytm back" :shortcut-l1]   ;; l1+; → sh:~/.local/bin/ytm back
     [:!Squote                    "~/.local/bin/ytm fwd" :shortcut-l1]   ;; l1+' → sh:~/.local/bin/ytm fwd
-    [:!Shyphen                   "~/.local/bin/ytm vol-down" :shortcut-l1]   ;; l1+- → sh:~/.local/bin/ytm vol-down
-    [:!Sequal_sign               "~/.local/bin/ytm vol-up" :shortcut-l1]   ;; l1+= → sh:~/.local/bin/ytm vol-up
+    [:!Scomma                    "~/.local/bin/ytm vol-down" :shortcut-l1]   ;; l1+, → sh:~/.local/bin/ytm vol-down
+    [:!Speriod                   "~/.local/bin/ytm vol-up" :shortcut-l1]   ;; l1+. → sh:~/.local/bin/ytm vol-up
     [:!Su      "~/.local/bin/ytm like" :shortcut-l1]   ;; l1+u → sh:~/.local/bin/ytm like
     [:!Sd      "~/.local/bin/ytm dislike" :shortcut-l1]   ;; l1+d → sh:~/.local/bin/ytm dislike
     [:!Sr      "~/.local/bin/ytm repeat" :shortcut-l1]   ;; l1+r → sh:~/.local/bin/ytm repeat
@@ -152,7 +153,6 @@
     [:x [:open "Mixlet"]                  :app-launch]
     [:v [:open "Google Chrome"]           :app-launch]
     [:b [:open "Telegram"]                :app-launch]
-    [:n "$HOME/.local/bin/browser open --float https://todoistenhanced.julesbertolino.fr https://todoistenhanced.julesbertolino.fr":app-launch]
     [:m [:open "YouTube Music for Desktop"]:app-launch]
     [:0 [:open "Claude"]                  :app-launch]
     [:1 "$HOME/.local/bin/browser space Work":app-launch]
@@ -160,10 +160,12 @@
     [:3 "$HOME/.local/bin/browser space Research":app-launch]
     [:4 "$HOME/.local/bin/browser space YouTube":app-launch]
     [:5 "$HOME/.local/bin/browser space Study":app-launch]
+    [:9 "$HOME/.local/bin/browser open --float https://todoistenhanced.julesbertolino.fr https://todoistenhanced.julesbertolino.fr":app-launch]
     ; [:y [:open "Sioyek"]                  :app-launch]
     ; [:u [:open "Conductor"]               :app-launch]
     ; [:d [:open "T3 Code (Alpha)"]         :app-launch]
     ; [:c :!Cgrave_accent_and_tilde         :app-launch]
+    ; [:n [:open "Inoreader"]               :app-launch]
 ;; END APP-RULES
    ]
   }
@@ -337,9 +339,11 @@
    [;; opt+key
     [:!O1      [:aero "workspace 1"]]  ;; ws1
     [:!O2      [:aero "workspace 2"]]  ;; ws2
-    [:!Oq      [:aero "workspace 3"]]  ;; ws3
-    [:!Ow      [:aero "workspace 4"]]  ;; ws4
-    [:!Oe      [:aero "workspace 5"]]  ;; ws5
+    [:!O3      [:aero "workspace 3"]]  ;; ws3
+    [:!O4      [:aero "workspace 4"]]  ;; ws4
+    [:!Oq      [:aero "workspace 5"]]  ;; ws5
+    [:!Ow      [:aero "workspace 6"]]  ;; ws6
+    [:!Oe      [:aero "workspace 7"]]  ;; ws7
     [:!Oh      [:aero "focus --boundaries-action wrap-around-the-workspace left"]]  ;; ←
     [:!Oj      [:aero "focus --boundaries-action wrap-around-the-workspace down"]]  ;; ↓
     [:!Ok      [:aero "focus --boundaries-action wrap-around-the-workspace up"]]  ;; ↑
@@ -356,9 +360,11 @@
     ;; opt+shift+key
     [:!OS1     [:aero "move-node-to-workspace 1 --focus-follows-window"]]  ;; →ws1
     [:!OS2     [:aero "move-node-to-workspace 2 --focus-follows-window"]]  ;; →ws2
-    [:!OSq     [:aero "move-node-to-workspace 3 --focus-follows-window"]]  ;; →ws3
-    [:!OSw     [:aero "move-node-to-workspace 4 --focus-follows-window"]]  ;; →ws4
-    [:!OSe     [:aero "move-node-to-workspace 5 --focus-follows-window"]]  ;; →ws5
+    [:!OS3     [:aero "move-node-to-workspace 3 --focus-follows-window"]]  ;; →ws3
+    [:!OS4     [:aero "move-node-to-workspace 4 --focus-follows-window"]]  ;; →ws4
+    [:!OSq     [:aero "move-node-to-workspace 5 --focus-follows-window"]]  ;; →ws5
+    [:!OSw     [:aero "move-node-to-workspace 6 --focus-follows-window"]]  ;; →ws6
+    [:!OSe     [:aero "move-node-to-workspace 7 --focus-follows-window"]]  ;; →ws7
     [:!OSh     [:aero "move left"]]  ;; mv←
     [:!OSj     [:aero "move down"]]  ;; mv↓
     [:!OSk     [:aero "move up"]]  ;; mv↑

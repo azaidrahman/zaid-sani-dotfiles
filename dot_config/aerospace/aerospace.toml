@@ -39,12 +39,16 @@ after-startup-command = []
 # 10 = 3   
 
 [workspace-to-monitor-force-assignment]
-# 1 is 2nd monitor, 3 is vertical monitor, for some reason idk
+# AeroSpace numbers the monitors from left to right. Monitor 1 is the left
+# monitor. Workspaces 1-4 go to the left monitor. Workspaces 5-7 go to the
+# right monitor. If only one monitor is connected, all workspaces go to it.
 1 = [1,'built-in']
 2 = [1,'built-in']
-3 = [2,'built-in']
-4 = [2,'built-in']
-5 = [2,1,'built-in']
+3 = [1,'built-in']
+4 = [1,'built-in']
+5 = [2,'built-in']
+6 = [2,'built-in']
+7 = [2,1,'built-in']
 # 6 = [1,'built-in']
 # 7 = [3,2,'built-in']
 # 8 = [3,2, 'built-in']
@@ -86,11 +90,15 @@ run = 'layout floating'
 if.app-id = 'com.apple.clock'
 run = 'layout floating'
 
+# Left monitor
 # Workspace 1 - Terminal/Apps
 # Workspace 2 - Work Browser/Work Apps
-# Workspace 3 - Personal Browser/Secondary Browser
-# Workspace 4 - Secondary Apps
-# Workspace 5 - Main aka Blank (Place to do splits)
+# Workspace 3 - Free
+# Workspace 4 - Free
+# Right monitor
+# Workspace 5 - Personal Browser/Secondary Browser
+# Workspace 6 - Secondary Apps
+# Workspace 7 - Main aka Blank (Place to do splits)
 
 # Browser
 [[on-window-detected]]
@@ -103,7 +111,7 @@ run = 'move-node-to-workspace 1'
 # Apps
 [[on-window-detected]]
 if.app-name-regex-substring = 'Docker'
-run = 'move-node-to-workspace 4'
+run = 'move-node-to-workspace 6'
 
 #News
 [[on-window-detected]]
@@ -111,7 +119,7 @@ if.app-name-regex-substring = 'Inoreader'
 run = 'move-node-to-workspace 2'
 [[on-window-detected]]
 if.app-name-regex-substring = 'IINA'
-run = 'move-node-to-workspace 4'
+run = 'move-node-to-workspace 6'
 # run = 'layout floating'  
 
 # Terminal
@@ -149,7 +157,7 @@ run = 'move-node-to-workspace 2'
 # Chats
 [[on-window-detected]]
 if.app-name-regex-substring = 'Messages'
-run = 'move-node-to-workspace 4'
+run = 'move-node-to-workspace 6'
 [[on-window-detected]]
 if.app-id = 'net.whatsapp.WhatsApp'
 run = 'move-node-to-workspace 2'
@@ -158,14 +166,14 @@ if.app-name-regex-substring = 'Slack'
 run = 'move-node-to-workspace 2'
 [[on-window-detected]]
 if.app-name-regex-substring = 'Telegram'
-run = 'move-node-to-workspace 4'
+run = 'move-node-to-workspace 6'
 [[on-window-detected]]
 if.app-id = 'com.microsoft.teams2'
 run = 'move-node-to-workspace 1'
 
 # [[on-window-detected]]
 #   if.app-id = 'com.github.th-ch.youtube-music'
-#   run = 'move-node-to-workspace 5'
+#   run = 'move-node-to-workspace 7'
 
 # [mode.resize.binding]  -- removed, resize via opt+minus/equal in Karabiner
 
