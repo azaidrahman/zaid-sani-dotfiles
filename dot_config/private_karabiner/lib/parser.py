@@ -77,14 +77,21 @@ def parse_entry(entry):
     return key, label, extra
 
 
+def help_item(key, label):
+    """Format one 'key:label' item for an EDN string.
+
+    A backslash key must be escaped, or goku fails to read the EDN.
+    """
+    display_key = '\\\\' if key == '\\' else key
+    return f"{display_key}:{label}"
+
+
 def help_text(entries):
     """Format entries as sorted comma-separated 'key:label' string."""
     items = []
     for entry in entries:
         key, label, _ = parse_entry(entry)
-        # Escape backslash for EDN string embedding
-        display_key = '\\\\' if key == '\\' else key
-        items.append((key, f"{display_key}:{label}"))
+        items.append((key, help_item(key, label)))
     items.sort(key=lambda x: qwerty_pos(x[0]))
     return ', '.join(t for _, t in items)
 
@@ -100,7 +107,7 @@ def help_text_grouped(groups, sort=True):
         for entry in group:
             if '|' in entry:
                 key, label, _ = parse_entry(entry)
-                items.append((key, f"{key}:{label}"))
+                items.append((key, help_item(key, label)))
             else:
                 items.append((entry[0] if entry else '', entry))
         if sort:

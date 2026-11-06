@@ -45,7 +45,7 @@ l1:
   - d | yt dislike | sh:~/.local/bin/ytm dislike
   - r | yt repeat | sh:~/.local/bin/ytm repeat
   - m | yt shuffle | sh:~/.local/bin/ytm shuffle
-  - y | yt player | sh:~/.local/bin/ytm tray
+  - \ | yt player | sh:~/.local/bin/ytm tray
 
 l2:
   - o | 1p | 1Password (alt)

@@ -90,7 +90,7 @@ l1	⇧⌥R	u	yt like	sh:~/.local/bin/ytm like
 l1	⇧⌥R	d	yt dislike	sh:~/.local/bin/ytm dislike
 l1	⇧⌥R	r	yt repeat	sh:~/.local/bin/ytm repeat
 l1	⇧⌥R	m	yt shuffle	sh:~/.local/bin/ytm shuffle
-l1	⇧⌥R	y	yt player	sh:~/.local/bin/ytm tray
+l1	⇧⌥R	\	yt player	sh:~/.local/bin/ytm tray
 l2	⌃⌥R	o	1p	1Password (alt) · cmd+opt+shift+F16 (via KM/Alfred)
 l2	⌃⌥R	p	dot	chezmoi dotfiles (alt) · ctrl+cmd+opt+shift+F16 (via KM/Alfred)
 l2	⌃⌥R	s	cleanshotx	CleanShot X (alt) · cmd+shift+F17 (via KM/Alfred)

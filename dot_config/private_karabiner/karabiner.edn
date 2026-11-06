@@ -53,7 +53,7 @@
        :clear-ws-help {:noti {:id "org.pqrs.notificaion_message_workspace"
                               :text ""}}
        :show-l1-help {:noti {:id "org.pqrs.notificaion_message_layer1"
-                             :text "w:punch, o:1p, p:dot, s:cleanshotx, g:gemini, l:todoist, x:codex, c:claude, 1:pin-screen, 2:capture-text, 3:full-screen, 4:capture-area, 5:record\nk:soundsource\nr:yt repeat, y:yt player, u:yt like, [:yt prev, ]:yt next, d:yt dislike, ;:yt -10s, ':yt +10s, m:yt shuffle, ,:yt vol-, .:yt vol+, space:yt play/pause"}}
+                             :text "w:punch, o:1p, p:dot, s:cleanshotx, g:gemini, l:todoist, x:codex, c:claude, 1:pin-screen, 2:capture-text, 3:full-screen, 4:capture-area, 5:record\nk:soundsource\nr:yt repeat, u:yt like, [:yt prev, ]:yt next, \\:yt player, d:yt dislike, ;:yt -10s, ':yt +10s, m:yt shuffle, ,:yt vol-, .:yt vol+, space:yt play/pause"}}
        :clear-l1-help {:noti {:id "org.pqrs.notificaion_message_layer1"
                               :text ""}}
        :show-l2-help {:noti {:id "org.pqrs.notificaion_message_layer2"
@@ -115,7 +115,7 @@
     [:!Sd      "~/.local/bin/ytm dislike" :shortcut-l1]   ;; l1+d → sh:~/.local/bin/ytm dislike
     [:!Sr      "~/.local/bin/ytm repeat" :shortcut-l1]   ;; l1+r → sh:~/.local/bin/ytm repeat
     [:!Sm      "~/.local/bin/ytm shuffle" :shortcut-l1]   ;; l1+m → sh:~/.local/bin/ytm shuffle
-    [:!Sy      "~/.local/bin/ytm tray" :shortcut-l1]   ;; l1+y → sh:~/.local/bin/ytm tray
+    [:!Sbackslash                "~/.local/bin/ytm tray" :shortcut-l1]   ;; l1+\ → sh:~/.local/bin/ytm tray
     [:!T#Og    [:open "Gemini"]    :shortcut-l2]   ;; l2+g → open:Gemini
     [:!T#Ox    [:open-id "com.openai.codex"] :shortcut-l2]   ;; l2+x → open-id:com.openai.codex
 ;; END SHORTCUT-DIRECT
