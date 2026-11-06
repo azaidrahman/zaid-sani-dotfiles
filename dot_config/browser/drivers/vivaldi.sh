@@ -19,6 +19,9 @@
 # 5. Not checked: there is one main Vivaldi window.
 # 6. The workspace rules also move links from other applications and URLs
 #    that the user types. Vivaldi then shows the workspace of the tab.
+# 7. A private window has no workspaces, so it ignores ⌃⇧N. AeroSpace shows
+#    the same title format for a private window. Only Vivaldi scripting can
+#    find a private window: its "mode" is "incognito", not "normal".
 #
 # AeroSpace shows a Vivaldi window as "<title of the active tab> - Vivaldi".
 # A Picture in Picture window is also a Vivaldi window. The driver ignores it.
@@ -36,29 +39,43 @@ viv_js() {
   osascript -l JavaScript "$BROWSER_HOME/drivers/vivaldi.js" "$VIVALDI_PREFS" "$@"
 }
 
-# viv_main_window: print the AeroSpace id of the main Vivaldi window. If
-# Vivaldi has no window, open one.
+# viv_main_window: print the AeroSpace id of the main Vivaldi window. This is
+# the front window that is not private (see check 7). If Vivaldi has no
+# window, or has only private windows, open a window.
 viv_main_window() {
-  local list title id
+  local list front id before
   list=$("$AEROSPACE_BIN" list-windows --monitor all --app-bundle-id "$DRIVER_BUNDLE" \
     --format '%{window-id}|%{window-title}' | grep -v '|Picture in Picture$')
   if [ -z "$list" ]; then
-    local before
     before=$(aero_ids | tr '\n' ' ')
     open -b "$DRIVER_BUNDLE" || return 1
     aero_wait_new "$before"
     return
   fi
-  if [ "$(printf '%s\n' "$list" | wc -l)" -gt 1 ]; then
-    title=$(osascript -e 'tell application "Vivaldi" to get title of active tab of window 1')
-    # Split each line at the first "|" only: a title can contain "|".
-    id=$(printf '%s\n' "$list" | awk -v t="$title - Vivaldi" '
-      { i = index($0, "|"); if (substr($0, i + 1) == t) { print substr($0, 1, i - 1); exit } }')
-    if [ -n "$id" ]; then
-      echo "$id"
-      return 0
-    fi
-  fi
+  # Vivaldi lists its windows from front to back. Print "title:" and the title
+  # of the active tab of the first normal window, or "none".
+  front=$(osascript -e 'tell application "Vivaldi"' \
+    -e 'repeat with w in windows' \
+    -e 'if mode of w is "normal" then return "title:" & (title of active tab of w)' \
+    -e 'end repeat' -e 'end tell' -e 'return "none"') || front=""
+  case "$front" in
+    none)
+      before=$(aero_ids | tr '\n' ' ')
+      osascript -e 'tell application "Vivaldi" to make new window with properties {mode:"normal"}' \
+        > /dev/null || return 1
+      aero_wait_new "$before"
+      return
+      ;;
+    title:*)
+      # Split each line at the first "|" only: a title can contain "|".
+      id=$(printf '%s\n' "$list" | awk -v t="${front#title:} - Vivaldi" '
+        { i = index($0, "|"); if (substr($0, i + 1) == t) { print substr($0, 1, i - 1); exit } }')
+      if [ -n "$id" ]; then
+        echo "$id"
+        return 0
+      fi
+      ;;
+  esac
   printf '%s\n' "$list" | head -n 1 | cut -d'|' -f1
 }
 

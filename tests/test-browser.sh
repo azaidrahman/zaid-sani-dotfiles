@@ -66,13 +66,14 @@ echo "notify $*" >> "$STUB_LOG"
 EOF
 # osascript: the bookmark script only reads a file, so it runs for real.
 # "make new window" adds window 20 to the AeroSpace windows, and returns the
-# Vivaldi id 777. Key codes and window closes go to the log.
+# Vivaldi id 777. The query for the front window that is not private returns
+# $STUB_FRONT. Key codes and window closes go to the log.
 cat > "$TMP/bin/osascript" <<'EOF'
 #!/bin/sh
 case "$*" in
   *bookmarks.js*) exec /usr/bin/osascript "$@" ;;
   *"make new window"*) echo 20 >> "$STUB_DIR/windows"; echo 777; exit 0 ;;
-  *"title of active tab of window 1"*) echo "$STUB_FRONT_TITLE"; exit 0 ;;
+  *"mode of w"*) echo "$STUB_FRONT"; exit 0 ;;
   *vivaldi.js*window-empty*) echo "$STUB_EMPTY"; exit 0 ;;
 esac
 if [ "${1:-}" = - ]; then
@@ -135,7 +136,7 @@ run() {
     AEROSPACE_BIN="$TMP/bin/aerospace" VIVALDI_PREFS="$TMP/viv-prefs.json" \
     BROWSER_DRIVER="${BROWSER_DRIVER:-}" BROWSER_WAIT_TRIES=2 \
     STUB_FOCUSED="${STUB_FOCUSED:-}" STUB_TITLES="${STUB_TITLES:-}" \
-    STUB_FRONT_TITLE="${STUB_FRONT_TITLE:-}" STUB_EMPTY="${STUB_EMPTY:-}" \
+    STUB_FRONT="${STUB_FRONT:-}" STUB_EMPTY="${STUB_EMPTY:-}" \
     /bin/bash "$BROWSER" "$@" 2>/dev/null)
   status=$?
   actual="out=$out log=$(tr '\n' ' ' < "$TMP/log")state=$(cat "$state/current" 2>/dev/null)"
@@ -184,8 +185,11 @@ BROWSER_DRIVER=vivaldi STUB_TITLES='10|Mail - Vivaldi' \
   run "no space: ⌃⇧1 (key code 18) shows the tabs in no workspace" 0 \
   "aerospace focus --window-id 10;;key 18" - - no-space
 BROWSER_DRIVER=vivaldi STUB_TITLES=$'11|Other - Vivaldi\n10|Inbox | Gmail - Vivaldi' \
-  STUB_FRONT_TITLE='Inbox | Gmail' \
+  STUB_FRONT='title:Inbox | Gmail' \
   run "front window: a title with |" 0 "aerospace focus --window-id 10" "window-id 11" - space Work
+BROWSER_DRIVER=vivaldi STUB_TITLES='10|Private - Vivaldi' STUB_FRONT=none \
+  run "front window: open a window when all windows are private" 0 \
+  "aerospace focus --window-id 20;;key 19" "window-id 10" - space Work
 
 # The URL matching of vivaldi.js, run for real. js_check loads vivaldi.js
 # from this repository with eval, to call its functions. It reads no other
