@@ -47,12 +47,14 @@ workspace	⌥L	k	↑	focus --boundaries-action wrap-around-the-workspace up
 workspace	⌥L	l	→	focus --boundaries-action wrap-around-the-workspace right
 workspace	⌥L	o	back	focus-back-and-forth
 workspace	⌥L	p	full	fullscreen
-workspace	⌥L	f	float	layout floating tiling
+workspace	⌥L	a	float	layout floating tiling
 workspace	⌥L	8	vacc	layout v_accordion
 workspace	⌥L	9	hacc	layout h_accordion
 workspace	⌥L	0	tile	layout tiles horizontal vertical
 workspace	⌥L	-	-size	resize smart -70
 workspace	⌥L	=	+size	resize smart +70
+workspace	⌥L	b	word←	readline: back one word (terminal)
+workspace	⌥L	f	word→	readline: forward one word (terminal)
 workspace	⌥L	⇧1	→ws1	move-node-to-workspace 1 --focus-follows-window
 workspace	⌥L	⇧2	→ws2	move-node-to-workspace 2 --focus-follows-window
 workspace	⌥L	⇧3	→ws3	move-node-to-workspace 3 --focus-follows-window

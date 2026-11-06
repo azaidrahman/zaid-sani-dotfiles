@@ -13,7 +13,7 @@ workspace:
   - l | → | focus --boundaries-action wrap-around-the-workspace right
   - o | back | focus-back-and-forth
   - p | full | fullscreen
-  - f | float | layout floating tiling
+  - a | float | layout floating tiling
   - 8 | vacc | layout v_accordion
   - 9 | hacc | layout h_accordion
   - 0 | tile | layout tiles horizontal vertical
@@ -34,4 +34,12 @@ workspace-shift:
   - k | mv↑ | move up
   - l | mv→ | move right
   - p | nfull | macos-native-fullscreen
+
+workspace-passthrough:
+  # key | label | description  (opt+key)
+  # The workspace layer does not catch these keys. Left Option goes to the
+  # app as Alt, and the terminal reads these keys as readline keys. They show
+  # in the help overlay and in the key search HUD, but they make no rule.
+  - b | word← | readline: back one word (terminal)
+  - f | word→ | readline: forward one word (terminal)
 

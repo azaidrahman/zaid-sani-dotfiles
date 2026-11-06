@@ -56,9 +56,11 @@ app_t = help_text_grouped(app_groups) if len(app_groups) > 1 else help_text(app_
 # Workspace help text (merge unshifted + shifted by key)
 ws_entries = ws_sections.get('workspace', [])
 ws_shift_entries = ws_sections.get('workspace-shift', [])
+# Keys that go to the app (readline Alt keys). They show in the help, with no rule.
+ws_pass_entries = ws_sections.get('workspace-passthrough', [])
 
 ws_labels = {}
-for entry in ws_entries:
+for entry in ws_entries + ws_pass_entries:
     key, label, _ = parse_entry(entry)
     ws_labels[key] = label
 
@@ -178,7 +180,7 @@ fkey_index_path = os.path.join(dir_path, 'data', 'fkey-index.tsv')
 open(fkey_index_path, 'w').write('\n'.join(fkey_rows) + '\n')
 
 index_rows = generate_key_index(
-    app_sections.get('app', []), ws_entries, ws_shift_entries,
+    app_sections.get('app', []), ws_entries + ws_pass_entries, ws_shift_entries,
     shortcut_sections, live_fkey_actions(fkey_rows), hyper_data, hyper_labels,
     extras_sections.get('extras', []))
 index_path = os.path.join(dir_path, 'data', 'keymap-index.tsv')

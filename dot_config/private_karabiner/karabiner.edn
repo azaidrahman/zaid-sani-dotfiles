@@ -49,7 +49,7 @@
        :clear-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
                                :text ""}}
        :show-ws-help {:noti {:id "org.pqrs.notificaion_message_workspace"
-                             :text "q:ws5/→ws5, w:ws6/→ws6, e:ws7/→ws7, o:back, p:full/nfull, f:float, h:←/mv←, j:↓/mv↓, k:↑/mv↑, l:→/mv→, -:-size, 0:tile, 1:ws1/→ws1, 2:ws2/→ws2, 3:ws3/→ws3, 4:ws4/→ws4, 8:vacc, 9:hacc, =:+size"}}
+                             :text "q:ws5/→ws5, w:ws6/→ws6, e:ws7/→ws7, o:back, p:full/nfull, a:float, f:word→, h:←/mv←, j:↓/mv↓, k:↑/mv↑, l:→/mv→, b:word←, -:-size, 0:tile, 1:ws1/→ws1, 2:ws2/→ws2, 3:ws3/→ws3, 4:ws4/→ws4, 8:vacc, 9:hacc, =:+size"}}
        :clear-ws-help {:noti {:id "org.pqrs.notificaion_message_workspace"
                               :text ""}}
        :show-l1-help {:noti {:id "org.pqrs.notificaion_message_layer1"
@@ -351,7 +351,7 @@
     [:!Ol      [:aero "focus --boundaries-action wrap-around-the-workspace right"]]  ;; →
     [:!Oo      [:aero "focus-back-and-forth"]]  ;; back
     [:!Op      [:aero "fullscreen"]]  ;; full
-    [:!Of      [:aero "layout floating tiling"]]  ;; float
+    [:!Oa      [:aero "layout floating tiling"]]  ;; float
     [:!O8      [:aero "layout v_accordion"]]  ;; vacc
     [:!O9      [:aero "layout h_accordion"]]  ;; hacc
     [:!O0      [:aero "layout tiles horizontal vertical"]]  ;; tile
