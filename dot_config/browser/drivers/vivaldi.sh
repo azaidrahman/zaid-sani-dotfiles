@@ -22,6 +22,10 @@
 # 7. A private window has no workspaces, so it ignores ⌃⇧N. AeroSpace shows
 #    the same title format for a private window. Only Vivaldi scripting can
 #    find a private window: its "mode" is "incognito", not "normal".
+# 8. The title of the active tab in Vivaldi scripting can differ from the
+#    title that AeroSpace shows. The start page has an empty title in
+#    scripting, but AeroSpace shows "Start Page - Vivaldi". The view of the
+#    tabs in no workspace often shows the start page.
 #
 # AeroSpace shows a Vivaldi window as "<title of the active tab> - Vivaldi".
 # A Picture in Picture window is also a Vivaldi window. The driver ignores it.
@@ -43,7 +47,7 @@ viv_js() {
 # the front window that is not private (see check 7). If Vivaldi has no
 # window, or has only private windows, open a window.
 viv_main_window() {
-  local list front id before
+  local list wins id before
   list=$("$AEROSPACE_BIN" list-windows --monitor all --app-bundle-id "$DRIVER_BUNDLE" \
     --format '%{window-id}|%{window-title}' | grep -v '|Picture in Picture$')
   if [ -z "$list" ]; then
@@ -52,31 +56,55 @@ viv_main_window() {
     aero_wait_new "$before"
     return
   fi
-  # Vivaldi lists its windows from front to back. Print "title:" and the title
-  # of the active tab of the first normal window, or "none".
-  front=$(osascript -e 'tell application "Vivaldi"' \
+  # Vivaldi lists its windows from front to back. Print one line for each
+  # window: the mode, a tab, and the title of the active tab. In a tell block
+  # for Vivaldi, "tab" is a tab of the browser, so use "character id 9".
+  if ! wins=$(osascript -e 'tell application "Vivaldi"' -e 'set out to ""' \
     -e 'repeat with w in windows' \
-    -e 'if mode of w is "normal" then return "title:" & (title of active tab of w)' \
-    -e 'end repeat' -e 'end tell' -e 'return "none"') || front=""
-  case "$front" in
-    none)
-      before=$(aero_ids | tr '\n' ' ')
-      osascript -e 'tell application "Vivaldi" to make new window with properties {mode:"normal"}' \
-        > /dev/null || return 1
-      aero_wait_new "$before"
-      return
-      ;;
-    title:*)
-      # Split each line at the first "|" only: a title can contain "|".
-      id=$(printf '%s\n' "$list" | awk -v t="${front#title:} - Vivaldi" '
-        { i = index($0, "|"); if (substr($0, i + 1) == t) { print substr($0, 1, i - 1); exit } }')
-      if [ -n "$id" ]; then
-        echo "$id"
-        return 0
-      fi
-      ;;
-  esac
-  printf '%s\n' "$list" | head -n 1 | cut -d'|' -f1
+    -e 'set out to out & (mode of w) & (character id 9) & (title of active tab of w) & linefeed' \
+    -e 'end repeat' -e 'end tell' -e 'return out'); then
+    printf '%s\n' "$list" | head -n 1 | cut -d'|' -f1
+    return 0
+  fi
+  if ! printf '%s\n' "$wins" | grep -q '^normal	'; then
+    before=$(aero_ids | tr '\n' ' ')
+    osascript -e 'tell application "Vivaldi" to make new window with properties {mode:"normal"}' \
+      > /dev/null || return 1
+    aero_wait_new "$before"
+    return
+  fi
+  # Pair each Vivaldi window with the first free AeroSpace window that shows
+  # its title. If the main window has no pair (see check 8), use a window that
+  # has no pair. Never use a window that pairs with a private window. Split
+  # each AeroSpace line at the first "|" only: a title can contain "|".
+  id=$({
+    printf '%s\n' "$wins" | sed 's/^/V/'
+    printf '%s\n' "$list" | sed 's/^/A/'
+  } | awk '
+    /^V/ {
+      t = index($0, "\t"); if (!t) next
+      n++; mode[n] = substr($0, 2, t - 2); want[n] = substr($0, t + 1) " - Vivaldi"
+      next
+    }
+    /^A/ {
+      i = index($0, "|"); if (!i) next
+      m++; wid[m] = substr($0, 2, i - 2); title[m] = substr($0, i + 1)
+    }
+    END {
+      for (v = 1; v <= n; v++) {
+        if (!main && mode[v] == "normal") main = v
+        for (a = 1; a <= m; a++)
+          if (!owner[a] && title[a] == want[v]) { owner[a] = v; pair[v] = a; break }
+      }
+      if (pair[main]) { print wid[pair[main]]; exit }
+      for (a = 1; a <= m; a++) if (!owner[a]) { print wid[a]; exit }
+      for (a = 1; a <= m; a++) if (mode[owner[a]] == "normal") { print wid[a]; exit }
+    }')
+  if [ -z "$id" ]; then
+    echo "cannot find the main Vivaldi window" >&2
+    return 1
+  fi
+  echo "$id"
 }
 
 # viv_focus_main: focus the main Vivaldi window.
