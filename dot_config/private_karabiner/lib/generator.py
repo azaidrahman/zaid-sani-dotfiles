@@ -346,17 +346,24 @@ HYPER_MOD_SYMBOLS = {
 def load_hyperkeys(path):
     """Load hyperkeys.yaml with full YAML parser (nested structure)."""
     if not os.path.exists(path):
-        return {}, {}
+        return {}, {}, {}
     with open(path) as f:
         data = yaml.safe_load(f)
-    # Also extract # comments for help labels
-    labels = _extract_labels(path)
-    return data or {}, labels
+    # Also extract # comments for help labels and descriptions
+    labels, descs = _extract_labels(path)
+    return data or {}, labels, descs
 
 
 def _extract_labels(path):
-    """Extract inline # comments as help labels keyed by (section, key, modifier)."""
+    """Extract inline # comments, keyed by (section, key, modifier).
+
+    A comment is '# label' or '# label | description'. The short label goes on
+    the keycap of the key search HUD (7 characters show). The description goes
+    in the help overlay and in the action column of the key search HUD.
+    Returns (labels, descs).
+    """
     labels = {}
+    descs = {}
     section = None
     current_key = None
     section_indent = None
@@ -385,9 +392,11 @@ def _extract_labels(path):
             m = re.match(r'^([\w+\-]+):\s*.+?#\s*(.+)$', stripped)
             if m and section and current_key:
                 mod = m.group(1)
-                label = m.group(2).strip()
-                labels[(section, current_key, mod)] = label
-    return labels
+                label, sep, desc = m.group(2).partition(' | ')
+                labels[(section, current_key, mod)] = label.strip()
+                if sep:
+                    descs[(section, current_key, mod)] = desc.strip()
+    return labels, descs
 
 
 def generate_hyper_rules(hyper_data, labels):
@@ -433,8 +442,12 @@ def generate_hyper_rules(hyper_data, labels):
     return '\n'.join(lines)
 
 
-def generate_hyper_help(hyper_data, labels):
-    """Generate concise help text: one line per key, modifiers inline."""
+def generate_hyper_help(hyper_data, labels, descs=None):
+    """Generate concise help text: one line per key, modifiers inline.
+
+    The overlay has space, so it shows the description when there is one.
+    """
+    descs = descs or {}
     hyper_keys = hyper_data.get('hyper', {})
     misc_keys = hyper_data.get('misc', {})
 
@@ -444,7 +457,7 @@ def generate_hyper_help(hyper_data, labels):
         display_key = '\\\\' if key == '\\' else key
         parts = []
         for mod, _ in mappings.items():
-            label = labels.get(('hyper', key, mod), '')
+            label = descs.get(('hyper', key, mod)) or labels.get(('hyper', key, mod), '')
             if not label:
                 continue
             sym = HYPER_MOD_SYMBOLS.get(mod, mod)
@@ -473,6 +486,13 @@ def generate_hyper_help(hyper_data, labels):
                 misc_parts.append(f'{sym}{short_key}:{label}')
     if misc_parts:
         key_lines.append('  '.join(misc_parts))
+
+    # Ctrl reference keys (Tab held) on the last line. They make no rule.
+    ctrl_parts = [f'{key}:{labels[("ctrl", key, "-")]}'
+                  for key in (hyper_data.get('ctrl') or {})
+                  if labels.get(('ctrl', key, '-'))]
+    if ctrl_parts:
+        key_lines.append('⌃(tab) ' + ' '.join(ctrl_parts))
 
     return '\\n'.join(key_lines)
 
@@ -511,7 +531,7 @@ INDEX_TRIGGERS = {
 
 def generate_key_index(app_entries, ws_entries, ws_shift_entries,
                        shortcut_sections, live_fkeys, hyper_data, hyper_labels,
-                       extras_entries=()):
+                       extras_entries=(), hyper_descs=None):
     """Build the consolidated key index for the search HUD.
 
     Returns a list of TSV rows: layer, trigger, key, label, action.
@@ -548,7 +568,9 @@ def generate_key_index(app_entries, ws_entries, ws_shift_entries,
                 disp = f'{sym}{key}' if mod != '-' else key
                 if isinstance(action, list):
                     action = ' '.join(str(a) for a in action)
-                add('hyper', disp, label, str(action))
+                # The description says what the key does. The goku code is the fallback.
+                desc = (hyper_descs or {}).get((section, key, mod))
+                add('hyper', disp, label, desc or str(action))
     # Hand-written help and search keys, which are not in hyperkeys.yaml
     add('hyper', '/', 'guide (hold)', 'hyper help overlay')
     add('hyper', '⇧/', 'key search', 'open the key search HUD')
@@ -557,6 +579,11 @@ def generate_key_index(app_entries, ws_entries, ws_shift_entries,
     for entry in extras_entries:
         combo, label, extra = parse_entry(entry)
         rows.append(('extra', '', combo, label or '', extra or ''))
+
+    # Ctrl reference keys from hyperkeys.yaml (Tab held). They make no rule.
+    for key, mappings in (hyper_data.get('ctrl') or {}).items():
+        label = hyper_labels.get(('ctrl', key, '-'), '')
+        rows.append(('extra', '', f'⌃{key}', label, str(mappings.get('-', ''))))
 
     return ['\t'.join(r) for r in rows]
 

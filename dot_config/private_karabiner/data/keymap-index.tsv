@@ -122,32 +122,30 @@ hyper	⇪	⇧l	nextTab	!Ttab
 hyper	⇪	⌘l	sel	!Sright_arrow
 hyper	⇪	⌥l	word	!Oright_arrow
 hyper	⇪	⌥⌘l	selWord	!OSright_arrow
-hyper	⇪	u	home	!Cleft_arrow
-hyper	⇪	⌘u	sel	!CSleft_arrow
-hyper	⇪	p	end	!Cright_arrow
-hyper	⇪	⌘p	sel	!CSright_arrow
+hyper	⇪	⌘u	selHome	select to the start of the line
+hyper	⇪	⌘p	selEnd	select to the end of the line
 hyper	⇪	x	⌫	delete_or_backspace
 hyper	⇪	⇧x	⌦	delete_forward
-hyper	⇪	f	expose	!Tup_arrow
-hyper	⇪	c	alfred clip	!CTOSc
-hyper	⇪	s	alfred snippet	!CTOSs
-hyper	⇪	z	alfred zuno search	!CTOSz
-hyper	⇪	-	browser bookmarks	!CTOShyphen
-hyper	⇪	=	browser tabs	!CTOSequal_sign
-hyper	⇪	\	alfred pin bookmarks	!CTOSbackslash
-hyper	⇪	e	alfred open windows	!CTOSe
-hyper	⇪	r	alfred rex tabs	!CTOSt
-hyper	⇪	⇧r	alfred bitbucket repos	!CTOSr
-hyper	⇪	i	mouseless overlay	!CTOSi
-hyper	⇪	g	alfredo new task	!CTOSg
-hyper	⇪	⌃g	alfredo all tasks	!CSf13
-hyper	⇪	2	alfred jira	!CTOS2
-hyper	⇪	⇧2	alfred bitbucket prs	!CTOSp
-hyper	⇪	8	alfred menu bar search	!CTOS8
-hyper	⇪	m	alfred youtube music	!CTOSm
+hyper	⇪	f	mission	mission control
+hyper	⇪	c	clip	alfred clipboard
+hyper	⇪	s	snippet	alfred snippets
+hyper	⇪	z	zuno	alfred zuno search
+hyper	⇪	-	bmarks	browser bookmarks
+hyper	⇪	=	bTabs	browser tabs
+hyper	⇪	\	pins	alfred pinned bookmarks
+hyper	⇪	e	windows	alfred open windows
+hyper	⇪	r	rexTabs	alfred rex tabs
+hyper	⇪	⇧r	repos	alfred bitbucket repos
+hyper	⇪	i	mouse	mouseless overlay
+hyper	⇪	g	newTask	alfredo new task
+hyper	⇪	⌃g	tasks	alfredo all tasks
+hyper	⇪	2	jira	alfred jira
+hyper	⇪	⇧2	PRs	alfred bitbucket prs
+hyper	⇪	8	menus	alfred menu bar search
+hyper	⇪	m	ytMusic	alfred youtube music
 hyper	⇪	0	ice bar	!QWER0
-hyper	⇪	q	mouseless freekey (hold)	!QWERq
-hyper	⇪	⌃o	alfred audio out	!CTOSo
+hyper	⇪	q	freekey	mouseless freekey (hold)
+hyper	⇪	⌃o	audio	alfred audio out
 hyper	⇪	⌘spacebar	emoji	!TCspacebar
 hyper	⇪	escape	caps	!Tcaps_lock
 hyper	⇪	/	guide (hold)	hyper help overlay
@@ -173,3 +171,5 @@ extra		⌥L[	prev app	cmd+shift+tab
 extra		⌥⌘\	arc tab → window	move the current Arc tab to a new window
 extra		layer /	layer help	hold a layer, press / = that layer's overlay
 extra		⇪?	key search	this HUD (also ctrl+shift+/)
+extra		⌃a	start	Tab+a: go to the start of the line
+extra		⌃e	end	Tab+e: go to the end of the line

@@ -65,7 +65,7 @@
        :clear-l3-help {:noti {:id "org.pqrs.notificaion_message_layer3"
                               :text ""}}
        :show-hyper-help {:noti {:id "org.pqrs.notificaion_message_hyper"
-                                :text "h:← ⇧prevTab ⌘sel ⌥word ⌥⌘selWord\nj:↓ ⇧nextApp ⌘sel ⌥⌘sel3 ⌃expose\nk:↑ ⇧prevApp ⌘sel ⌥⌘sel3\nl:→ ⇧nextTab ⌘sel ⌥word ⌥⌘selWord\nu:home ⌘sel\np:end ⌘sel\nx:⌫ ⇧⌦\nf:expose\nc:alfred clip\ns:alfred snippet\nz:alfred zuno search\n-:browser bookmarks\n=:browser tabs\n\\:alfred pin bookmarks\ne:alfred open windows\nr:alfred rex tabs ⇧alfred bitbucket repos\ni:mouseless overlay\ng:alfredo new task ⌃alfredo all tasks\n2:alfred jira ⇧alfred bitbucket prs\n8:alfred menu bar search\nm:alfred youtube music\n0:ice bar\nq:mouseless freekey (hold)\no:⌃alfred audio out\n⌘spa:emoji  esc:caps"}}
+                                :text "h:← ⇧prevTab ⌘sel ⌥word ⌥⌘selWord\nj:↓ ⇧nextApp ⌘sel ⌥⌘sel3 ⌃expose\nk:↑ ⇧prevApp ⌘sel ⌥⌘sel3\nl:→ ⇧nextTab ⌘sel ⌥word ⌥⌘selWord\nu:⌘select to the start of the line\np:⌘select to the end of the line\nx:⌫ ⇧⌦\nf:mission control\nc:alfred clipboard\ns:alfred snippets\nz:alfred zuno search\n-:browser bookmarks\n=:browser tabs\n\\:alfred pinned bookmarks\ne:alfred open windows\nr:alfred rex tabs ⇧alfred bitbucket repos\ni:mouseless overlay\ng:alfredo new task ⌃alfredo all tasks\n2:alfred jira ⇧alfred bitbucket prs\n8:alfred menu bar search\nm:alfred youtube music\n0:ice bar\nq:mouseless freekey (hold)\no:⌃alfred audio out\n⌘spa:emoji  esc:caps\n⌃(tab) a:start e:end"}}
        :clear-hyper-help {:noti {:id "org.pqrs.notificaion_message_hyper"
                                  :text ""}}
 }
@@ -201,70 +201,68 @@
     [:!OCQWERl         :!OSright_arrow]  ;; selWord
 
     ;; u
-    [:!QWERu           :!Cleft_arrow]  ;; home
-    [:!CQWERu          :!CSleft_arrow]  ;; sel
+    [:!CQWERu          :!CSleft_arrow]  ;; selHome
 
     ;; p
-    [:!QWERp           :!Cright_arrow]  ;; end
-    [:!CQWERp          :!CSright_arrow]  ;; sel
+    [:!CQWERp          :!CSright_arrow]  ;; selEnd
 
     ;; x
     [:!QWERx           :delete_or_backspace]  ;; ⌫
     [:!SQWERx          :delete_forward]  ;; ⌦
 
     ;; f
-    [:!QWERf           :!Tup_arrow]  ;; expose
+    [:!QWERf           :!Tup_arrow]  ;; mission
 
     ;; c
-    [:!QWERc           :!CTOSc]  ;; alfred clip
+    [:!QWERc           :!CTOSc]  ;; clip
 
     ;; s
-    [:!QWERs           :!CTOSs]  ;; alfred snippet
+    [:!QWERs           :!CTOSs]  ;; snippet
 
     ;; z
-    [:!QWERz           :!CTOSz]  ;; alfred zuno search
+    [:!QWERz           :!CTOSz]  ;; zuno
 
     ;; -
-    [:!QWERhyphen      :!CTOShyphen]  ;; browser bookmarks
+    [:!QWERhyphen      :!CTOShyphen]  ;; bmarks
 
     ;; =
-    [:!QWERequal_sign  :!CTOSequal_sign]  ;; browser tabs
+    [:!QWERequal_sign  :!CTOSequal_sign]  ;; bTabs
 
     ;; \
-    [:!QWERbackslash   :!CTOSbackslash]  ;; alfred pin bookmarks
+    [:!QWERbackslash   :!CTOSbackslash]  ;; pins
 
     ;; e
-    [:!QWERe           :!CTOSe]  ;; alfred open windows
+    [:!QWERe           :!CTOSe]  ;; windows
 
     ;; r
-    [:!QWERr           :!CTOSt]  ;; alfred rex tabs
-    [:!SQWERr          :!CTOSr]  ;; alfred bitbucket repos
+    [:!QWERr           :!CTOSt]  ;; rexTabs
+    [:!SQWERr          :!CTOSr]  ;; repos
 
     ;; i
-    [:!QWERi           :!CTOSi]  ;; mouseless overlay
+    [:!QWERi           :!CTOSi]  ;; mouse
 
     ;; g
-    [:!QWERg           :!CTOSg]  ;; alfredo new task
-    [:!TQWERg          :!CSf13]  ;; alfredo all tasks
+    [:!QWERg           :!CTOSg]  ;; newTask
+    [:!TQWERg          :!CSf13]  ;; tasks
 
     ;; 2
-    [:!QWER2           :!CTOS2]  ;; alfred jira
-    [:!SQWER2          :!CTOSp]  ;; alfred bitbucket prs
+    [:!QWER2           :!CTOS2]  ;; jira
+    [:!SQWER2          :!CTOSp]  ;; PRs
 
     ;; 8
-    [:!QWER8           :!CTOS8]  ;; alfred menu bar search
+    [:!QWER8           :!CTOS8]  ;; menus
 
     ;; m
-    [:!QWERm           :!CTOSm]  ;; alfred youtube music
+    [:!QWERm           :!CTOSm]  ;; ytMusic
 
     ;; 0
     [:!QWER0           :!QWER0]  ;; ice bar
 
     ;; q
-    [:!QWERq           :!QWERq]  ;; mouseless freekey (hold)
+    [:!QWERq           :!QWERq]  ;; freekey
 
     ;; o
-    [:!TQWERo          :!CTOSo]  ;; alfred audio out
+    [:!TQWERo          :!CTOSo]  ;; audio
 
     ;; / = show hyper help (hold to view, release to dismiss)
     [:!QWERslash :show-hyper-help nil {:afterup :clear-hyper-help}]

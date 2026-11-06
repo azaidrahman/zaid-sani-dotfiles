@@ -9,6 +9,9 @@
 # Modifiers: shift, cmd, opt, ctrl, opt+cmd, ctrl+shift
 # Actions: goku key code, or ["seq", "of", "keys"] for sequences
 # The # comment after each action becomes the help overlay label.
+# Write the comment as "# label | description". The short label (7
+# characters or less) shows on the keycap of the key search HUD. The
+# description shows in the help overlay and in the key search HUD list.
 
 # !  | means mandatory
 # #  | means optional
@@ -62,71 +65,71 @@ hyper:
     opt: "!Oright_arrow" # word
     opt+cmd: "!OSright_arrow" # selWord
 
+  # u and p have no plain binding. Use Tab+a and Tab+e (Ctrl) for the start
+  # and the end of the line. Only the select keys stay.
   u:
-    -: "!Cleft_arrow" # home
-    cmd: "!CSleft_arrow" # sel
+    cmd: "!CSleft_arrow" # selHome | select to the start of the line
 
   p:
-    -: "!Cright_arrow" # end
-    cmd: "!CSright_arrow" # sel
+    cmd: "!CSright_arrow" # selEnd | select to the end of the line
 
   x:
     -: delete_or_backspace # ⌫
     shift: delete_forward # ⌦
 
   f:
-    -: "!Tup_arrow" # expose
+    -: "!Tup_arrow" # mission | mission control
 
   c:
-    -: "!CTOSc" # alfred clip
+    -: "!CTOSc" # clip | alfred clipboard
 
   s:
-    -: "!CTOSs" # alfred snippet
+    -: "!CTOSs" # snippet | alfred snippets
 
   z:
-    -: "!CTOSz" # alfred zuno search
+    -: "!CTOSz" # zuno | alfred zuno search
 
   -:
-    -: "!CTOShyphen" # browser bookmarks
+    -: "!CTOShyphen" # bmarks | browser bookmarks
 
   =:
-    -: "!CTOSequal_sign" # browser tabs
+    -: "!CTOSequal_sign" # bTabs | browser tabs
 
   \:
-    -: "!CTOSbackslash" # alfred pin bookmarks
+    -: "!CTOSbackslash" # pins | alfred pinned bookmarks
 
   e:
-    -: "!CTOSe" # alfred open windows
+    -: "!CTOSe" # windows | alfred open windows
 
   r:
-    -: "!CTOSt" # alfred rex tabs
-    shift: "!CTOSr" # alfred bitbucket repos
+    -: "!CTOSt" # rexTabs | alfred rex tabs
+    shift: "!CTOSr" # repos | alfred bitbucket repos
 
   i:
-    -: "!CTOSi" # mouseless overlay
+    -: "!CTOSi" # mouse | mouseless overlay
 
   g:
-    -: "!CTOSg" # alfredo new task
-    ctrl: "!CSf13" # alfredo all tasks
+    -: "!CTOSg" # newTask | alfredo new task
+    ctrl: "!CSf13" # tasks | alfredo all tasks
 
   "2":
-    -: "!CTOS2" # alfred jira
-    shift: "!CTOSp" # alfred bitbucket prs
+    -: "!CTOS2" # jira | alfred jira
+    shift: "!CTOSp" # PRs | alfred bitbucket prs
 
   "8":
-    -: "!CTOS8" # alfred menu bar search
+    -: "!CTOS8" # menus | alfred menu bar search
 
   m:
-    -: "!CTOSm" # alfred youtube music
+    -: "!CTOSm" # ytMusic | alfred youtube music
 
   "0":
     -: "!QWER0" # ice bar
 
   q:
-    -: "!QWERq" # mouseless freekey (hold)
+    -: "!QWERq" # freekey | mouseless freekey (hold)
 
   o:
-    ctrl: "!CTOSo" # alfred audio out
+    ctrl: "!CTOSo" # audio | alfred audio out
 
 misc:
   spacebar:
@@ -134,3 +137,13 @@ misc:
 
   escape:
     -: "!Tcaps_lock" # caps
+
+# "ctrl" section: keys that you push while you hold Tab (Tab held = Ctrl).
+# These keys make no rule. The shell and most text fields read them as
+# readline keys. They show on the last line of the hyper help overlay, and
+# in the list of the key search HUD.
+ctrl:
+  a:
+    -: "Tab+a: go to the start of the line" # start
+  e:
+    -: "Tab+e: go to the end of the line" # end

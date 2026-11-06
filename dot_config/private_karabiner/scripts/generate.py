@@ -96,8 +96,8 @@ for ln in sorted(LAYERS.keys()):
     )
 
 # Hyper (declarative from YAML)
-hyper_data, hyper_labels = load_hyperkeys(hyperkeys_path)
-hyper_t = generate_hyper_help(hyper_data, hyper_labels)
+hyper_data, hyper_labels, hyper_descs = load_hyperkeys(hyperkeys_path)
+hyper_t = generate_hyper_help(hyper_data, hyper_labels, hyper_descs)
 hyper_help_line = (
     '       :show-hyper-help {:noti {:id "org.pqrs.notificaion_message_hyper"\n'
     '                                :text "' + hyper_t + '"}}\n'
@@ -182,7 +182,7 @@ open(fkey_index_path, 'w').write('\n'.join(fkey_rows) + '\n')
 index_rows = generate_key_index(
     app_sections.get('app', []), ws_entries + ws_pass_entries, ws_shift_entries,
     shortcut_sections, live_fkey_actions(fkey_rows), hyper_data, hyper_labels,
-    extras_sections.get('extras', []))
+    extras_sections.get('extras', []), hyper_descs)
 index_path = os.path.join(dir_path, 'data', 'keymap-index.tsv')
 open(index_path, 'w').write('\n'.join(index_rows) + '\n')
 
