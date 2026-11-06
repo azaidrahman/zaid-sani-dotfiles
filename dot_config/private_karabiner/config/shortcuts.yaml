@@ -60,3 +60,4 @@ l3:
   - ] | b next-space | Browser next space
   - - | b prev-tab
   - = | b next-tab
+  - r | b reader | !CTSf13

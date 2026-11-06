@@ -103,6 +103,7 @@ l3	⌘⌥R	[	b prev-space	Browser previous space · shift+F13 (via KM/Alfred)
 l3	⌘⌥R	]	b next-space	Browser next space · ctrl+shift+F13 (via KM/Alfred)
 l3	⌘⌥R	-	b prev-tab	cmd+opt+shift+F13 (via KM/Alfred)
 l3	⌘⌥R	=	b next-tab	ctrl+cmd+opt+shift+F13 (via KM/Alfred)
+l3	⌘⌥R	r	b reader	!CTSf13
 hyper	⇪	h	←	left_arrow
 hyper	⇪	⇧h	prevTab	!TStab
 hyper	⇪	⌘h	sel	!Sleft_arrow
