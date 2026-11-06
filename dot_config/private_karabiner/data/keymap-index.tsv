@@ -172,4 +172,8 @@ extra		⌥⌘\	arc tab → window	move the current Arc tab to a new window
 extra		layer /	layer help	hold a layer, press / = that layer's overlay
 extra		⇪?	key search	this HUD (also ctrl+shift+/)
 extra		⌃a	start	Tab+a: go to the start of the line
+extra		⌃⌘a	selStart	Tab+cmd+a: select to the start of the line
 extra		⌃e	end	Tab+e: go to the end of the line
+extra		⌃⌘e	selEnd	Tab+cmd+e: select to the end of the line
+extra		⌃⌘b	selWord	Tab+cmd+b: select one word to the left
+extra		⌃⌘f	selWord	Tab+cmd+f: select one word to the right

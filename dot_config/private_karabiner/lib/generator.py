@@ -453,23 +453,9 @@ def generate_hyper_help(hyper_data, labels, descs=None):
 
     key_lines = []
     for key, mappings in hyper_keys.items():
-        # Escape backslash for EDN string embedding
-        display_key = '\\\\' if key == '\\' else key
-        parts = []
-        for mod, _ in mappings.items():
-            label = descs.get(('hyper', key, mod)) or labels.get(('hyper', key, mod), '')
-            if not label:
-                continue
-            sym = HYPER_MOD_SYMBOLS.get(mod, mod)
-            if mod == '-':
-                parts.append(f'{display_key}:{label}')
-            else:
-                parts.append(f'{sym}{label}')
-        if parts:
-            # A key with only modifier variants still shows its name
-            if '-' not in mappings:
-                parts[0] = f'{display_key}:{parts[0]}'
-            key_lines.append(' '.join(parts))
+        line = _help_key_line('hyper', key, mappings, labels, descs)
+        if line:
+            key_lines.append(line)
 
     # Misc keys on one line
     misc_parts = []
@@ -487,14 +473,33 @@ def generate_hyper_help(hyper_data, labels, descs=None):
     if misc_parts:
         key_lines.append('  '.join(misc_parts))
 
-    # Ctrl reference keys (Tab held) on the last line. They make no rule.
-    ctrl_parts = [f'{key}:{labels[("ctrl", key, "-")]}'
-                  for key in (hyper_data.get('ctrl') or {})
-                  if labels.get(('ctrl', key, '-'))]
+    # Ctrl keys (Tab held) on the last line
+    ctrl_parts = [_help_key_line('ctrl', key, mappings, labels, descs)
+                  for key, mappings in (hyper_data.get('ctrl') or {}).items()]
+    ctrl_parts = [p for p in ctrl_parts if p]
     if ctrl_parts:
-        key_lines.append('⌃(tab) ' + ' '.join(ctrl_parts))
+        key_lines.append('⌃(tab) ' + '  '.join(ctrl_parts))
 
     return '\\n'.join(key_lines)
+
+
+def _help_key_line(section, key, mappings, labels, descs):
+    """Return the help text of one key: the plain label, then each modifier variant."""
+    # Escape backslash for EDN string embedding
+    display_key = '\\\\' if key == '\\' else key
+    parts = []
+    for mod in mappings:
+        label = descs.get((section, key, mod)) or labels.get((section, key, mod), '')
+        if not label:
+            continue
+        if mod == '-':
+            parts.append(f'{display_key}:{label}')
+        else:
+            parts.append(f'{HYPER_MOD_SYMBOLS.get(mod, mod)}{label}')
+    # A key with only modifier variants still shows its name
+    if parts and '-' not in mappings:
+        parts[0] = f'{display_key}:{parts[0]}'
+    return ' '.join(parts)
 
 
 def generate_help_block(app_t, ws_t, layer_help_lines, hyper_help_line):
@@ -580,10 +585,12 @@ def generate_key_index(app_entries, ws_entries, ws_shift_entries,
         combo, label, extra = parse_entry(entry)
         rows.append(('extra', '', combo, label or '', extra or ''))
 
-    # Ctrl reference keys from hyperkeys.yaml (Tab held). They make no rule.
+    # Ctrl keys from hyperkeys.yaml (Tab held)
     for key, mappings in (hyper_data.get('ctrl') or {}).items():
-        label = hyper_labels.get(('ctrl', key, '-'), '')
-        rows.append(('extra', '', f'⌃{key}', label, str(mappings.get('-', ''))))
+        for mod, desc in mappings.items():
+            label = hyper_labels.get(('ctrl', key, mod), '')
+            sym = HYPER_MOD_SYMBOLS.get(mod, mod)
+            rows.append(('extra', '', f'⌃{sym}{key}', label, str(desc)))
 
     return ['\t'.join(r) for r in rows]
 

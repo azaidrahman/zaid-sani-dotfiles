@@ -65,7 +65,7 @@
        :clear-l3-help {:noti {:id "org.pqrs.notificaion_message_layer3"
                               :text ""}}
        :show-hyper-help {:noti {:id "org.pqrs.notificaion_message_hyper"
-                                :text "h:← ⇧prevTab ⌘sel ⌥word ⌥⌘selWord\nj:↓ ⇧nextApp ⌘sel ⌥⌘sel3 ⌃expose\nk:↑ ⇧prevApp ⌘sel ⌥⌘sel3\nl:→ ⇧nextTab ⌘sel ⌥word ⌥⌘selWord\nu:⌘select to the start of the line\np:⌘select to the end of the line\nx:⌫ ⇧⌦\nf:mission control\nc:alfred clipboard\ns:alfred snippets\nz:alfred zuno search\n-:browser bookmarks\n=:browser tabs\n\\:alfred pinned bookmarks\ne:alfred open windows\nr:alfred rex tabs ⇧alfred bitbucket repos\ni:mouseless overlay\ng:alfredo new task ⌃alfredo all tasks\n2:alfred jira ⇧alfred bitbucket prs\n8:alfred menu bar search\nm:alfred youtube music\n0:ice bar\nq:mouseless freekey (hold)\no:⌃alfred audio out\n⌘spa:emoji  esc:caps\n⌃(tab) a:start e:end"}}
+                                :text "h:← ⇧prevTab ⌘sel ⌥word ⌥⌘selWord\nj:↓ ⇧nextApp ⌘sel ⌥⌘sel3 ⌃expose\nk:↑ ⇧prevApp ⌘sel ⌥⌘sel3\nl:→ ⇧nextTab ⌘sel ⌥word ⌥⌘selWord\nu:⌘select to the start of the line\np:⌘select to the end of the line\nx:⌫ ⇧⌦\nf:mission control\nc:alfred clipboard\ns:alfred snippets\nz:alfred zuno search\n-:browser bookmarks\n=:browser tabs\n\\:alfred pinned bookmarks\ne:alfred open windows\nr:alfred rex tabs ⇧alfred bitbucket repos\ni:mouseless overlay\ng:alfredo new task ⌃alfredo all tasks\n2:alfred jira ⇧alfred bitbucket prs\n8:alfred menu bar search\nm:alfred youtube music\n0:ice bar\nq:mouseless freekey (hold)\no:⌃alfred audio out\n⌘spa:emoji  esc:caps\n⌃(tab) a:start ⌘selStart  e:end ⌘selEnd  b:⌘selWord  f:⌘selWord"}}
        :clear-hyper-help {:noti {:id "org.pqrs.notificaion_message_hyper"
                                  :text ""}}
 }
@@ -319,7 +319,14 @@
   {:des "Tab to Ctrl"
    :rules
    [;; Tab → Ctrl (hold) / Tab (tap)
-    [:##tab :left_control nil {:alone :tab}]]}
+    [:##tab :left_control nil {:alone :tab}]
+    ;; Tab+Cmd+a / Tab+Cmd+e → select to the start / end of the line.
+    ;; The help text is in the "ctrl" section of config/hyperkeys.yaml.
+    [:!CTa :!CSleft_arrow]
+    [:!CTe :!CSright_arrow]
+    ;; Tab+Cmd+b / Tab+Cmd+f → select one word to the left / right.
+    [:!CTb :!OSleft_arrow]
+    [:!CTf :!OSright_arrow]]}
 
   {:des "Backslash double-tap to Notification Centre"
    :rules

@@ -139,11 +139,21 @@ misc:
     -: "!Tcaps_lock" # caps
 
 # "ctrl" section: keys that you push while you hold Tab (Tab held = Ctrl).
-# These keys make no rule. The shell and most text fields read them as
-# readline keys. They show on the last line of the hyper help overlay, and
-# in the list of the key search HUD.
+# This section makes no rule. It only gives the help text. The keys show on
+# the last line of the hyper help overlay, and in the list of the key search
+# HUD.
+# - The plain keys are readline keys. The shell and most text fields read
+#   them, so they need no rule.
+# - The cmd keys are rules in karabiner.base.edn, in the "Tab to Ctrl" block.
+#   If you change a cmd key here, change its rule there.
 ctrl:
   a:
     -: "Tab+a: go to the start of the line" # start
+    cmd: "Tab+cmd+a: select to the start of the line" # selStart
   e:
     -: "Tab+e: go to the end of the line" # end
+    cmd: "Tab+cmd+e: select to the end of the line" # selEnd
+  b:
+    cmd: "Tab+cmd+b: select one word to the left" # selWord
+  f:
+    cmd: "Tab+cmd+f: select one word to the right" # selWord

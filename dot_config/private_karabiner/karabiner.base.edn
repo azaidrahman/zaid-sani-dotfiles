@@ -184,7 +184,14 @@
   {:des "Tab to Ctrl"
    :rules
    [;; Tab → Ctrl (hold) / Tab (tap)
-    [:##tab :left_control nil {:alone :tab}]]}
+    [:##tab :left_control nil {:alone :tab}]
+    ;; Tab+Cmd+a / Tab+Cmd+e → select to the start / end of the line.
+    ;; The help text is in the "ctrl" section of config/hyperkeys.yaml.
+    [:!CTa :!CSleft_arrow]
+    [:!CTe :!CSright_arrow]
+    ;; Tab+Cmd+b / Tab+Cmd+f → select one word to the left / right.
+    [:!CTb :!OSleft_arrow]
+    [:!CTf :!OSright_arrow]]}
 
   {:des "Backslash double-tap to Notification Centre"
    :rules
