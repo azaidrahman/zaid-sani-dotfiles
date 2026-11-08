@@ -9,6 +9,11 @@
 #               display on again for any other number. It decides again after
 #               the Mac wakes, because the monitors can change during sleep.
 #
+#               At its start, for example at login, the agent does not turn
+#               the display off. It leaves the display on, and the menu asks
+#               about 10 seconds later. The choice holds until the set of
+#               monitors changes.
+#
 #               The app ~/Applications/displayctl.app shows a laptop icon in
 #               the menu bar. A slash on the icon means the display is off. A
 #               dim icon means the agent does not run. The menu can turn the

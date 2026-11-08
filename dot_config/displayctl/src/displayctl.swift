@@ -6,7 +6,9 @@
 // The `watch` command runs as an agent. It turns the built-in display off when
 // exactly two external displays are connected. It turns the display on again
 // for any other number. The agent decides after a change of the monitors, and
-// again after the Mac wakes.
+// again after the Mac wakes. At its own start, for example at login, the agent
+// does not turn the display off. It leaves the display on, and the menu asks
+// the user.
 //
 // The `menu` command shows an item in the menu bar. The item shows the state of
 // the display and of the agent. It can turn the display on or off, and it can
@@ -189,6 +191,38 @@ struct Latch {
     }
 }
 
+// The count of externals for which the agent waits for the user. At its start,
+// the agent leaves the display on and the menu asks the user. The wait holds
+// until the count changes, also after a wake. Thus an answer of "Keep On" lasts
+// while the set of monitors stays the same.
+struct UserHold {
+    private(set) var externals: Int? = nil
+
+    mutating func hold(externals count: Int) { externals = count }
+
+    // True while the count is the count of the hold. A different count ends the
+    // hold for good.
+    mutating func waits(externals count: Int) -> Bool {
+        guard let held = externals else { return false }
+        if held == count { return true }
+        externals = nil
+        return false
+    }
+}
+
+// The agent writes this file when it waits for the user. The file holds the
+// count of externals. The menu reads it, asks the user, and removes it. The file
+// lives in /tmp, so a restart clears it.
+private let askFile = "/tmp/.displayctl-ask"
+
+private func writeAsk(externals: Int) {
+    try? "\(externals)\n".write(toFile: askFile, atomically: true, encoding: .utf8)
+}
+
+private func removeAsk() {
+    try? FileManager.default.removeItem(atPath: askFile)
+}
+
 private func builtinState() -> BuiltinState {
     if liveBuiltinID() != nil { return .on }
     return toolHoldsBuiltinOff() ? .offByTool : .unknown
@@ -260,6 +294,7 @@ private func applyBuiltin(on wanted: Bool, dryRun: Bool) -> Bool {
 // MARK: - Watch mode
 
 private var latch = Latch()
+private var userHold = UserHold()
 
 // A change that did not happen gets another look, because the state that
 // blocked it is short. Without this the agent would wait for the next change in
@@ -291,6 +326,14 @@ private func evaluate(reason: String) {
     if applyingOwnChange { return }
 
     let externals = externalCount()
+    if userHold.waits(externals: externals) {
+        log("\(reason): \(externals) external(s), the choice is the user's, leaving the display alone")
+        return
+    }
+    // No hold, or the set of monitors changed. A question that is still open is
+    // then out of date.
+    removeAsk()
+
     if latch.isUnchanged(externals: externals) {
         log("\(reason): \(externals) external(s), no change in the set of monitors, leaving the display alone")
         return
@@ -298,6 +341,16 @@ private func evaluate(reason: String) {
 
     let wanted = builtinShouldBeOn(externals: externals)
     log("\(reason): \(externals) external(s), the built-in display should be \(wanted ? "on" : "off")")
+
+    // At its start the agent does not turn the display off. The start is often
+    // at login, and a change of the displays then slows the login and can go
+    // wrong. Leave the display on, and let the menu ask the user.
+    if reason == "start" && plan(wanted: wanted, state: builtinState()) == .turnOff {
+        userHold.hold(externals: externals)
+        writeAsk(externals: externals)
+        log("start: the display stays on until the user chooses in the menu")
+        return
+    }
 
     applyingOwnChange = true
     let applied = applyBuiltin(on: wanted, dryRun: watchDryRun)
@@ -333,6 +386,7 @@ private func installSignalHandlers() {
         let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
         source.setEventHandler {
             log("stopping, so the built-in display goes back on")
+            removeAsk()
             applyBuiltin(on: true, dryRun: watchDryRun)
             exit(0)
         }
@@ -481,6 +535,8 @@ private final class MenuController: NSObject, NSMenuDelegate {
     // action runs. The menu blocks the other agent actions until it is done.
     private var busy: String? = nil
     private var timer: Timer?
+    // True while the question about the display is on the screen.
+    private var asking = false
 
     override init() {
         super.init()
@@ -489,10 +545,58 @@ private final class MenuController: NSObject, NSMenuDelegate {
         item.menu = menu
         refresh()
         // A crash or a launchctl command in a shell changes the agent and
-        // raises no event here. Look again at a fixed interval.
+        // raises no event here. Look again at a fixed interval. The same look
+        // finds a question from the agent.
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             self?.refresh()
+            self?.askIfAgentWaits()
         }
+    }
+
+    // Wait this long after the agent starts before the question shows. The
+    // agent starts at login, and the login is still busy for some seconds.
+    private let askDelay: TimeInterval = 10
+
+    // The agent leaves the display on at its start and writes the ask file.
+    // Ask the user, then remove the file, so the question shows one time only.
+    private func askIfAgentWaits() {
+        guard !asking,
+              let attributes = try? FileManager.default.attributesOfItem(atPath: askFile),
+              let written = attributes[.modificationDate] as? Date,
+              Date().timeIntervalSince(written) >= askDelay
+        else { return }
+        let text = (try? String(contentsOfFile: askFile, encoding: .utf8)) ?? ""
+        removeAsk()
+        guard let externals = Int(text.trimmingCharacters(in: .whitespacesAndNewlines)),
+              externalCount() == externals,
+              builtinState() == .on
+        else { return }
+
+        asking = true
+        let alert = NSAlert()
+        alert.messageText = "Turn off the built-in display?"
+        alert.informativeText = "\(externals) external displays are connected. The built-in display stays on until you choose. You can also turn it off later from the menu bar."
+        alert.icon = NSImage(systemSymbolName: "laptopcomputer", accessibilityDescription: nil)
+        alert.addButton(withTitle: "Turn Off")
+        alert.addButton(withTitle: "Keep On")
+        // An accessory app is not in front by itself, and the alert would open
+        // behind the other windows.
+        NSApp.activate()
+        let answer = alert.runModal()
+        asking = false
+
+        guard answer == .alertFirstButtonReturn else {
+            log("the user chose to keep the built-in display on")
+            return
+        }
+        // The alert can stay open for a long time. Turn the display off only if
+        // the set of monitors is still the same.
+        guard externalCount() == externals else {
+            log("the set of monitors changed while the question was open, so no change")
+            return
+        }
+        log("the user chose to turn the built-in display off")
+        runTool("off")
     }
 
     func refresh() {
@@ -612,14 +716,18 @@ private final class MenuController: NSObject, NSMenuDelegate {
         return entry
     }
 
+    @objc private func toggleDisplay() {
+        log("toggle the built-in display from the menu")
+        runTool("toggle")
+    }
+
     // Run the tool as a child process. The child writes to the same log, and
     // the wait for the display does not block the menu.
-    @objc private func toggleDisplay() {
+    private func runTool(_ command: String) {
         guard let path = Bundle.main.executablePath else { return }
-        log("toggle the built-in display from the menu")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = ["toggle"]
+        process.arguments = [command]
         process.terminationHandler = { [weak self] _ in
             DispatchQueue.main.async { self?.refresh() }
         }
@@ -754,6 +862,15 @@ private func selftest() -> Bool {
     woken.record(externals: 2, applied: true)
     woken.forget()
     check("latch after a wake", woken.isUnchanged(externals: 2), false)
+
+    // The hold from the start must last while the count stays the same, also
+    // after a wake. A new count must end it for good, so that a later return
+    // to the same count acts as usual.
+    var hold = UserHold()
+    hold.hold(externals: 2)
+    check("hold, same count", hold.waits(externals: 2), true)
+    check("hold, new count", hold.waits(externals: 1), false)
+    check("hold after a new count", hold.waits(externals: 2), false)
 
     // The menu reads the agent state from `launchctl print`. The nested
     // sections have their own "state" lines, and they must not count.
