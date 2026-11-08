@@ -5,7 +5,7 @@
 # the key with the service account, so no Touch ID prompt opens on a remote Mac.
 providers:
   litellm:
-    baseUrl: {{ if hasPrefix "onyx" .chezmoi.hostname }}http://localhost:4000/v1{{ else }}http://onyx:4000/v1{{ end }}
+    baseUrl: {{ if hasPrefix "onyx" (includeTemplate "hostname" $) }}http://localhost:4000/v1{{ else }}http://onyx:4000/v1{{ end }}
     apiKey: '![ -n "$LITELLM_KEY_OMP" ] && printf %s "$LITELLM_KEY_OMP" || "$HOME/.local/bin/op-sa" read "op://Personal Development/LiteLLM login/omp"'
     api: openai-completions
     discovery:

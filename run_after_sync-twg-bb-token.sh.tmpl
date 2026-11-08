@@ -80,7 +80,7 @@ else
 fi
 
 if mv "$tmp" "$CONF"; then
-    note "updated on {{ .chezmoi.hostname }} from 1Password"
+    note "updated on {{ (includeTemplate "hostname" $) }} from 1Password"
 else
     rm -f "$tmp"
     note "could not write $CONF"

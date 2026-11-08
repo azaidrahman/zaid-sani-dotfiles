@@ -31,7 +31,7 @@ import * as path from "node:path";
 // the `pi` shell wrapper exports, so /key/info reports the spend of that key
 // only (pi and omp), not the whole proxy. The figure is the key's lifetime
 // total: LiteLLM has no cheap per-week number.
-{{- if eq .chezmoi.hostname "onyx" }}
+{{- if eq (includeTemplate "hostname" $) "onyx" }}
 const LITELLM_BASE_URL = "http://localhost:4000";
 {{- else }}
 const LITELLM_BASE_URL = "http://onyx:4000";

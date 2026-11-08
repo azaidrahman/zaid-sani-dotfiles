@@ -5,7 +5,7 @@
        plugin is dropped (see plugins.conf.tmpl). Add a hostname to $headless to
        strip a box entirely. Keep this list in sync with plugins.conf.tmpl. */ -}}
 {{- $headless := list -}}
-{{- $minimal := has .chezmoi.hostname $headless -}}
+{{- $minimal := has (includeTemplate "hostname" $) $headless -}}
 # Non-visual options and keybindings
 source-file ~/.tmux/conf.d/options.conf
 source-file ~/.tmux/conf.d/keys.conf

@@ -2,7 +2,7 @@
 # {{ include "dot_config/private_karabiner/karabiner.edn" | sha256sum }}
 # {{ include "dot_config/private_karabiner/data/devices_apple.json" | sha256sum }}
 # {{ include "dot_config/private_karabiner/src/key-search-hud.swift" | sha256sum }}
-{{- $devFile := joinPath "dot_config/private_karabiner/data" (printf "devices_%s.json" .chezmoi.hostname) -}}
+{{- $devFile := joinPath "dot_config/private_karabiner/data" (printf "devices_%s.json" (includeTemplate "hostname" $)) -}}
 {{- if stat (joinPath .chezmoi.sourceDir $devFile) }}
 # {{ include $devFile | sha256sum }}
 {{- end }}

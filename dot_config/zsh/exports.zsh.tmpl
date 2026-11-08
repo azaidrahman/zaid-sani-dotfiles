@@ -126,6 +126,6 @@ export GCP_SCRIPTS="$HOME/projects/{{ .workProjectsDir }}/gtech-atlas/scripts/"
 export INFRA="$HOME/projects/{{ .workProjectsDir }}/gtech-atlas/"
 export GTECH_DOCS="$HOME/projects/{{ .workProjectsDir }}/gtech-docs/apps/docs/platform/"
 export WTREE="$HOME/projects/{{ .workProjectsDir }}/worktrees"
-{{- if eq .chezmoi.hostname "aqua" }}
+{{- if eq (includeTemplate "hostname" $) "aqua" }}
 export VAULT_PATH="$HOME/Documents/Zaid Personal"
 {{- end }}

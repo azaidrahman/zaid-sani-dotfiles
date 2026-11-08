@@ -1,7 +1,7 @@
 {{- /* Headless hosts run plain stock tmux (no theme plugin, no visual.conf).
        Keep this list in sync with dot_tmux.conf.tmpl (the loader). */ -}}
 {{- $headless := list -}}
-{{- $minimal := has .chezmoi.hostname $headless -}}
+{{- $minimal := has (includeTemplate "hostname" $) $headless -}}
 # Plugins + TPM. The theme plugin is skipped on headless/minimal hosts.
 
 # PATH so TPM and plugin scripts find homebrew + system binaries.

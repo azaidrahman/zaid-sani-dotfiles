@@ -5,7 +5,7 @@
   removes comments.
 */ -}}
 github.com:
-    git_protocol: {{ if eq .chezmoi.hostname "aqua" }}ssh{{ else }}https{{ end }}
+    git_protocol: {{ if eq (includeTemplate "hostname" $) "aqua" }}ssh{{ else }}https{{ end }}
     users:
         azaidrahman:
     user: azaidrahman

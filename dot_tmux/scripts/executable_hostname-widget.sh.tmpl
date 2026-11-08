@@ -15,9 +15,9 @@ else
   hostname="unknown-host"
 fi
 
-{{ if eq .chezmoi.hostname "aqua" -}}
+{{ if eq (includeTemplate "hostname" $) "aqua" -}}
 ACCENT_COLOR="#000000"
-{{ else if eq .chezmoi.hostname "onyx" -}}
+{{ else if eq (includeTemplate "hostname" $) "onyx" -}}
 ACCENT_COLOR="#FFFFFF"
 {{ else -}}
 ACCENT_COLOR="#414868"

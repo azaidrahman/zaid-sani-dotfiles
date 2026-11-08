@@ -5,7 +5,7 @@
 # The source hash is here on purpose. A new binary needs a restart of the agent,
 # or launchd keeps the old one running.
 set -e
-{{ if ne .chezmoi.hostname "aqua" -}}
+{{ if ne (includeTemplate "hostname" $) "aqua" -}}
 # displayctl controls the built-in display of aqua. Other machines skip it.
 exit 0
 {{ end -}}

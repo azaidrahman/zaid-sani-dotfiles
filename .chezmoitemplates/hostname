@@ -1,0 +1,18 @@
+{{- /*
+  The name of this machine, for example "aqua" or "onyx".
+
+  Do not use .chezmoi.hostname for this. chezmoi takes that value from the
+  first dotted name on a 127.0.0.1 line in /etc/hosts. A local override for
+  work, such as "127.0.0.1 some.work.host", then changes the name of the
+  machine, and every per-machine check fails.
+
+  On macOS, read the LocalHostName that the Sharing settings set. On other
+  systems, use the value of chezmoi.
+
+  Use it as: (includeTemplate "hostname" $)
+*/ -}}
+{{- if eq .chezmoi.os "darwin" -}}
+{{- output "scutil" "--get" "LocalHostName" | trim -}}
+{{- else -}}
+{{- .chezmoi.hostname -}}
+{{- end -}}

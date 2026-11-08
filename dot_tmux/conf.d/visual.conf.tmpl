@@ -32,9 +32,9 @@ run-shell 'tmux set -g status-left "$(tmux show-options -gv status-left | sed "s
 set -g status-right-length 200
 
 # Override session bar color per device: cyan for aqua, dark purple for onyx
-{{ if eq .chezmoi.hostname "aqua" -}}
+{{ if eq (includeTemplate "hostname" $) "aqua" -}}
 run-shell 'tmux set -g status-left "$(tmux show-options -gv status-left | sed "s|fg=#414868,bg=#7aa2f7|fg=#000000,bg=#04d1f9|")"'
-{{ else if eq .chezmoi.hostname "onyx" -}}
+{{ else if eq (includeTemplate "hostname" $) "onyx" -}}
 run-shell 'tmux set -g status-left "$(tmux show-options -gv status-left | sed "s|fg=#414868,bg=#7aa2f7|fg=##FFFFFF,bg=##5B21B6|")"'
 {{ else -}}
 run-shell 'tmux set -g status-left "$(tmux show-options -gv status-left | sed "s|fg=#414868,bg=#7aa2f7|fg=#000000,bg=#4D95F3|")"'
@@ -43,10 +43,10 @@ run-shell 'tmux set -g status-left "$(tmux show-options -gv status-left | sed "s
 # Command-prompt/message line (e.g. <prefix> S "New session:") needs an explicit
 # `fill` or tmux only paints behind the text, leaving old status-right widgets
 # visible underneath and overlapping the prompt. Colors match the session accent above.
-{{ if eq .chezmoi.hostname "aqua" -}}
+{{ if eq (includeTemplate "hostname" $) "aqua" -}}
 set -g message-style "bg=#04d1f9,fg=#000000,fill=#04d1f9"
 set -g message-command-style "bg=#04d1f9,fg=#000000,fill=#04d1f9"
-{{ else if eq .chezmoi.hostname "onyx" -}}
+{{ else if eq (includeTemplate "hostname" $) "onyx" -}}
 set -g message-style "bg=#5B21B6,fg=#FFFFFF,fill=#5B21B6"
 set -g message-command-style "bg=#5B21B6,fg=#FFFFFF,fill=#5B21B6"
 {{ else -}}

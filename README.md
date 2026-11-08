@@ -11,7 +11,10 @@ are pulled at runtime from 1Password and the macOS Keychain (see below).
 
 Config is multi-machine and branches on hostname where it matters:
 
-Templates use `{{ .chezmoi.hostname }}` to pick per-machine values (e.g. the
+Templates use `{{ includeTemplate "hostname" $ }}` to pick per-machine values.
+Do not use `{{ .chezmoi.hostname }}`. chezmoi reads that value from `/etc/hosts`,
+and a local override for work can change it. The partial reads `scutil --get
+LocalHostName` on macOS. Per-machine values include the
 LiteLLM base URL points at `localhost` over the tailnet
 elsewhere), and 1Password item names are derived from each device's
 `LocalHostName` (e.g. `FOO.PAT.GH`, `BAR.PAT.GH`).

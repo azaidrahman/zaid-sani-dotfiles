@@ -7,7 +7,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 // The key is read from $LITELLM_API_KEY, the per-harness virtual key that the
 // `pi` shell wrapper exports via _litellm_proxy. pi interpolates it at load
 // time, so the key is never stored here.
-{{- if eq .chezmoi.hostname "onyx" }}
+{{- if eq (includeTemplate "hostname" $) "onyx" }}
 const LITELLM_BASE_URL = "http://localhost:4000";
 {{- else }}
 const LITELLM_BASE_URL = "http://onyx:4000";
