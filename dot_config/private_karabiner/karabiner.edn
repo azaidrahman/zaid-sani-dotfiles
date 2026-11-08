@@ -45,7 +45,7 @@
 
 ;; BEGIN HELP-TEXT (auto-generated from config/help-text.yaml)
  :tos {:show-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
-                              :text "w:WA, W:messages, e:obsidian, r:rex, t:ghostty, i:IINA, I:ino, o:todoist(app), p:gchat, \\:switch, s:slack, f:cal, F:alfred, g:iPhone, G:safari, j:jira, k:KM, l:gmail, L:gmail(work), x:mixlet, v:chrome, b:telegram, m:ytm, 0:claude, 1:web(work), 2:web(zaid), 3:web(research), 4:web(youtube), 5:web(study), 9:todoist, `:web(none), ⇧1:win(work), ⇧2:win(zaid), ⇧3:win(research), ⇧4:win(youtube), ⇧5:win(study)"}}
+                              :text "q:web(youtube), Q:win(youtube), w:WA, W:messages, e:obsidian, r:rex, t:ghostty, i:IINA, I:ino, o:todoist(app), p:gchat, \\:switch, s:slack, f:cal, F:alfred, g:iPhone, G:safari, j:jira, k:KM, l:gmail, L:gmail(work), x:mixlet, v:chrome, b:telegram, m:ytm, 0:claude, 1:web(work), 2:web(zaid), 3:web(study), 4:web(research), 9:todoist, `:web(none), ⇧1:win(work), ⇧2:win(zaid), ⇧3:win(study), ⇧4:win(research)"}}
        :clear-app-help {:noti {:id "org.pqrs.notificaion_message_global_shortcut"
                                :text ""}}
        :show-ws-help {:noti {:id "org.pqrs.notificaion_message_workspace"
@@ -123,6 +123,7 @@
 
 ;; BEGIN APP-RULES (auto-generated from config/app.yaml)
     ;; Shifted shortcuts
+    [:!Sq "$HOME/.local/bin/browser space-window YouTube":app-launch]
     [:!Sw [:open "Messages"]              :app-launch]
     [:!Si [:open "Inoreader"]             :app-launch]
     [:!Sf [:open "Alfred Preferences"]    :app-launch]
@@ -130,13 +131,13 @@
     [:!Sl "$HOME/.local/bin/browser tab gmail-work":app-launch]
     [:!S1 "$HOME/.local/bin/browser space-window Work":app-launch]
     [:!S2 "$HOME/.local/bin/browser space-window Zaid":app-launch]
-    [:!S3 "$HOME/.local/bin/browser space-window Research":app-launch]
-    [:!S4 "$HOME/.local/bin/browser space-window YouTube":app-launch]
-    [:!S5 "$HOME/.local/bin/browser space-window Study":app-launch]
+    [:!S3 "$HOME/.local/bin/browser space-window Study":app-launch]
+    [:!S4 "$HOME/.local/bin/browser space-window Research":app-launch]
     ; [:!St :!TOSf13                    :app-launch]  ;; quick terminal (ghostty)
     ; [:!Sv [:open "Arc"]                   :app-launch]
 
     ;; Unshifted shortcuts
+    [:q "$HOME/.local/bin/browser space YouTube":app-launch]
     [:w [:open "Whatsapp"]                :app-launch]
     [:e [:open "Obsidian"]                :app-launch]
     [:r [:open "Rex Beta"]                :app-launch]
@@ -158,9 +159,8 @@
     [:0 [:open "Claude"]                  :app-launch]
     [:1 "$HOME/.local/bin/browser space Work":app-launch]
     [:2 "$HOME/.local/bin/browser space Zaid":app-launch]
-    [:3 "$HOME/.local/bin/browser space Research":app-launch]
-    [:4 "$HOME/.local/bin/browser space YouTube":app-launch]
-    [:5 "$HOME/.local/bin/browser space Study":app-launch]
+    [:3 "$HOME/.local/bin/browser space Study":app-launch]
+    [:4 "$HOME/.local/bin/browser space Research":app-launch]
     [:9 "$HOME/.local/bin/browser open --float https://todoistenhanced.julesbertolino.fr https://todoistenhanced.julesbertolino.fr":app-launch]
     [:grave_accent_and_tilde "$HOME/.local/bin/browser no-space":app-launch]
     ; [:y [:open "Sioyek"]                  :app-launch]

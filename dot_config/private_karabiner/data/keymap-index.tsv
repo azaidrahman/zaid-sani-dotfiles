@@ -13,14 +13,14 @@ app	⌥R	f	cal	Calendar
 app	⌥R	⇧f	alfred	Alfred Preferences
 app	⌥R	g	iPhone	iPhone Mirroring
 app	⌥R	⇧g	safari	Safari
-app	⌥R	3	web(research)	sh:$HOME/.local/bin/browser space Research
-app	⌥R	4	web(youtube)	sh:$HOME/.local/bin/browser space YouTube
+app	⌥R	3	web(study)	sh:$HOME/.local/bin/browser space Study
+app	⌥R	4	web(research)	sh:$HOME/.local/bin/browser space Research
+app	⌥R	q	web(youtube)	sh:$HOME/.local/bin/browser space YouTube
 app	⌥R	⇧1	win(work)	sh:$HOME/.local/bin/browser space-window Work
 app	⌥R	⇧2	win(zaid)	sh:$HOME/.local/bin/browser space-window Zaid
-app	⌥R	⇧3	win(research)	sh:$HOME/.local/bin/browser space-window Research
-app	⌥R	⇧4	win(youtube)	sh:$HOME/.local/bin/browser space-window YouTube
-app	⌥R	5	web(study)	sh:$HOME/.local/bin/browser space Study
-app	⌥R	⇧5	win(study)	sh:$HOME/.local/bin/browser space-window Study
+app	⌥R	⇧3	win(study)	sh:$HOME/.local/bin/browser space-window Study
+app	⌥R	⇧4	win(research)	sh:$HOME/.local/bin/browser space-window Research
+app	⌥R	⇧q	win(youtube)	sh:$HOME/.local/bin/browser space-window YouTube
 app	⌥R	`	web(none)	sh:$HOME/.local/bin/browser no-space
 app	⌥R	k	KM	Keyboard Maestro
 app	⌥R	l	gmail	sh:$HOME/.local/bin/browser tab gmail
