@@ -9,6 +9,13 @@
 #               display on again for any other number. It decides again after
 #               the Mac wakes, because the monitors can change during sleep.
 #
+#               The app ~/Applications/displayctl.app shows a laptop icon in
+#               the menu bar. A slash on the icon means the display is off. A
+#               dim icon means the agent does not run. The menu can turn the
+#               display on or off, and stop, start, or restart the agent. System
+#               Settings > General > Login Items lists the app under "Open at
+#               Login", and the agent under "Allow in the Background".
+#
 #               This function passes the display commands to the tool. It adds
 #               the commands for the launch agent.
 #

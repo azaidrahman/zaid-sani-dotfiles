@@ -11,6 +11,9 @@
   </array>
   <!-- The agent must run in the GUI session, because it needs a connection to
        the window server. A bootstrap into gui/<uid> gives that session. -->
+  <!-- System Settings lists this agent under "Allow in the Background" with the
+       name and the icon of displayctl.app. The switch there turns it off. -->
+  <key>AssociatedBundleIdentifiers</key><string>com.zaid.displayctl</string>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <!-- The agent turns the built-in display back on before it stops. That change

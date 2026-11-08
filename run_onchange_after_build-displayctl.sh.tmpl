@@ -19,3 +19,58 @@ OUT="$HOME/.config/displayctl/bin"
 mkdir -p "$OUT"
 echo "build-displayctl: compiling displayctl"
 swiftc -O "$SRC/displayctl.swift" -o "$OUT/displayctl"
+
+# The menu bar item is an app, so System Settings can list it as a login item.
+# The app holds a copy of the same binary. It starts in the `menu` mode because
+# it has no arguments.
+APP="$HOME/Applications/displayctl.app"
+EXE="$APP/Contents/MacOS/displayctl"
+
+first_install=true
+[[ -d $APP ]] && first_install=false
+
+# Stop the old copy before the bundle changes. Open it again after the change.
+# The menu holds no state, so a SIGTERM is safe. A quit through osascript can
+# stop for a permission prompt, and the apply then waits.
+was_running=false
+if pgrep -f "^$EXE" >/dev/null; then
+  was_running=true
+  pkill -f "^$EXE" || true
+  for _ in $(seq 1 50); do
+    pgrep -f "^$EXE" >/dev/null || break
+    sleep 0.1
+  done
+fi
+
+echo "build-displayctl: assembling $APP"
+rm -rf "$APP.new"
+mkdir -p "$APP.new/Contents/MacOS"
+cp "$OUT/displayctl" "$APP.new/Contents/MacOS/displayctl"
+cat >"$APP.new/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>com.zaid.displayctl</string>
+  <key>CFBundleName</key><string>displayctl</string>
+  <key>CFBundleExecutable</key><string>displayctl</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSUIElement</key><true/>
+</dict>
+</plist>
+PLIST
+# An ad-hoc signature seals the Info.plist. The login item needs a valid
+# signature.
+codesign --force --sign - "$APP.new"
+mkdir -p "$HOME/Applications"
+rm -rf "$APP"
+mv "$APP.new" "$APP"
+
+# The first start adds the app to the login items. After that, only open the
+# app when it ran before, so that a quit in the menu holds.
+if $first_install || $was_running; then
+  open -g "$APP"
+fi

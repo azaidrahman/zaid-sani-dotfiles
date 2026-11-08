@@ -8,6 +8,13 @@
 // for any other number. The agent decides after a change of the monitors, and
 // again after the Mac wakes.
 //
+// The `menu` command shows an item in the menu bar. The item shows the state of
+// the display and of the agent. It can turn the display on or off, and it can
+// stop, start, or restart the agent. The build script also puts this binary in
+// ~/Applications/displayctl.app. That app starts in the `menu` mode, and it is
+// a login item that System Settings shows and can remove. The menu is separate
+// from the agent, so it stays in the menu bar while the agent is stopped.
+//
 // macOS gives no public function to disable a display. This tool uses three
 // private functions from the SkyLight framework. It finds them at run time. If
 // a future version of macOS removes them, the tool reports the problem and
@@ -17,6 +24,7 @@ import AppKit
 import CoreGraphics
 import Darwin
 import Foundation
+import ServiceManagement
 
 // MARK: - Private SkyLight interface
 
@@ -64,8 +72,11 @@ private let iso: ISO8601DateFormatter = {
     return f
 }()
 
+// Both agents write to the same log. The name tells which agent wrote a line.
+private var logName = "displayctl"
+
 private func log(_ message: String) {
-    FileHandle.standardError.write("\(iso.string(from: Date())) displayctl: \(message)\n".data(using: .utf8)!)
+    FileHandle.standardError.write("\(iso.string(from: Date())) \(logName): \(message)\n".data(using: .utf8)!)
 }
 
 // MARK: - Display queries
@@ -374,6 +385,330 @@ private func watch(dryRun: Bool) -> Never {
     exit(0)
 }
 
+// MARK: - Control of the watch agent
+//
+// The menu controls the watch agent with the same launchctl commands as the
+// `,displayctl` shell function.
+
+private let agentLabel = "com.zaid.displayctl"
+private let agentPlist = NSHomeDirectory() + "/Library/LaunchAgents/\(agentLabel).plist"
+private let logPath = NSHomeDirectory() + "/Library/Logs/displayctl.log"
+private let agentTarget = "gui/\(getuid())/\(agentLabel)"
+
+enum AgentState: Equatable {
+    case running(pid: Int32)
+    case loaded(lastExit: String) // launchd holds the job, but no process runs
+    case stopped                  // launchd does not hold the job
+}
+
+// Read the output of `launchctl print`, or nil when launchctl does not know the
+// job. Only the top-level keys count. The nested sections of the output have
+// their own "state" lines, with a deeper indent.
+func parseAgentState(_ output: String?) -> AgentState {
+    guard let output else { return .stopped }
+    var state = ""
+    var pid: Int32? = nil
+    var lastExit = "unknown"
+    for line in output.split(separator: "\n") {
+        guard line.hasPrefix("\t"), !line.hasPrefix("\t\t") else { continue }
+        let parts = line.split(separator: "=", maxSplits: 1)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard parts.count == 2 else { continue }
+        switch parts[0] {
+        case "state": state = parts[1]
+        case "pid": pid = Int32(parts[1])
+        case "last exit code": lastExit = parts[1]
+        default: break
+        }
+    }
+    if state == "running", let pid { return .running(pid: pid) }
+    return .loaded(lastExit: lastExit)
+}
+
+@discardableResult
+private func launchctl(_ arguments: [String]) -> (status: Int32, output: String) {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+    process.arguments = arguments
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = pipe
+    do { try process.run() } catch { return (-1, "\(error)") }
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+}
+
+private func readAgentState() -> AgentState {
+    let result = launchctl(["print", agentTarget])
+    return parseAgentState(result.status == 0 ? result.output : nil)
+}
+
+private func agentIsLoaded() -> Bool {
+    launchctl(["print", agentTarget]).status == 0
+}
+
+// A bootout returns before the agent stops. The agent turns the display back on
+// first, and the plist gives it 20 seconds for that. Wait for 25 seconds at most.
+private func stopAgent() -> Bool {
+    guard agentIsLoaded() else { return true }
+    launchctl(["bootout", agentTarget])
+    for _ in 0..<250 {
+        if !agentIsLoaded() { return true }
+        usleep(100_000)
+    }
+    log("the agent did not stop in 25 seconds")
+    return false
+}
+
+private func startAgent() -> Bool {
+    guard !agentIsLoaded() else { return true }
+    let result = launchctl(["bootstrap", "gui/\(getuid())", agentPlist])
+    if result.status != 0 {
+        log("could not start the agent: \(result.output.trimmingCharacters(in: .whitespacesAndNewlines))")
+        return false
+    }
+    return true
+}
+
+// MARK: - Menu bar item
+
+private final class MenuController: NSObject, NSMenuDelegate {
+    private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    private let menu = NSMenu()
+    private var agent: AgentState = .stopped
+    // The agent action that runs now, for example "Restarting". Nil when no
+    // action runs. The menu blocks the other agent actions until it is done.
+    private var busy: String? = nil
+    private var timer: Timer?
+
+    override init() {
+        super.init()
+        menu.delegate = self
+        menu.autoenablesItems = false
+        item.menu = menu
+        refresh()
+        // A crash or a launchctl command in a shell changes the agent and
+        // raises no event here. Look again at a fixed interval.
+        timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            self?.refresh()
+        }
+    }
+
+    func refresh() {
+        agent = readAgentState()
+        updateIcon()
+    }
+
+    // The icon shows the built-in display. It is dim when the agent does not run.
+    func updateIcon() {
+        guard let button = item.button else { return }
+        let displayOn = liveBuiltinID() != nil
+        let name = displayOn ? "laptopcomputer" : "laptopcomputer.slash"
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: "displayctl")
+            ?? NSImage(systemSymbolName: "display", accessibilityDescription: "displayctl")
+        image?.isTemplate = true
+        button.image = image
+        button.appearsDisabled = busy != nil || !agentIsRunning
+        button.toolTip = "Built-in display: \(displayLine)\nAgent: \(agentLine)"
+    }
+
+    private var agentIsRunning: Bool {
+        if case .running = agent { return true }
+        return false
+    }
+
+    private var displayLine: String {
+        switch builtinState() {
+        case .on: return "on"
+        case .offByTool: return "off"
+        case .unknown: return "not in the display list"
+        }
+    }
+
+    private var agentLine: String {
+        if let busy { return "\(busy)…" }
+        switch agent {
+        case .running(let pid): return "running (pid \(pid))"
+        case .loaded(let lastExit): return "not running (last exit \(lastExit))"
+        case .stopped: return "stopped"
+        }
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        refresh()
+        menu.removeAllItems()
+
+        menu.addItem(info("Built-in display: \(displayLine)"))
+        menu.addItem(info("External displays: \(externalCount())"))
+        menu.addItem(info("Agent: \(agentLine)"))
+        menu.addItem(.separator())
+
+        let displayOn = builtinState() == .on
+        let toggle = action(displayOn ? "Turn Built-in Display Off" : "Turn Built-in Display On",
+                            #selector(toggleDisplay))
+        // The tool never turns off the last display.
+        toggle.isEnabled = !displayOn || onlineDisplays().count >= 2
+        if agentIsRunning {
+            toggle.toolTip = "The agent decides again when a monitor comes or goes, or after the Mac wakes."
+        }
+        menu.addItem(toggle)
+        menu.addItem(.separator())
+
+        let restart = action("Restart Agent", #selector(restartAgent))
+        restart.isEnabled = busy == nil && agent != .stopped
+        menu.addItem(restart)
+        let startStop = agent == .stopped
+            ? action("Start Agent", #selector(startAgentAction))
+            : action("Stop Agent", #selector(stopAgentAction))
+        startStop.isEnabled = busy == nil
+        if agent != .stopped {
+            startStop.toolTip = "The built-in display goes back on. The agent stays stopped until you start it or log in again."
+        }
+        menu.addItem(startStop)
+        menu.addItem(.separator())
+
+        let login = action("Open at Login", #selector(toggleLoginItem))
+        login.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        // Only the app has an identity that System Settings can list.
+        login.isEnabled = runsAsApp
+        menu.addItem(login)
+        menu.addItem(action("Login Items Settings…", #selector(openLoginItems)))
+        menu.addItem(.separator())
+
+        menu.addItem(action("Open Log", #selector(openLog)))
+        menu.addItem(action("Quit displayctl Menu", #selector(quit)))
+    }
+
+    @objc private func toggleLoginItem() {
+        let service = SMAppService.mainApp
+        do {
+            if service.status == .enabled {
+                try service.unregister()
+                log("removed the menu from the login items")
+            } else {
+                try service.register()
+                log("added the menu to the login items")
+            }
+        } catch {
+            log("could not change the login item: \(error.localizedDescription)")
+            SMAppService.openSystemSettingsLoginItems()
+        }
+    }
+
+    @objc private func openLoginItems() {
+        SMAppService.openSystemSettingsLoginItems()
+    }
+
+    private func info(_ title: String) -> NSMenuItem {
+        let entry = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        entry.isEnabled = false
+        return entry
+    }
+
+    private func action(_ title: String, _ selector: Selector) -> NSMenuItem {
+        let entry = NSMenuItem(title: title, action: selector, keyEquivalent: "")
+        entry.target = self
+        return entry
+    }
+
+    // Run the tool as a child process. The child writes to the same log, and
+    // the wait for the display does not block the menu.
+    @objc private func toggleDisplay() {
+        guard let path = Bundle.main.executablePath else { return }
+        log("toggle the built-in display from the menu")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = ["toggle"]
+        process.terminationHandler = { [weak self] _ in
+            DispatchQueue.main.async { self?.refresh() }
+        }
+        try? process.run()
+    }
+
+    @objc private func restartAgent() {
+        runAgentAction("Restarting") { stopAgent() && startAgent() }
+    }
+
+    @objc private func startAgentAction() {
+        runAgentAction("Starting") { startAgent() }
+    }
+
+    @objc private func stopAgentAction() {
+        runAgentAction("Stopping") { stopAgent() }
+    }
+
+    // A stop can take 20 seconds, so the work runs off the main thread.
+    private func runAgentAction(_ name: String, _ work: @escaping () -> Bool) {
+        guard busy == nil else { return }
+        busy = name
+        updateIcon()
+        log("\(name.lowercased()) the agent from the menu")
+        DispatchQueue.global(qos: .userInitiated).async {
+            let ok = work()
+            DispatchQueue.main.async {
+                self.busy = nil
+                if !ok { log("\(name.lowercased()) the agent failed") }
+                self.refresh()
+            }
+        }
+    }
+
+    @objc private func openLog() {
+        NSWorkspace.shared.open(URL(fileURLWithPath: logPath))
+    }
+
+    // A quit holds until the next login, or until you open the app again.
+    @objc private func quit() {
+        NSApp.terminate(nil)
+    }
+}
+
+private var menuController: MenuController?
+
+private let menuReconfigCallback: CGDisplayReconfigurationCallBack = { _, flags, _ in
+    if flags.contains(.beginConfigurationFlag) { return }
+    // The window server finishes the change a moment after the event.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { menuController?.updateIcon() }
+}
+
+private let runsAsApp = Bundle.main.bundleURL.pathExtension == "app"
+
+// Add the app to the login items one time only, at the first start. After that,
+// the choice in System Settings or in the menu holds. Without this record, each
+// start of the app would undo a removal.
+private func registerLoginItemOnce() {
+    let key = "loginItemRegistered"
+    guard runsAsApp, !UserDefaults.standard.bool(forKey: key) else { return }
+    UserDefaults.standard.set(true, forKey: key)
+    do {
+        try SMAppService.mainApp.register()
+        log("added the menu to the login items")
+    } catch {
+        log("could not add the menu to the login items: \(error.localizedDescription)")
+    }
+}
+
+private func runMenu() -> Never {
+    logName = "displayctl menu"
+    // An app that LaunchServices opens has no stderr. Send it to the log of the
+    // agent, so both write one record. The child that "toggle" starts gets the
+    // same stderr.
+    let fd = open(logPath, O_WRONLY | O_APPEND | O_CREAT, 0o644)
+    if fd >= 0 {
+        dup2(fd, STDERR_FILENO)
+        close(fd)
+    }
+    registerLoginItemOnce()
+    let app = NSApplication.shared
+    // An accessory app has a menu bar item, but no Dock icon.
+    app.setActivationPolicy(.accessory)
+    menuController = MenuController()
+    CGDisplayRegisterReconfigurationCallback(menuReconfigCallback, nil)
+    app.run()
+    exit(0)
+}
+
 // MARK: - Self test
 //
 // These checks run on any Mac and touch no hardware. They cover the decision
@@ -420,6 +755,14 @@ private func selftest() -> Bool {
     woken.forget()
     check("latch after a wake", woken.isUnchanged(externals: 2), false)
 
+    // The menu reads the agent state from `launchctl print`. The nested
+    // sections have their own "state" lines, and they must not count.
+    let running = "gui/501/x = {\n\tstate = running\n\tpid = 42\n\tsockets = {\n\t\tstate = active\n\t}\n}"
+    let waiting = "gui/501/x = {\n\tstate = not running\n\tlast exit code = 78\n\t\tstate = active\n}"
+    check("agent running", parseAgentState(running), AgentState.running(pid: 42))
+    check("agent loaded, not running", parseAgentState(waiting), AgentState.loaded(lastExit: "78"))
+    check("agent not loaded", parseAgentState(nil), AgentState.stopped)
+
     print(failures == 0 ? "all checks passed" : "\(failures) check(s) failed")
     return failures == 0
 }
@@ -445,7 +788,8 @@ private func printList() {
 }
 
 let arguments = Array(CommandLine.arguments.dropFirst())
-let command = arguments.first ?? "list"
+// The app starts with no arguments, and it must show the menu.
+let command = arguments.first ?? (runsAsApp ? "menu" : "list")
 let dryRun = arguments.contains("--dry-run")
 
 switch command {
@@ -459,9 +803,11 @@ case "toggle":
     exit(applyBuiltin(on: builtinState() != .on, dryRun: dryRun) ? 0 : 1)
 case "watch":
     watch(dryRun: dryRun)
+case "menu":
+    runMenu()
 case "selftest":
     exit(selftest() ? 0 : 1)
 default:
-    print("usage: displayctl [list|on|off|toggle|watch|selftest] [--dry-run]")
+    print("usage: displayctl [list|on|off|toggle|watch|menu|selftest] [--dry-run]")
     exit(2)
 }
