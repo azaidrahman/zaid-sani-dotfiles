@@ -101,11 +101,18 @@ private final class Watcher {
     func update(for app: NSRunningApplication?) {
         guard let current = currentProfile() else { return }
         if isGame(app) {
-            guard current != gameProfile, !foreignProfiles.contains(current) else { return }
+            if foreignProfiles.contains(current) {
+                log("game in front, but the profile \(current) holds, so no change")
+                return
+            }
+            guard current != gameProfile else { return }
             log("game in front: \(app?.bundleIdentifier ?? "?")")
             previous = current
             select(gameProfile)
         } else {
+            if current == gameProfile {
+                log("not a game in front: \(app?.bundleIdentifier ?? "?")")
+            }
             restore(current: current)
         }
     }
@@ -121,7 +128,23 @@ private final class Watcher {
 
 private var signalSources: [DispatchSourceSignal] = []
 
+// Keep the last 2000 lines when the log is larger than 1 MB. launchd holds the
+// log open, so cut the file in place. A new file would leave launchd writing
+// to the old one.
+private func trimLog() {
+    guard let size = (try? FileManager.default.attributesOfItem(atPath: logPath))?[.size] as? Int,
+          size > 1_000_000,
+          let text = try? String(contentsOfFile: logPath, encoding: .utf8),
+          let handle = FileHandle(forWritingAtPath: logPath)
+    else { return }
+    let kept = text.split(separator: "\n").suffix(2000).joined(separator: "\n") + "\n"
+    try? handle.truncate(atOffset: 0)
+    handle.write(kept.data(using: .utf8)!)
+    try? handle.close()
+}
+
 private func watch() -> Never {
+    trimLog()
     let watcher = Watcher()
     NSWorkspace.shared.notificationCenter.addObserver(
         forName: NSWorkspace.didActivateApplicationNotification,
@@ -238,8 +261,13 @@ private final class MenuController: NSObject, NSMenuDelegate {
     }
 
     func refresh() {
+        let oldAgent = agent, oldProfile = profile
         agent = readAgentState()
         profile = currentProfile()
+        // Write each change to the log. The log then shows when the agent
+        // stopped, and what the menu showed at that time.
+        if agent != oldAgent { log("agent: \(agentLine)") }
+        if profile != oldProfile { log("keybinds: \(keybindsLine)") }
         updateIcon()
     }
 
@@ -250,15 +278,24 @@ private final class MenuController: NSObject, NSMenuDelegate {
         return false
     }
 
-    // The controller is filled while the keybinds are off. It is dim when the
-    // agent does not run.
+    // True when the agent runs and Karabiner answers.
+    private var healthy: Bool { agentIsRunning && profile != nil }
+
+    // The controller is filled while the keybinds are off. The dot after it is
+    // green while the agent works, and red when it does not.
     private func updateIcon() {
         guard let button = item.button else { return }
         let name = keybindsOff ? "gamecontroller.fill" : "gamecontroller"
         let image = NSImage(systemSymbolName: name, accessibilityDescription: "gamekeys")
         image?.isTemplate = true
         button.image = image
-        button.appearsDisabled = busy != nil || !agentIsRunning
+        button.imagePosition = .imageLeft
+        let dot: NSColor = busy != nil ? .systemYellow : (healthy ? .systemGreen : .systemRed)
+        button.attributedTitle = NSAttributedString(string: "●", attributes: [
+            .foregroundColor: dot,
+            .font: NSFont.systemFont(ofSize: 9),
+            .baselineOffset: 1,
+        ])
         button.toolTip = "Keybinds: \(keybindsLine)\nAgent: \(agentLine)"
     }
 
@@ -276,6 +313,12 @@ private final class MenuController: NSObject, NSMenuDelegate {
         case .stopped: return "stopped"
         }
     }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        log("menu opened (front: \(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "?"))")
+    }
+
+    func menuDidClose(_ menu: NSMenu) { log("menu closed") }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         refresh()
@@ -306,6 +349,7 @@ private final class MenuController: NSObject, NSMenuDelegate {
         menu.addItem(action("Login Items Settings…", #selector(openLoginItems)))
         menu.addItem(.separator())
 
+        menu.addItem(action("Copy Log for Claude", #selector(copyLog)))
         menu.addItem(action("Open Log", #selector(openLog)))
         menu.addItem(action("Quit gamekeys Menu", #selector(quit)))
     }
@@ -368,6 +412,28 @@ private final class MenuController: NSObject, NSMenuDelegate {
                 self.refresh()
             }
         }
+    }
+
+    // Copy a report to the clipboard: the state now, and the end of the log.
+    @objc private func copyLog() {
+        refresh()
+        let front = NSWorkspace.shared.frontmostApplication
+        let lines = ((try? String(contentsOfFile: logPath, encoding: .utf8)) ?? "")
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .suffix(200)
+            .joined(separator: "\n")
+        let report = """
+        gamekeys report \(ISO8601DateFormatter().string(from: Date()))
+        macOS: \(ProcessInfo.processInfo.operatingSystemVersionString)
+        keybinds: \(keybindsLine)
+        agent: \(agentLine)
+        front app: \(front?.bundleIdentifier ?? "?") (game: \(isGame(front)))
+        log (\(logPath), last 200 lines):
+        \(lines)
+        """
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(report, forType: .string)
+        log("copied the report to the clipboard")
     }
 
     @objc private func openLog() {
