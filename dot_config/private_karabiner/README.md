@@ -48,6 +48,22 @@ goku                 # recompile (reads from deployed path)
 
 **Important:** goku reads from `~/.config/karabiner/karabiner.edn`, not the chezmoi source. Always `chezmoi apply` before running `goku` separately.
 
+## Game profile
+
+The `gamekeys` agent turns off the keybinds while a game is in front. It
+selects the "Game" profile, and it selects the "Zaid" profile again when a
+different app comes to the front. An app is a game if macOS puts it in a games
+category, or if it supports Game Mode. World of Warcraft is a game. Its
+launcher and Battle.net are not.
+
+The "Game" profile has no complex rules. It keeps the modifier swaps of each
+keyboard. It does not keep the remaps of the mouse buttons. `run_onchange_goku.sh`
+makes the profile from the device settings of the "Zaid" profile.
+
+The source is `dot_config/gamekeys/`. The log is `~/Library/Logs/gamekeys.log`.
+If the keybinds stay off, run
+`launchctl kickstart -k gui/$(id -u)/com.zaid.gamekeys`.
+
 ## Layers
 
 ### App Launcher (Right Option)

@@ -59,6 +59,30 @@ for p in k.get("profiles", []):
         p["devices"] = list(merged.values())
         break
 
+# The "Game" profile has no complex rules. The gamekeys agent selects it while
+# a game is in front. It keeps the modifier swaps of each keyboard, so the
+# physical keys stay the same. It removes the remaps of the mouse buttons, so
+# that the game can bind them.
+game_devices = []
+for d in merged.values():
+    d = json.loads(json.dumps(d))
+    d["simple_modifications"] = [
+        m for m in d.get("simple_modifications", [])
+        if "pointing_button" not in m.get("from", {})
+    ]
+    game_devices.append(d)
+
+main = next((p for p in k["profiles"] if p.get("name") == "Zaid"), {})
+old_game = next((p for p in k["profiles"] if p.get("name") == "Game"), {})
+game = {
+    "name": "Game",
+    "selected": old_game.get("selected", False),
+    "complex_modifications": {"rules": []},
+    "devices": game_devices,
+    "virtual_hid_keyboard": main.get("virtual_hid_keyboard", {"keyboard_type_v2": "ansi"}),
+}
+k["profiles"] = [p for p in k["profiles"] if p.get("name") != "Game"] + [game]
+
 with open(karabiner_path, "w") as f:
     json.dump(k, f, indent=2)
     f.write("\n")
