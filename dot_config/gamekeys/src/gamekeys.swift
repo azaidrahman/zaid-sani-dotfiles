@@ -281,8 +281,10 @@ private final class MenuController: NSObject, NSMenuDelegate {
     // True when the agent runs and Karabiner answers.
     private var healthy: Bool { agentIsRunning && profile != nil }
 
-    // The controller is filled while the keybinds are off. The dot after it is
-    // green while the agent works, and red when it does not.
+    // The dot after the controller shows game mode. It is green while a game is
+    // in front and the keybinds are off. It is red while the keybinds are on.
+    // It is gray when the agent does not run or Karabiner does not answer, and
+    // yellow while a menu action runs. The controller is filled in game mode.
     private func updateIcon() {
         guard let button = item.button else { return }
         let name = keybindsOff ? "gamecontroller.fill" : "gamecontroller"
@@ -290,7 +292,14 @@ private final class MenuController: NSObject, NSMenuDelegate {
         image?.isTemplate = true
         button.image = image
         button.imagePosition = .imageLeft
-        let dot: NSColor = busy != nil ? .systemYellow : (healthy ? .systemGreen : .systemRed)
+        let dot: NSColor
+        if busy != nil {
+            dot = .systemYellow
+        } else if !healthy {
+            dot = .systemGray
+        } else {
+            dot = keybindsOff ? .systemGreen : .systemRed
+        }
         button.attributedTitle = NSAttributedString(string: "●", attributes: [
             .foregroundColor: dot,
             .font: NSFont.systemFont(ofSize: 9),

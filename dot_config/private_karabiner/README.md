@@ -61,8 +61,15 @@ keyboard. It does not keep the remaps of the mouse buttons. `run_onchange_goku.s
 makes the profile from the device settings of the "Zaid" profile.
 
 A game controller in the menu bar comes from `~/Applications/gamekeys.app`.
-The controller is filled while the keybinds are off, and it is dim when the
-agent does not run. Its menu can stop, start, or restart the agent.
+The dot after the controller shows game mode:
+
+- Green: a game is in front, and the keybinds are off.
+- Red: the keybinds are on.
+- Gray: the agent does not run, or Karabiner does not answer.
+- Yellow: a menu action runs.
+
+The menu can stop, start, or restart the agent. "Copy Log for Claude" copies
+the state and the end of the log.
 
 The source is `dot_config/gamekeys/`. The log is `~/Library/Logs/gamekeys.log`.
 If the keybinds stay off, use "Restart Agent" in the menu.
