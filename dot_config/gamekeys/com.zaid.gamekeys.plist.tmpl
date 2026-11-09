@@ -7,9 +7,13 @@
   <key>ProgramArguments</key>
   <array>
     <string>{{ .chezmoi.homeDir }}/.config/gamekeys/bin/gamekeys</string>
+    <string>watch</string>
   </array>
   <!-- The agent must run in the GUI session, because it watches the frontmost
        app. A bootstrap into gui/<uid> gives that session. -->
+  <!-- System Settings lists this agent under "Allow in the Background" with the
+       name and the icon of gamekeys.app. The switch there turns it off. -->
+  <key>AssociatedBundleIdentifiers</key><string>com.zaid.gamekeys</string>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>StandardErrorPath</key>

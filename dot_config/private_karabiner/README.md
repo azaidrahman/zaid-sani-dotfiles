@@ -60,9 +60,12 @@ The "Game" profile has no complex rules. It keeps the modifier swaps of each
 keyboard. It does not keep the remaps of the mouse buttons. `run_onchange_goku.sh`
 makes the profile from the device settings of the "Zaid" profile.
 
+A game controller in the menu bar comes from `~/Applications/gamekeys.app`.
+The controller is filled while the keybinds are off, and it is dim when the
+agent does not run. Its menu can stop, start, or restart the agent.
+
 The source is `dot_config/gamekeys/`. The log is `~/Library/Logs/gamekeys.log`.
-If the keybinds stay off, run
-`launchctl kickstart -k gui/$(id -u)/com.zaid.gamekeys`.
+If the keybinds stay off, use "Restart Agent" in the menu.
 
 ## Layers
 
