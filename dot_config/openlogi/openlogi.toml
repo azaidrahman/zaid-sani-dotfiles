@@ -118,13 +118,11 @@ onboard_profiles = false
 button_spy = false
 sidetone = false
 
-[devices."unit:7aa40479".per_app_bindings."com.blizzard.worldofwarcraft".Back ]
-CustomShortcut = "F6"
-
+# WoW: Back and Forward are plain mouse buttons 4 and 5, so WoW binds them as
+# BUTTON4 and BUTTON5. The gesture button has no native button, so it sends F8.
 [devices."unit:7aa40479".per_app_bindings."com.blizzard.worldofwarcraft"]
-
-[devices."unit:7aa40479".per_app_bindings."com.blizzard.worldofwarcraft".Forward ]
-CustomShortcut = "F7"
+Back = "MouseBack"
+Forward = "MouseForward"
 
 [devices."unit:7aa40479".per_app_bindings."com.blizzard.worldofwarcraft".GestureButton ]
 CustomShortcut = "F8"
