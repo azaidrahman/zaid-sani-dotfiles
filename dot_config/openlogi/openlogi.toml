@@ -82,15 +82,18 @@ onboard_profiles = false
 button_spy = false
 sidetone = false
 
-[devices."unit:7aa40479".disabled_gestures.GestureButton]
+[devices."unit:7aa40479".bindings.GestureButton ]
 Up = "MissionControl"
 Down = "ShowDesktop"
 Left = "PrevTab"
 Right = "NextTab"
 Click = "LaunchpadShow"
 
+# "Zaid": the default profile. It has the same mouse buttons as the "Zaid"
+# profile of Karabiner had. Per-app profiles, such as WoW, replace it.
 [devices."unit:7aa40479".bindings]
-GestureButton = "None"
+Back = "MissionControl"
+Forward = "LeftClick"
 
 [devices."unit:7aa40479".links."direct:046d:b023".capabilities]
 buttons = true
