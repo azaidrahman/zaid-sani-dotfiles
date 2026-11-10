@@ -58,7 +58,7 @@ GOKU_EDN_CONFIG_FILE="$HOME/.config/karabiner/karabiner.edn" goku   # recompile 
 grep '<AppOrKey>' ~/.config/karabiner/karabiner.json               # VERIFY it compiled
 ```
 
-**Karabiner loads `karabiner.json`, which only `goku` produces — the binding isn't live until goku runs.** Don't trust the `run_onchange_goku` hook to do it: it's hash-gated and can be skipped or run against a stale edn, leaving a correct-looking `karabiner.edn` but an un-recompiled `.json`. Always run `goku` explicitly and verify the `.json`.
+**Karabiner loads `karabiner.json`, which only `goku` produces — the binding isn't live until goku runs.** Don't trust the `run_onchange_after_goku` hook to do it: it's hash-gated and can be skipped (before 2026-11-10 it was `run_onchange_goku`, which ran *before* chezmoi wrote the new edn and compiled the stale one), leaving a correct-looking `karabiner.edn` but an un-recompiled `.json`. Always run `goku` explicitly and verify the `.json`.
 
 **Scope the apply to `~/.config/karabiner`.** A bare `chezmoi apply` — and the `add-keymap` CLI's `-deploy` — runs a *global* apply that can trigger unrelated `run_onchange` scripts (e.g. `brew-bundle`) which prompt on a TTY and **fail in a non-interactive/agent session**, aborting before goku. If you do use `-deploy` and it errors on another script, finish with the explicit `goku` line above and verify.
 

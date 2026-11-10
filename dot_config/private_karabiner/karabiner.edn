@@ -23,7 +23,7 @@
 ;; ## | optional any
 
 ;; The "WoW" profile holds only the rules that have the :WoW tag. The gamekeys
-;; agent selects it while World of Warcraft is in front. run_onchange_goku.sh
+;; agent selects it while World of Warcraft is in front. run_onchange_after_goku.sh
 ;; makes the profile before goku runs, and it copies the device settings.
 {:profiles {:Zaid {:default true}
             :WoW  {}}

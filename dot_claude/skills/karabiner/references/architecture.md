@@ -23,7 +23,7 @@
 
 ## Deploy / compile
 
-`chezmoi apply` copies the source into `~/.config/karabiner/` and the `run_onchange_goku.sh` hook fires **when the deployed `karabiner.edn` hash changes** — it runs `goku` (with `GOKU_EDN_CONFIG_FILE=$HOME/.config/karabiner/karabiner.edn`) and merges saved device settings back into the profile. So the normal chain is just:
+`chezmoi apply` copies the source into `~/.config/karabiner/` and the `run_onchange_after_goku.sh` hook fires **when the deployed `karabiner.edn` hash changes** — it runs `goku` (with `GOKU_EDN_CONFIG_FILE=$HOME/.config/karabiner/karabiner.edn`) and merges saved device settings back into the profile. So the normal chain is just:
 
 ```bash
 ./build.sh && chezmoi apply

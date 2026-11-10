@@ -57,14 +57,14 @@ category, or if it supports Game Mode. World of Warcraft is a game. Its
 launcher and Battle.net are not.
 
 The "Game" profile has no complex rules. It keeps the modifier swaps of each
-keyboard. It does not keep the remaps of the mouse buttons. `run_onchange_goku.sh`
+keyboard. It does not keep the remaps of the mouse buttons. `run_onchange_after_goku.sh`
 makes the profile from the device settings of the "Zaid" profile.
 
 ### WoW profile
 
 World of Warcraft gets its own "WoW" profile. The profile has the same device
 settings as the "Game" profile. It has only the rules with the `:WoW` tag in
-`karabiner.base.edn`. Before goku runs, `run_onchange_goku.sh` adds the
+`karabiner.base.edn`. Before goku runs, `run_onchange_after_goku.sh` adds the
 profile to `karabiner.json` if it is not there. goku stops if a profile is
 missing.
 
