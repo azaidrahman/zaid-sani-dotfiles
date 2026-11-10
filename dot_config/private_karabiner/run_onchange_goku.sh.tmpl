@@ -18,6 +18,25 @@ if [ ! -f "$KARABINER_JSON" ]; then
 EOF
 fi
 
+# goku stops if a profile in karabiner.edn is not in karabiner.json. Add each
+# missing profile with no rules. goku then writes the rules, and the step
+# after goku adds the device settings.
+python3 - "$KARABINER_JSON" WoW <<'PYEOF'
+import json, sys
+
+path, names = sys.argv[1], sys.argv[2:]
+with open(path) as f:
+    k = json.load(f)
+have = {p.get("name") for p in k.get("profiles", [])}
+missing = [n for n in names if n not in have]
+if missing:
+    for n in missing:
+        k["profiles"].append({"name": n, "complex_modifications": {"rules": []}})
+    with open(path, "w") as f:
+        json.dump(k, f, indent=2)
+        f.write("\n")
+PYEOF
+
 GOKU_EDN_CONFIG_FILE="$HOME/.config/karabiner/karabiner.edn" goku
 
 # Merge saved device settings back (goku doesn't touch devices, but on a
@@ -82,6 +101,14 @@ game = {
     "virtual_hid_keyboard": main.get("virtual_hid_keyboard", {"keyboard_type_v2": "ansi"}),
 }
 k["profiles"] = [p for p in k["profiles"] if p.get("name") != "Game"] + [game]
+
+# The "WoW" profile gets its rules from goku (the :WoW rules in karabiner.edn).
+# It gets the same devices as the "Game" profile: the same modifier swaps, and
+# no remaps of the mouse buttons.
+for p in k["profiles"]:
+    if p.get("name") == "WoW":
+        p["devices"] = json.loads(json.dumps(game_devices))
+        p["virtual_hid_keyboard"] = game["virtual_hid_keyboard"]
 
 with open(karabiner_path, "w") as f:
     json.dump(k, f, indent=2)

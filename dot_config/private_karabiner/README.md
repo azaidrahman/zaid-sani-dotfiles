@@ -60,6 +60,31 @@ The "Game" profile has no complex rules. It keeps the modifier swaps of each
 keyboard. It does not keep the remaps of the mouse buttons. `run_onchange_goku.sh`
 makes the profile from the device settings of the "Zaid" profile.
 
+### WoW profile
+
+World of Warcraft gets its own "WoW" profile. The profile has the same device
+settings as the "Game" profile. It has only the rules with the `:WoW` tag in
+`karabiner.base.edn`. Before goku runs, `run_onchange_goku.sh` adds the
+profile to `karabiner.json` if it is not there. goku stops if a profile is
+missing.
+
+WoW binds only Shift, Ctrl, and Alt. The left pinky holds Shift, Caps Lock,
+or Tab. The thumb holds the key next to the space bar, which sends Alt. One
+pinky key and the thumb give all 8 sets of binds:
+
+| Pinky key | Sends | Tap | Alone | With the thumb (Alt) |
+|---|---|---|---|---|
+| None | — | — | `1` | `ALT-1` |
+| Shift | Shift | — | `SHIFT-1` | `ALT-SHIFT-1` |
+| Caps Lock | Ctrl | `NUMPADDIVIDE` | `CTRL-1` | `ALT-CTRL-1` |
+| Tab | Ctrl+Shift | `TAB` | `CTRL-SHIFT-1` | `ALT-CTRL-SHIFT-1` |
+
+A tap sends its key when you release the key. The bottom-left keys keep their
+device swaps, so Command+Tab still works in the game.
+
+OpenLogi, not Karabiner, controls the MX Master 3. In WoW, its thumb buttons
+send F6, F7, and F8. See `dot_config/openlogi/`.
+
 A game controller in the menu bar comes from `~/Applications/gamekeys.app`.
 The dot after the controller shows game mode:
 

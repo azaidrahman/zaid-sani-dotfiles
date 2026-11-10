@@ -19,8 +19,12 @@
 // ~/Applications/gamekeys.app. That app starts in the `menu` mode, and it is a
 // login item that System Settings shows and can remove.
 //
-// The goku script in chezmoi makes the "Game" profile, from the device
-// settings of the main profile.
+// Some games get their own profile. While World of Warcraft is in front, the
+// agent selects the "WoW" profile. That profile has only the WoW rules of
+// karabiner.edn. See `gameProfilesByBundle`.
+//
+// The goku script in chezmoi makes the "Game" and "WoW" profiles, from the
+// device settings of the main profile.
 
 import AppKit
 import Darwin
@@ -30,6 +34,13 @@ import ServiceManagement
 private let cli = "/Library/Application Support/org.pqrs/Karabiner-Elements/bin/karabiner_cli"
 private let gameProfile = "Game"
 private let mainProfile = "Zaid"
+// Some games get their own profile, with rules for that game. The key is a
+// prefix of the bundle ID, so it also matches the Classic and PTR clients.
+private let gameProfilesByBundle: [(prefix: String, profile: String)] = [
+    ("com.blizzard.worldofwarcraft", "WoW"),
+]
+// Each profile that the agent selects for a game.
+private let gameProfiles: Set<String> = Set([gameProfile] + gameProfilesByBundle.map(\.profile))
 // The agent never replaces these profiles with the "Game" profile.
 private let foreignProfiles: Set<String> = ["Guest"]
 
@@ -92,35 +103,44 @@ private func isGame(_ app: NSRunningApplication?) -> Bool {
     return info["LSSupportsGameMode"] as? Bool == true
 }
 
+// The profile for the app, or nil if the app is not a game.
+private func profile(for app: NSRunningApplication?) -> String? {
+    guard isGame(app) else { return nil }
+    let id = app?.bundleIdentifier ?? ""
+    return gameProfilesByBundle.first { id.hasPrefix($0.prefix) }?.profile ?? gameProfile
+}
+
 // MARK: - Agent
 
 private final class Watcher {
-    // The profile that was active before the agent selected "Game".
+    // The profile that was active before the agent selected a game profile.
     private var previous: String?
 
     func update(for app: NSRunningApplication?) {
         guard let current = currentProfile() else { return }
-        if isGame(app) {
+        if let target = profile(for: app) {
             if foreignProfiles.contains(current) {
                 log("game in front, but the profile \(current) holds, so no change")
                 return
             }
-            guard current != gameProfile else { return }
+            guard current != target else { return }
             log("game in front: \(app?.bundleIdentifier ?? "?")")
-            previous = current
-            select(gameProfile)
+            // From one game to a different game, keep the profile from before
+            // the first game.
+            if !gameProfiles.contains(current) { previous = current }
+            select(target)
         } else {
-            if current == gameProfile {
+            if gameProfiles.contains(current) {
                 log("not a game in front: \(app?.bundleIdentifier ?? "?")")
             }
             restore(current: current)
         }
     }
 
-    // Select the earlier profile again, but only if "Game" is still active.
-    // After a crash, `previous` is empty, so use the main profile.
+    // Select the earlier profile again, but only if a game profile is still
+    // active. After a crash, `previous` is empty, so use the main profile.
     func restore(current: String? = currentProfile()) {
-        guard current == gameProfile else { return }
+        guard let current, gameProfiles.contains(current) else { return }
         select(previous ?? mainProfile)
         previous = nil
     }
@@ -271,7 +291,9 @@ private final class MenuController: NSObject, NSMenuDelegate {
         updateIcon()
     }
 
-    private var keybindsOff: Bool { profile == gameProfile }
+    // True in each game profile. The "WoW" profile has a few rules for the
+    // game, but the normal keybinds are off there too.
+    private var keybindsOff: Bool { profile.map(gameProfiles.contains) ?? false }
 
     private var agentIsRunning: Bool {
         if case .running = agent { return true }
@@ -310,7 +332,7 @@ private final class MenuController: NSObject, NSMenuDelegate {
 
     private var keybindsLine: String {
         guard let profile else { return "unknown (Karabiner does not answer)" }
-        if keybindsOff { return "off (a game is in front)" }
+        if keybindsOff { return "off (a game is in front, profile \(profile))" }
         return "on (profile \(profile))"
     }
 
