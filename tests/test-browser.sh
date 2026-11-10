@@ -86,8 +86,9 @@ fi
 echo "osascript $*" >> "$STUB_LOG"
 EOF
 # aerospace: the window ids are in $STUB_DIR/windows, the titles in
-# $STUB_TITLES, and the focused window in $STUB_FOCUSED. Other calls go to
-# the log.
+# $STUB_TITLES, and the focused window in $STUB_FOCUSED. Each line of
+# $STUB_TITLES is "<id>|<workspace is focused>|<workspace is visible>|<title>".
+# Other calls go to the log.
 cat > "$TMP/bin/aerospace" <<'EOF'
 #!/bin/sh
 case "$1" in
@@ -175,29 +176,44 @@ BROWSER_DRIVER=arc run "open --float: Arc opens the URL in a floating window" 0 
 # window. STUB_FOCUSED is the window that has the focus after the key.
 # STUB_VIV gives the Vivaldi windows from front to back, one line for each
 # window: the mode, a tab, and the title of the active tab.
-BROWSER_DRIVER=vivaldi STUB_FOCUSED=10 STUB_TITLES='10|Mail - Vivaldi' STUB_EMPTY=no \
+BROWSER_DRIVER=vivaldi STUB_FOCUSED=10 STUB_TITLES='10|false|false|Mail - Vivaldi' STUB_EMPTY=no \
   run "own window: keep the new window when it has tabs" 0 "key 20" close - space-window Zaid
-BROWSER_DRIVER=vivaldi STUB_FOCUSED=10 STUB_TITLES='10|Mail - Vivaldi' STUB_EMPTY=yes \
+BROWSER_DRIVER=vivaldi STUB_FOCUSED=10 STUB_TITLES='10|false|false|Mail - Vivaldi' STUB_EMPTY=yes \
   run "own window: close the new window when Vivaldi focused a different window" 0 \
   "key 20;;close 777" - - space-window Zaid
-BROWSER_DRIVER=vivaldi STUB_FOCUSED=20 STUB_TITLES='10|Mail - Vivaldi' STUB_EMPTY=yes \
+BROWSER_DRIVER=vivaldi STUB_FOCUSED=20 STUB_TITLES='10|false|false|Mail - Vivaldi' STUB_EMPTY=yes \
   run "own window: keep the new window when it shows an empty workspace" 0 "key 20" close - \
   space-window Zaid
-BROWSER_DRIVER=vivaldi STUB_TITLES='10|Mail - Vivaldi' STUB_VIV=$'normal\tMail' \
+BROWSER_DRIVER=vivaldi STUB_TITLES='10|false|false|Mail - Vivaldi' STUB_VIV=$'normal\tMail' \
   run "no space: ⌃⇧1 (key code 18) shows the tabs in no workspace" 0 \
   "aerospace focus --window-id 10;;key 18" - - no-space
-BROWSER_DRIVER=vivaldi STUB_TITLES=$'11|Other - Vivaldi\n10|Inbox | Gmail - Vivaldi' \
+BROWSER_DRIVER=vivaldi STUB_TITLES=$'11|false|false|Other - Vivaldi\n10|false|false|Inbox | Gmail - Vivaldi' \
   STUB_VIV=$'normal\tInbox | Gmail\nnormal\tOther' \
   run "front window: a title with |" 0 "aerospace focus --window-id 10" "window-id 11" - space Work
-BROWSER_DRIVER=vivaldi STUB_TITLES='10|Private - Vivaldi' STUB_VIV=$'incognito\tPrivate' \
+BROWSER_DRIVER=vivaldi STUB_TITLES='10|false|false|Private - Vivaldi' STUB_VIV=$'incognito\tPrivate' \
   run "front window: open a window when all windows are private" 0 \
   "aerospace focus --window-id 20;;key 19" "window-id 10" - space Work
 # The start page has no title for scripting, but AeroSpace shows
 # "Start Page". The private window 15 is first in the AeroSpace list.
-BROWSER_DRIVER=vivaldi STUB_TITLES=$'15|Bank - Vivaldi\n10|Start Page - Vivaldi\n11|Video - Vivaldi' \
+BROWSER_DRIVER=vivaldi \
+  STUB_TITLES=$'15|false|false|Bank - Vivaldi\n10|false|false|Start Page - Vivaldi\n11|false|false|Video - Vivaldi' \
   STUB_VIV=$'normal\t\nincognito\tBank\nnormal\tVideo' \
   run "front window: the title of the active tab differs from the window title" 0 \
   "aerospace focus --window-id 10;;key 18" "window-id 15" - no-space
+# Window 10 is the front Vivaldi window, but its AeroSpace workspace is
+# hidden. If the driver focuses it, AeroSpace shows that workspace on its
+# monitor. Use a window on the focused workspace, else on a visible
+# workspace. Never use the private window 15.
+BROWSER_DRIVER=vivaldi \
+  STUB_TITLES=$'10|false|false|Mail - Vivaldi\n15|true|true|Bank - Vivaldi\n11|false|true|Video - Vivaldi\n12|true|true|News - Vivaldi' \
+  STUB_VIV=$'normal\tMail\nincognito\tBank\nnormal\tVideo\nnormal\tNews' \
+  run "front window: prefer a window on the focused workspace" 0 \
+  "aerospace focus --window-id 12;;key 20" "window-id 15" - space Zaid
+BROWSER_DRIVER=vivaldi \
+  STUB_TITLES=$'10|false|false|Mail - Vivaldi\n15|true|true|Bank - Vivaldi\n11|false|true|Video - Vivaldi' \
+  STUB_VIV=$'normal\tMail\nincognito\tBank\nnormal\tVideo' \
+  run "front window: else prefer a window on a visible workspace" 0 \
+  "aerospace focus --window-id 11;;key 20" "window-id 15" - space Zaid
 
 # The URL matching of vivaldi.js, run for real. js_check loads vivaldi.js
 # from this repository with eval, to call its functions. It reads no other

@@ -44,12 +44,16 @@ viv_js() {
 }
 
 # viv_main_window: print the AeroSpace id of the main Vivaldi window. This is
-# the front window that is not private (see check 7). If Vivaldi has no
-# window, or has only private windows, open a window.
+# a window that is not private (see check 7). Use a window on the focused
+# AeroSpace workspace first, then a window on a visible workspace, then the
+# front window. If you focus a window on a hidden workspace, AeroSpace shows
+# that workspace on its monitor, and the workspace that you looked at goes
+# away. If Vivaldi has no window, or has only private windows, open a window.
 viv_main_window() {
   local list wins id before
   list=$("$AEROSPACE_BIN" list-windows --monitor all --app-bundle-id "$DRIVER_BUNDLE" \
-    --format '%{window-id}|%{window-title}' | grep -v '|Picture in Picture$')
+    --format '%{window-id}|%{workspace-is-focused}|%{workspace-is-visible}|%{window-title}' |
+    grep -v '|Picture in Picture$')
   if [ -z "$list" ]; then
     before=$(aero_ids | tr '\n' ' ')
     open -b "$DRIVER_BUNDLE" || return 1
@@ -74,9 +78,15 @@ viv_main_window() {
     return
   fi
   # Pair each Vivaldi window with the first free AeroSpace window that shows
-  # its title. If the main window has no pair (see check 8), use a window that
-  # has no pair. Never use a window that pairs with a private window. Split
-  # each AeroSpace line at the first "|" only: a title can contain "|".
+  # its title. Never use a window that pairs with a private window. Give each
+  # other window a rank, and use the window with the lowest rank:
+  # - The place: 0 on the focused workspace, 1 on a visible workspace, 2 on a
+  #   hidden workspace.
+  # - In one place: the pair of the front normal window first. Then a window
+  #   that has no pair: it can be the front window (see check 8). Then the
+  #   other normal windows, from front to back.
+  # The first three fields of an AeroSpace line have no "|". The rest is the
+  # title, which can contain "|".
   id=$({
     printf '%s\n' "$wins" | sed 's/^/V/'
     printf '%s\n' "$list" | sed 's/^/A/'
@@ -87,18 +97,28 @@ viv_main_window() {
       next
     }
     /^A/ {
-      i = index($0, "|"); if (!i) next
-      m++; wid[m] = substr($0, 2, i - 2); title[m] = substr($0, i + 1)
+      rest = substr($0, 2); m++
+      for (f = 1; f <= 3; f++) {
+        i = index(rest, "|"); if (!i) { m--; next }
+        field[f] = substr(rest, 1, i - 1); rest = substr(rest, i + 1)
+      }
+      wid[m] = field[1]; title[m] = rest
+      place[m] = field[2] == "true" ? 0 : field[3] == "true" ? 1 : 2
     }
     END {
       for (v = 1; v <= n; v++) {
         if (!main && mode[v] == "normal") main = v
         for (a = 1; a <= m; a++)
-          if (!owner[a] && title[a] == want[v]) { owner[a] = v; pair[v] = a; break }
+          if (!owner[a] && title[a] == want[v]) { owner[a] = v; break }
       }
-      if (pair[main]) { print wid[pair[main]]; exit }
-      for (a = 1; a <= m; a++) if (!owner[a]) { print wid[a]; exit }
-      for (a = 1; a <= m; a++) if (mode[owner[a]] == "normal") { print wid[a]; exit }
+      best = ""
+      for (a = 1; a <= m; a++) {
+        if (owner[a] && mode[owner[a]] != "normal") continue
+        order = owner[a] == main && main ? 0 : !owner[a] ? 1 : 1 + owner[a]
+        rank = place[a] * 1000 + order
+        if (best == "" || rank < best) { best = rank; id = wid[a] }
+      }
+      if (best != "") print id
     }')
   if [ -z "$id" ]; then
     echo "cannot find the main Vivaldi window" >&2
