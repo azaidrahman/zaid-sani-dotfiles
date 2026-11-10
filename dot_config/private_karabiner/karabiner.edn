@@ -348,18 +348,18 @@
   ;; of Shift, Caps, or Tab, and the thumb holds the key next to the space bar.
   ;; That key sends Alt: the device swaps make the Mac Command key send Alt.
   ;; One pinky key and the thumb give all 8 sets of binds in WoW:
-  ;;   pinky:  none     Shift          Caps (Ctrl)   Tab (Ctrl+Shift)
+  ;;   pinky:  none     Shift          Tab (Ctrl)    Caps (Ctrl+Shift)
   ;;   alone:  1        SHIFT-1        CTRL-1        CTRL-SHIFT-1
   ;;   +thumb: ALT-1    ALT-SHIFT-1    ALT-CTRL-1    ALT-CTRL-SHIFT-1
   ;; A tap sends the key when you release it. A Caps tap sends the numpad
   ;; slash (NUMPADDIVIDE in WoW), so the tap is one more bind. An F-key is not
   ;; safe there: F13-F20 with modifiers are global hotkeys (data/fkey-index.tsv).
   ;; The bottom-left keys keep the device swaps, so Command+Tab still works.
-  {:des "WoW: Caps to Ctrl, Tab to Ctrl+Shift"
+  {:des "WoW: Tab to Ctrl, Caps to Ctrl+Shift"
    :rules
    [:WoW
-    [:##caps_lock :left_control   nil {:alone :keypad_slash}]
-    [:##tab       :!Sleft_control nil {:alone :tab}]]}
+    [:##tab       :left_control   nil {:alone :tab}]
+    [:##caps_lock :!Sleft_control nil {:alone :keypad_slash}]]}
 
 ;; BEGIN WORKSPACE-RULES (auto-generated from config/help-text.yaml)
   {:des "Workspace shortcuts (Left Option)"

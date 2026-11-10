@@ -76,8 +76,8 @@ pinky key and the thumb give all 8 sets of binds:
 |---|---|---|---|---|
 | None | — | — | `1` | `ALT-1` |
 | Shift | Shift | — | `SHIFT-1` | `ALT-SHIFT-1` |
-| Caps Lock | Ctrl | `NUMPADDIVIDE` | `CTRL-1` | `ALT-CTRL-1` |
-| Tab | Ctrl+Shift | `TAB` | `CTRL-SHIFT-1` | `ALT-CTRL-SHIFT-1` |
+| Tab | Ctrl | `TAB` | `CTRL-1` | `ALT-CTRL-1` |
+| Caps Lock | Ctrl+Shift | `NUMPADDIVIDE` | `CTRL-SHIFT-1` | `ALT-CTRL-SHIFT-1` |
 
 A tap sends its key when you release the key. The bottom-left keys keep their
 device swaps, so Command+Tab still works in the game.
