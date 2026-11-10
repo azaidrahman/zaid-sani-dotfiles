@@ -68,6 +68,10 @@ outer.right =      4
 
 
 # Floating
+# WoW sets its own window size and fullscreen mode.
+[[on-window-detected]]
+if.app-id = 'com.blizzard.worldofwarcraft'
+run = 'layout floating'
 [[on-window-detected]]
 if.app-name-regex-substring = 'finder'
 run = 'layout floating'
