@@ -10,3 +10,4 @@ __pycache__/
 /.claude/worktrees/
 /.worktrees/
 dot_omp/agent/node_modules/
+dot_config/openlogi/*.lock

@@ -70,3 +70,8 @@ archive/
 {{ if ne (includeTemplate "hostname" $) "aqua" }}
 .config/karabiner/src/autoclick-hud.swift
 {{ end }}
+
+# OpenLogi reads ~/.config/openlogi/config.toml, a symlink to openlogi.toml in
+# the source directory. Thus, saves from the app go into the repository. The
+# app keeps a lock file beside the target.
+.config/openlogi/openlogi.toml*
