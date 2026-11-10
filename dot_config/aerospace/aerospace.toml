@@ -157,10 +157,7 @@ run = 'move-node-to-workspace 2'
 # Chats
 [[on-window-detected]]
 if.app-id = 'com.apple.MobileSMS'
-run = [
-    'layout floating',
-    'move-node-to-workspace 6',
-]
+run = 'layout floating'
 [[on-window-detected]]
 if.app-id = 'com.apple.FaceTime'
 run = 'layout floating'
