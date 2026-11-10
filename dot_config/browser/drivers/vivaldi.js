@@ -19,6 +19,10 @@
 //   tabs                       print the open tabs as Alfred script filter JSON
 //   current                    print the name of the workspace of the active
 //                              tab of the front window, or nothing
+//   windows                    print one line for each window, from front to
+//                              back: "<mode><TAB><position><TAB><title>".
+//                              The position is of the workspace of the active
+//                              tab, and the title is the title of that tab.
 //
 // Vivaldi scripting does not tell the workspace of a tab. This helper reads
 // it from the session file of Vivaldi (see sessionWorkspaces). If the session
@@ -209,6 +213,15 @@ function run(argv) {
       const front = Application('Vivaldi').windows[0].activeTab;
       const pos = positionOfTab(ws, sessionWorkspaces(prefsPath), { id: String(front.id()), url: front.url() });
       return pos ? ws.list[pos - 1].name : '';
+    }
+    case 'windows': {
+      const ws = readWorkspaces(prefsPath);
+      const session = sessionWorkspaces(prefsPath);
+      return Application('Vivaldi').windows().map((w) => {
+        const t = w.activeTab;
+        const pos = positionOfTab(ws, session, { id: String(t.id()), url: t.url() });
+        return `${w.mode()}\t${pos}\t${t.title()}`;
+      }).join('\n');
     }
     case 'tabs': {
       // The subtitle starts with the workspace, so that the user sees it.

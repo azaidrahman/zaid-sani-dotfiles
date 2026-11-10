@@ -66,14 +66,14 @@ echo "notify $*" >> "$STUB_LOG"
 EOF
 # osascript: the bookmark script only reads a file, so it runs for real.
 # "make new window" adds window 20 to the AeroSpace windows, and returns the
-# Vivaldi id 777. The query for the modes and titles of the Vivaldi windows
-# returns $STUB_VIV. Key codes and window closes go to the log.
+# Vivaldi id 777. "vivaldi.js windows" returns $STUB_VIV. Key codes and
+# window closes go to the log.
 cat > "$TMP/bin/osascript" <<'EOF'
 #!/bin/sh
 case "$*" in
   *bookmarks.js*) exec /usr/bin/osascript "$@" ;;
   *"make new window"*) echo 20 >> "$STUB_DIR/windows"; echo 777; exit 0 ;;
-  *"mode of w"*) printf '%s\n' "$STUB_VIV"; exit 0 ;;
+  *vivaldi.js*windows) printf '%s\n' "$STUB_VIV"; exit 0 ;;
   *vivaldi.js*window-empty*) echo "$STUB_EMPTY"; exit 0 ;;
 esac
 if [ "${1:-}" = - ]; then
@@ -175,7 +175,8 @@ BROWSER_DRIVER=arc run "open --float: Arc opens the URL in a floating window" 0 
 # (key code 20). Window 10 is the main window, and window 20 is the new
 # window. STUB_FOCUSED is the window that has the focus after the key.
 # STUB_VIV gives the Vivaldi windows from front to back, one line for each
-# window: the mode, a tab, and the title of the active tab.
+# window: the mode, a tab, the position of the workspace that the window
+# shows, a tab, and the title of the active tab.
 BROWSER_DRIVER=vivaldi STUB_FOCUSED=10 STUB_TITLES='10|false|false|Mail - Vivaldi' STUB_EMPTY=no \
   run "own window: keep the new window when it has tabs" 0 "key 20" close - space-window Zaid
 BROWSER_DRIVER=vivaldi STUB_FOCUSED=10 STUB_TITLES='10|false|false|Mail - Vivaldi' STUB_EMPTY=yes \
@@ -184,34 +185,44 @@ BROWSER_DRIVER=vivaldi STUB_FOCUSED=10 STUB_TITLES='10|false|false|Mail - Vivald
 BROWSER_DRIVER=vivaldi STUB_FOCUSED=20 STUB_TITLES='10|false|false|Mail - Vivaldi' STUB_EMPTY=yes \
   run "own window: keep the new window when it shows an empty workspace" 0 "key 20" close - \
   space-window Zaid
-BROWSER_DRIVER=vivaldi STUB_TITLES='10|false|false|Mail - Vivaldi' STUB_VIV=$'normal\tMail' \
+BROWSER_DRIVER=vivaldi STUB_TITLES='10|false|false|Mail - Vivaldi' STUB_VIV=$'normal\t1\tMail' \
   run "no space: ⌃⇧1 (key code 18) shows the tabs in no workspace" 0 \
   "aerospace focus --window-id 10;;key 18" - - no-space
 BROWSER_DRIVER=vivaldi STUB_TITLES=$'11|false|false|Other - Vivaldi\n10|false|false|Inbox | Gmail - Vivaldi' \
-  STUB_VIV=$'normal\tInbox | Gmail\nnormal\tOther' \
+  STUB_VIV=$'normal\t2\tInbox | Gmail\nnormal\t2\tOther' \
   run "front window: a title with |" 0 "aerospace focus --window-id 10" "window-id 11" - space Work
-BROWSER_DRIVER=vivaldi STUB_TITLES='10|false|false|Private - Vivaldi' STUB_VIV=$'incognito\tPrivate' \
+BROWSER_DRIVER=vivaldi STUB_TITLES='10|false|false|Private - Vivaldi' STUB_VIV=$'incognito\t1\tPrivate' \
   run "front window: open a window when all windows are private" 0 \
   "aerospace focus --window-id 20;;key 19" "window-id 10" - space Work
 # The start page has no title for scripting, but AeroSpace shows
 # "Start Page". The private window 15 is first in the AeroSpace list.
 BROWSER_DRIVER=vivaldi \
   STUB_TITLES=$'15|false|false|Bank - Vivaldi\n10|false|false|Start Page - Vivaldi\n11|false|false|Video - Vivaldi' \
-  STUB_VIV=$'normal\t\nincognito\tBank\nnormal\tVideo' \
+  STUB_VIV=$'normal\t1\t\nincognito\t1\tBank\nnormal\t1\tVideo' \
   run "front window: the title of the active tab differs from the window title" 0 \
   "aerospace focus --window-id 10;;key 18" "window-id 15" - no-space
-# Window 10 is the front Vivaldi window, but its AeroSpace workspace is
-# hidden. If the driver focuses it, AeroSpace shows that workspace on its
-# monitor. Use a window on the focused workspace, else on a visible
-# workspace. Never use the private window 15.
+# If the driver focuses a window on a hidden AeroSpace workspace, AeroSpace
+# shows that workspace on its monitor. If the driver focuses a window that
+# does not show the workspace, the window covers the other windows of its
+# AeroSpace workspace. Never use the private window 15.
+# Window 10 is on the focused AeroSpace workspace. The private window 15 and
+# windows 11 and 12 show Zaid. Window 12 is in front of window 11, but it is
+# on a hidden workspace.
+BROWSER_DRIVER=vivaldi \
+  STUB_TITLES=$'10|true|true|Mail - Vivaldi\n15|true|true|Bank - Vivaldi\n11|false|true|Video - Vivaldi\n12|false|false|News - Vivaldi' \
+  STUB_VIV=$'normal\t1\tMail\nincognito\t2\tBank\nnormal\t2\tNews\nnormal\t2\tVideo' \
+  run "front window: prefer a visible window that shows the workspace" 0 \
+  "aerospace focus --window-id 11;;key 20" "window-id 15" - space Zaid
+# No window shows Zaid. Window 10 is the front window, but its AeroSpace
+# workspace is hidden.
 BROWSER_DRIVER=vivaldi \
   STUB_TITLES=$'10|false|false|Mail - Vivaldi\n15|true|true|Bank - Vivaldi\n11|false|true|Video - Vivaldi\n12|true|true|News - Vivaldi' \
-  STUB_VIV=$'normal\tMail\nincognito\tBank\nnormal\tVideo\nnormal\tNews' \
-  run "front window: prefer a window on the focused workspace" 0 \
+  STUB_VIV=$'normal\t1\tMail\nincognito\t1\tBank\nnormal\t1\tVideo\nnormal\t1\tNews' \
+  run "front window: else prefer a window on the focused workspace" 0 \
   "aerospace focus --window-id 12;;key 20" "window-id 15" - space Zaid
 BROWSER_DRIVER=vivaldi \
   STUB_TITLES=$'10|false|false|Mail - Vivaldi\n15|true|true|Bank - Vivaldi\n11|false|true|Video - Vivaldi' \
-  STUB_VIV=$'normal\tMail\nincognito\tBank\nnormal\tVideo' \
+  STUB_VIV=$'normal\t1\tMail\nincognito\t1\tBank\nnormal\t1\tVideo' \
   run "front window: else prefer a window on a visible workspace" 0 \
   "aerospace focus --window-id 11;;key 20" "window-id 15" - space Zaid
 

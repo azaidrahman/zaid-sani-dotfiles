@@ -43,14 +43,19 @@ viv_js() {
   osascript -l JavaScript "$BROWSER_HOME/drivers/vivaldi.js" "$VIVALDI_PREFS" "$@"
 }
 
-# viv_main_window: print the AeroSpace id of the main Vivaldi window. This is
-# a window that is not private (see check 7). Use a window on the focused
-# AeroSpace workspace first, then a window on a visible workspace, then the
-# front window. If you focus a window on a hidden workspace, AeroSpace shows
-# that workspace on its monitor, and the workspace that you looked at goes
-# away. If Vivaldi has no window, or has only private windows, open a window.
+# viv_main_window [<position>]: print the AeroSpace id of the main Vivaldi
+# window. This is a window that is not private (see check 7). If you give a
+# position, use a window that shows the workspace at the position first.
+# Then use a window on the focused AeroSpace workspace, then a window on a
+# visible workspace, then the front window.
+# When AeroSpace focuses a window, it brings the window to the front of its
+# AeroSpace workspace, and it shows that workspace on its monitor. Thus focus
+# only the window that the user wants to see. If the driver focuses a
+# different window and sends the key, Vivaldi then goes to the window that
+# shows the workspace, but the first window still covers the other windows.
+# If Vivaldi has no window, or has only private windows, open a window.
 viv_main_window() {
-  local list wins id before
+  local target=${1:-} list wins id before
   list=$("$AEROSPACE_BIN" list-windows --monitor all --app-bundle-id "$DRIVER_BUNDLE" \
     --format '%{window-id}|%{workspace-is-focused}|%{workspace-is-visible}|%{window-title}' |
     grep -v '|Picture in Picture$')
@@ -60,13 +65,9 @@ viv_main_window() {
     aero_wait_new "$before"
     return
   fi
-  # Vivaldi lists its windows from front to back. Print one line for each
-  # window: the mode, a tab, and the title of the active tab. In a tell block
-  # for Vivaldi, "tab" is a tab of the browser, so use "character id 9".
-  if ! wins=$(osascript -e 'tell application "Vivaldi"' -e 'set out to ""' \
-    -e 'repeat with w in windows' \
-    -e 'set out to out & (mode of w) & (character id 9) & (title of active tab of w) & linefeed' \
-    -e 'end repeat' -e 'end tell' -e 'return out'); then
+  # One line for each Vivaldi window, from front to back: the mode, the
+  # position of the workspace that it shows, and the title of the active tab.
+  if ! wins=$(viv_js windows); then
     printf '%s\n' "$list" | head -n 1 | cut -d'|' -f1
     return 0
   fi
@@ -80,8 +81,10 @@ viv_main_window() {
   # Pair each Vivaldi window with the first free AeroSpace window that shows
   # its title. Never use a window that pairs with a private window. Give each
   # other window a rank, and use the window with the lowest rank:
-  # - The place: 0 on the focused workspace, 1 on a visible workspace, 2 on a
-  #   hidden workspace.
+  # - First a window that shows the target workspace. A window that has no
+  #   pair does not count: its workspace is not known.
+  # - Then the place: 0 on the focused workspace, 1 on a visible workspace,
+  #   2 on a hidden workspace.
   # - In one place: the pair of the front normal window first. Then a window
   #   that has no pair: it can be the front window (see check 8). Then the
   #   other normal windows, from front to back.
@@ -90,10 +93,13 @@ viv_main_window() {
   id=$({
     printf '%s\n' "$wins" | sed 's/^/V/'
     printf '%s\n' "$list" | sed 's/^/A/'
-  } | awk '
+  } | awk -v target="$target" '
     /^V/ {
-      t = index($0, "\t"); if (!t) next
-      n++; mode[n] = substr($0, 2, t - 2); want[n] = substr($0, t + 1) " - Vivaldi"
+      rest = substr($0, 2)
+      t = index(rest, "\t"); if (!t) next
+      n++; mode[n] = substr(rest, 1, t - 1); rest = substr(rest, t + 1)
+      t = index(rest, "\t"); if (!t) { n--; next }
+      pos[n] = substr(rest, 1, t - 1); want[n] = substr(rest, t + 1) " - Vivaldi"
       next
     }
     /^A/ {
@@ -115,7 +121,8 @@ viv_main_window() {
       for (a = 1; a <= m; a++) {
         if (owner[a] && mode[owner[a]] != "normal") continue
         order = owner[a] == main && main ? 0 : !owner[a] ? 1 : 1 + owner[a]
-        rank = place[a] * 1000 + order
+        shows = target != "" && owner[a] && pos[owner[a]] == target
+        rank = (shows ? 0 : 10000) + place[a] * 1000 + order
         if (best == "" || rank < best) { best = rank; id = wid[a] }
       }
       if (best != "") print id
@@ -127,17 +134,18 @@ viv_main_window() {
   echo "$id"
 }
 
-# viv_focus_main: focus the main Vivaldi window.
+# viv_focus_main [<position>]: focus the main Vivaldi window (see
+# viv_main_window).
 viv_focus_main() {
   local window
-  window=$(viv_main_window) || return 1
+  window=$(viv_main_window "${1:-}") || return 1
   aero_focus "$window"
 }
 
-# viv_show <position>: focus the main window, and show the workspace at the
-# position (1 is the first workspace).
+# viv_show <position>: focus the main window for the workspace at the
+# position, and show that workspace (1 is the first workspace).
 viv_show() {
-  viv_focus_main || return 1
+  viv_focus_main "$1" || return 1
   viv_key "$1"
 }
 
