@@ -82,8 +82,9 @@ pinky key and the thumb give all 8 sets of binds:
 A tap sends its key when you release the key. The bottom-left keys keep their
 device swaps, so Command+Tab still works in the game.
 
-OpenLogi, not Karabiner, controls the MX Master 3. In WoW, its thumb buttons
-send F6, F7, and F8. See `dot_config/openlogi/`.
+OpenLogi, not Karabiner, controls the MX Master 3. In WoW, the back and
+forward buttons send mouse buttons 4 and 5 (BUTTON4 and BUTTON5 in WoW). The
+gesture button sends F8. See `dot_config/openlogi/`.
 
 A game controller in the menu bar comes from `~/Applications/gamekeys.app`.
 The dot after the controller shows game mode:
