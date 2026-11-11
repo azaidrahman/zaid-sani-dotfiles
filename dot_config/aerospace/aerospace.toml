@@ -72,6 +72,10 @@ outer.right =      4
 [[on-window-detected]]
 if.app-id = 'com.blizzard.worldofwarcraft'
 run = 'layout floating'
+# The Battle.net launcher keeps its own window size.
+[[on-window-detected]]
+if.app-id = 'net.battle.app'
+run = 'layout floating'
 [[on-window-detected]]
 if.app-name-regex-substring = 'finder'
 run = 'layout floating'
