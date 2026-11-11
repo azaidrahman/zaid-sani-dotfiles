@@ -66,8 +66,9 @@ echo "notify $*" >> "$STUB_LOG"
 EOF
 # osascript: the bookmark script only reads a file, so it runs for real.
 # "make new window" adds window 20 to the AeroSpace windows, and returns the
-# Vivaldi id 777. "vivaldi.js windows" returns $STUB_VIV. Key codes and
-# window closes go to the log.
+# Vivaldi id 777. "vivaldi.js windows" returns $STUB_VIV, and
+# "vivaldi.js window-title" returns $STUB_WTITLE. Key codes and window
+# closes go to the log.
 cat > "$TMP/bin/osascript" <<'EOF'
 #!/bin/sh
 case "$*" in
@@ -75,6 +76,7 @@ case "$*" in
   *"make new window"*) echo 20 >> "$STUB_DIR/windows"; echo 777; exit 0 ;;
   *vivaldi.js*windows) printf '%s\n' "$STUB_VIV"; exit 0 ;;
   *vivaldi.js*window-empty*) echo "$STUB_EMPTY"; exit 0 ;;
+  *vivaldi.js*window-title*) echo "$STUB_WTITLE"; exit 0 ;;
 esac
 if [ "${1:-}" = - ]; then
   body=$(cat)
@@ -137,7 +139,7 @@ run() {
     AEROSPACE_BIN="$TMP/bin/aerospace" VIVALDI_PREFS="$TMP/viv-prefs.json" \
     BROWSER_DRIVER="${BROWSER_DRIVER:-}" BROWSER_WAIT_TRIES=2 \
     STUB_FOCUSED="${STUB_FOCUSED:-}" STUB_TITLES="${STUB_TITLES:-}" \
-    STUB_VIV="${STUB_VIV:-}" STUB_EMPTY="${STUB_EMPTY:-}" \
+    STUB_VIV="${STUB_VIV:-}" STUB_EMPTY="${STUB_EMPTY:-}" STUB_WTITLE="${STUB_WTITLE:-}" \
     /bin/bash "$BROWSER" "$@" 2>/dev/null)
   status=$?
   actual="out=$out log=$(tr '\n' ' ' < "$TMP/log")state=$(cat "$state/current" 2>/dev/null)"
@@ -225,6 +227,18 @@ BROWSER_DRIVER=vivaldi \
   STUB_VIV=$'normal\t1\tMail\nincognito\t1\tBank\nnormal\t1\tVideo' \
   run "front window: else prefer a window on a visible workspace" 0 \
   "aerospace focus --window-id 11;;key 20" "window-id 15" - space Zaid
+# focus-tab with a position: focus the window of the tab, which is window 11
+# with the title "Video", and show the workspace in it. No other window
+# shows Zaid, and window 10 is on the focused workspace. The tab "-" only
+# shows the workspace.
+BROWSER_DRIVER=vivaldi STUB_WTITLE=Video \
+  STUB_TITLES=$'10|true|true|Mail - Vivaldi\n11|false|false|Video - Vivaldi' \
+  run "focus tab: use the window of the tab" 0 \
+  "aerospace focus --window-id 11;;key 20;;activate 42" "window-id 10" - focus-tab 5 42 2
+BROWSER_DRIVER=vivaldi STUB_WTITLE=Video \
+  STUB_TITLES=$'10|true|true|Mail - Vivaldi\n11|false|false|Video - Vivaldi' \
+  run "focus tab: the tab - only shows the workspace" 0 \
+  "aerospace focus --window-id 11;;key 19" "activate" - focus-tab 5 - 1
 
 # The URL matching of vivaldi.js, run for real. js_check loads vivaldi.js
 # from this repository with eval, to call its functions. It reads no other
@@ -245,5 +259,59 @@ js_check "a prefix matches only at a URL boundary, and an exact URL wins" \
     urlStartsWith('https://x/pr/123', 'https://x/pr/12'),
     urlStartsWith('https://x/pr/12?tab=diff', 'https://x/pr/12'),
     firstMatch([{url: 'https://x/a/b'}, {url: 'https://x/a'}], 'https://x/a', (u) => u).url].join()"
+
+# watchStep, one row for each case. Workspace 1 is Work, and 2 is Zaid. A
+# rule sends https://r/ to Zaid. Tab "a" is in Work, and tab "z" is in Zaid.
+# Each row starts with a first look at "a" and "z" in one window, which
+# shows Work. Then the row gives the looks after it, 1 second apart. "sim"
+# prints each note as "<pos>", or "<pos>><back>" for a jump, or "-" for no
+# note.
+js_check "watch: go back after a jump, and notify for a tab that the user cannot see" \
+  "2|2>1|-|1|-|2|-|2>1|-|2" \
+  "(() => {
+    const load = () => ({
+      ws: { list: [{ id: 1, name: 'Work' }, { id: 2, name: 'Zaid' }],
+        rules: [{ type: 'STARTSWITH', expression: 'https://r/', workspaceId: 2 }] },
+      session: new Map([['a', 1], ['z', 2]]) });
+    const snap = (front, activeId, tabs, mode = 'normal') => ({ front, windows: [{ id: '9', mode, activeId,
+      tabs: tabs.map(([id, url]) => ({ id, url })) }] });
+    const A = ['a', 'https://x/a'];
+    const Z = ['z', 'https://x/z'];
+    const R = ['r', 'https://r/1'];
+    const sim = (...looks) => {
+      let state = watchStep(null, snap(true, 'a', [A, Z]), load, 0).state;
+      const out = [];
+      looks.forEach((s, i) => {
+        const r = watchStep(state, s, load, i + 1);
+        state = r.state;
+        r.notes.forEach((n) => out.push(n.back === undefined ? n.pos : n.pos + '>' + n.back));
+      });
+      return out.join() || '-';
+    };
+    const many = [1, 2, 3, 4, 5, 6].map((n) => ['m' + n, 'https://r/' + n]);
+    return [
+      // A rule moved a background tab to Zaid, and Vivaldi still shows Work.
+      sim(snap(true, 'a', [A, Z, R]), snap(true, 'a', [A, Z, R])),
+      // A rule moved the new active tab to Zaid: Vivaldi jumped.
+      sim(snap(true, 'r', [A, Z, R]), snap(true, 'r', [A, Z, R])),
+      // A background tab with no rule stays in Work, which the user sees.
+      sim(snap(true, 'a', [A, Z, ['n', 'https://x/n']]), snap(true, 'a', [A, Z, ['n', 'https://x/n']])),
+      // The same tab, while another application is frontmost.
+      sim(snap(false, 'a', [A, Z, ['n', 'https://x/n']]), snap(false, 'a', [A, Z, ['n', 'https://x/n']])),
+      // More than WATCH_BURST new tabs: a restored session.
+      sim(snap(true, 'a', [A, Z, ...many]), snap(true, 'a', [A, Z, ...many])),
+      // A blank tab that gets a URL later. The wait starts at the URL.
+      sim(snap(true, 'a', [A, Z, ['b', 'about:blank']]), snap(true, 'a', [A, Z, ['b', 'https://r/2']]),
+        snap(true, 'a', [A, Z, ['b', 'https://r/2']])),
+      // A private window has no workspaces.
+      sim(snap(false, 'a', [A, Z, R], 'incognito'), snap(false, 'a', [A, Z, R], 'incognito')),
+      // The user typed a URL of the rule in the active tab: Vivaldi jumped.
+      sim(snap(true, 'a', [['a', 'https://r/1'], Z])),
+      // The user went to Zaid: the tab is not new, and its URL is the same.
+      sim(snap(true, 'z', [A, Z])),
+      // A jump while another application is frontmost: no keys, only a note.
+      sim(snap(false, 'r', [A, Z, R]), snap(false, 'r', [A, Z, R])),
+    ].join('|');
+  })()"
 
 exit "$fail"

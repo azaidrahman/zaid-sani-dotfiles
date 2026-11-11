@@ -1,0 +1,24 @@
+#!/bin/bash
+# plist hash: {{ include "private_Library/LaunchAgents/com.zaid.vivaldi-watch.plist.tmpl" | sha256sum }}
+# script hash: {{ include "dot_config/browser/drivers/vivaldi.js" | sha256sum }}
+#
+# Load the LaunchAgent of the Vivaldi watcher again (see the comment in the
+# plist). The watcher reads vivaldi.js only when it starts. Thus a change to
+# vivaldi.js also loads the agent again.
+{{ if eq .chezmoi.os "darwin" -}}
+set -euo pipefail
+
+LABEL=com.zaid.vivaldi-watch
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+DOMAIN="gui/$(id -u)"
+
+# A bootout returns before the agent stops. Wait until launchd forgets the
+# label, or the bootstrap fails with "Input/output error".
+launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+for _ in $(seq 1 50); do
+  launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1 || break
+  sleep 0.1
+done
+launchctl bootstrap "$DOMAIN" "$PLIST"
+echo "load-vivaldi-watch: the agent shows a notification for Vivaldi tabs that you cannot see"
+{{ end -}}

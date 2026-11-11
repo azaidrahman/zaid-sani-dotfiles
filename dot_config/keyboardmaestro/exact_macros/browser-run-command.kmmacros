@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Actions</key>
+	<array>
+		<dict>
+			<key>ActionUID</key>
+			<integer>200</integer>
+			<key>MacroActionType</key>
+			<string>SetVariableToText</string>
+			<key>Text</key>
+			<string>%TriggerValue%</string>
+			<key>Variable</key>
+			<string>Local_BrowserArgs</string>
+		</dict>
+		<dict>
+			<key>ActionUID</key>
+			<integer>201</integer>
+			<key>DisplayKind</key>
+			<string>None</string>
+			<key>HonourFailureSettings</key>
+			<true/>
+			<key>IncludeStdErr</key>
+			<true/>
+			<key>MacroActionType</key>
+			<string>ExecuteShellScript</string>
+			<key>Path</key>
+			<string></string>
+			<key>Text</key>
+			<string># Run the browser command with the parameter of "do script" as its
+# arguments. The Vivaldi watcher (vivaldi.js watch) and its notifications
+# use this macro, because the browser command sends keys to Vivaldi, and
+# Keyboard Maestro has the Accessibility permission for that. Each run
+# writes one line to the log file.
+log="$HOME/Library/Logs/browser-run-command.log"
+args=$KMVAR_Local_BrowserArgs
+case $args in
+  '' | *[!A-Za-z0-9\ _-]*) echo "$(date '+%F %T') bad arguments: $args" &gt;&gt; "$log"; exit 2 ;;
+esac
+eval "set -- $args"
+err=$(BROWSER_DRIVER=vivaldi "$HOME/.local/bin/browser" "$@" 2&gt;&amp;1 &gt;/dev/null)
+status=$?
+echo "$(date '+%F %T') browser $args: exit $status${err:+: $err}" &gt;&gt; "$log"
+exit $status</string>
+			<key>TimeOutAbortsMacro</key>
+			<true/>
+			<key>TrimResults</key>
+			<true/>
+			<key>TrimResultsNew</key>
+			<true/>
+			<key>UseText</key>
+			<true/>
+		</dict>
+	</array>
+	<key>Name</key>
+	<string>Browser: Run Command</string>
+	<key>Triggers</key>
+	<array/>
+	<key>UID</key>
+	<string>2EDA9A5E-2F0A-4A30-90BB-E611B00293F1</string>
+</dict>
+</plist>

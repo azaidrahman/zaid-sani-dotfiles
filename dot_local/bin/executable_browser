@@ -9,7 +9,9 @@
 #   browser tabs                    print the open tabs as Alfred JSON
 #   browser bookmarks               print the Pinboard bookmarks of all
 #                                   spaces as Alfred JSON, current first
-#   browser focus-tab <win> <tab>   focus a tab that "browser tabs" printed
+#   browser focus-tab <win> <tab> [<pos>]
+#                                   focus a tab that "browser tabs" printed;
+#                                   pos: the position of its workspace
 #   browser open [--float] <url> [<prefix>]
 #                                   open the URL; if a tab URL starts with
 #                                   the prefix, focus that tab instead.
@@ -73,7 +75,7 @@ fail() {
 }
 
 usage() {
-  sed -n '3,24s/^# \{0,1\}//p' "$0" >&2
+  sed -n '3,26s/^# \{0,1\}//p' "$0" >&2
   fail 2 "unknown action: ${action:-none}"
 }
 
@@ -209,8 +211,8 @@ case "$action" in
       "$current" "${BROWSER_BOOKMARK_TAGS:-}" || fail 1 "cannot list the bookmarks"
     ;;
   focus-tab)
-    [ $# -eq 2 ] || usage
-    call drv_focus_tab "$1" "$2"
+    [ $# -eq 2 ] || [ $# -eq 3 ] || usage
+    call drv_focus_tab "$@"
     ;;
   open)
     float=no

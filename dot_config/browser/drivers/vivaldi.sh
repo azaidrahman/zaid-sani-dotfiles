@@ -316,9 +316,50 @@ drv_current_space() {
   viv_js current
 }
 
-# drv_focus_tab <window id> <tab id>
+# viv_window_aero <Vivaldi window id>: print the AeroSpace id of the Vivaldi
+# window, or nothing. Pair the windows by the title of the active tab. If two
+# AeroSpace windows have that title, print nothing: the pair is not sure.
+viv_window_aero() {
+  local title
+  title=$(viv_js window-title "$1") || return 0
+  [ -n "$title" ] || return 0
+  "$AEROSPACE_BIN" list-windows --monitor all --app-bundle-id "$DRIVER_BUNDLE" \
+    --format '%{window-id}|%{workspace-is-focused}|%{workspace-is-visible}|%{window-title}' |
+    awk -v want="$title - Vivaldi" '
+      {
+        rest = $0
+        for (f = 1; f <= 3; f++) {
+          i = index(rest, "|"); if (!i) next
+          if (f == 1) wid = substr(rest, 1, i - 1)
+          rest = substr(rest, i + 1)
+        }
+        if (rest == want) { n++; id = wid }
+      }
+      END { if (n == 1) print id }'
+}
+
+# drv_focus_tab <window id> <tab id> [<position>]: focus the tab. The
+# position is of the workspace of the tab. Without it, vivaldi.js finds it
+# (see tab-position). With the tab id "-", only show the workspace.
+# Focus the window of the tab, and show the workspace in it. If AeroSpace
+# does not have that window, use the main window for the workspace.
 drv_focus_tab() {
-  local pos
-  pos=$(viv_js tab-position "$2") || return 1
-  viv_focus_tab "$2" "$pos"
+  local pos=${3:-} aero
+  if [ -z "$pos" ]; then
+    [ "$2" != - ] || return 1
+    pos=$(viv_js tab-position "$2") || return 1
+  fi
+  aero=$(viv_window_aero "$1")
+  if [ -n "$aero" ]; then
+    aero_focus "$aero" || return 1
+    if [ "$pos" -gt 0 ] || [ -n "${3:-}" ]; then
+      viv_key "$pos" || return 1
+    fi
+  elif [ "$2" = - ]; then
+    viv_show "$pos" || return 1
+  else
+    viv_focus_tab "$2" "$pos" || return 1
+    return 0
+  fi
+  [ "$2" = - ] || viv_js activate "$2" > /dev/null
 }

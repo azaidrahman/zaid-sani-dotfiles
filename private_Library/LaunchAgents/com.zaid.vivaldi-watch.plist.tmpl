@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  vivaldi-watch shows a notification when a new Vivaldi tab opens where you
+  cannot see it. For example, a workspace rule moves the tab to a different
+  workspace, and Vivaldi does not show that workspace. Click the
+  notification to go to the tab. The watcher is the "watch" command of
+  vivaldi.js. It looks at the tabs every 1.5 seconds while Vivaldi runs.
+  It exits after one hour, and launchd starts it again (KeepAlive). Each
+  notification writes one line to the log file below.
+  run_onchange_after_load-vivaldi-watch.sh loads this agent.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.zaid.vivaldi-watch</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/osascript</string>
+    <string>-l</string>
+    <string>JavaScript</string>
+    <string>{{ .chezmoi.homeDir }}/.config/browser/drivers/vivaldi.js</string>
+    <string>{{ .chezmoi.homeDir }}/Library/Application Support/Vivaldi/Default/Preferences</string>
+    <string>watch</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>{{ .chezmoi.homeDir }}/Library/Logs/vivaldi-watch.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{ .chezmoi.homeDir }}/Library/Logs/vivaldi-watch.log</string>
+</dict>
+</plist>
