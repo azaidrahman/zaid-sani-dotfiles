@@ -60,6 +60,8 @@ function positionOfName(ws, name) {
 function positionOfUrl(ws, url) {
   for (const r of ws.rules) {
     const e = r.expression;
+    // Vivaldi ignores a rule with no text. Every URL contains "".
+    if (!e) continue;
     const match =
       (r.type === 'STARTSWITH' && url.startsWith(e)) ||
       (r.type === 'EQUALS' && url === e) ||
