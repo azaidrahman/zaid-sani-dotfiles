@@ -2,17 +2,21 @@
 # The upload step of prefix+v in Rex (special_paste.lua).
 #
 #   special-paste.sh <ssh pid>
+#   special-paste.sh --host <host>
 #
-# The script sends the clipboard image to the host of an ssh process. It
-# uses the same ssh options as that process, so `ssh -p 2222 -J jump onyx`
-# also works. Then it prints the path of the image on that host. The Lua
-# action pastes the path into the pane.
+# The script sends the clipboard image to a host. Then it prints the path of
+# the image on that host. The Lua action pastes the path into the pane.
+#
+#   <ssh pid>      the host of that ssh process. The script uses the same
+#                  ssh options, so `ssh -p 2222 -J jump onyx` also works.
+#   --host <host>  the host for a pane of a Rex host. The script runs
+#                  `ssh <host>` with the options of ~/.ssh/config.
 #
 # This is the same upload as clipssh (~/.local/bin/clipssh), with two
 # differences:
 #
 #   - The script does not change the clipboard. The image stays on it.
-#   - The script finds the host from the ssh process, not from an argument.
+#   - The script can find the host from the ssh process.
 #
 # Exit status:
 #
@@ -29,7 +33,17 @@ export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
 
 NO_IMAGE=3
 
-pid=${1:?ssh pid required}
+pid=""
+SSH_OPTS=()
+DEST=""
+case ${1:-} in
+--host) DEST=${2:-} ;;
+*) pid=${1:-} ;;
+esac
+if [[ -z $pid && -z $DEST ]]; then
+  echo "usage: special-paste.sh <ssh pid> | --host <host>" >&2
+  exit 1
+fi
 
 # These ssh options take a value. In OpenSSH, an option letter and its value
 # can be one word (-p2222) or two words (-p 2222).
@@ -92,17 +106,19 @@ fi
 
 # ps gives the command line as one string. Words split on spaces, so an
 # option value with a space does not work. Host names and ports have none.
-args=$(ps -o args= -p "$pid" 2>/dev/null) || {
-  echo "the ssh process $pid is gone" >&2
-  exit 1
-}
-# shellcheck disable=SC2086 # split the command line into words
-set -- $args
-shift # the word "ssh"
-parse_ssh "$@"
-if [[ -z $DEST ]]; then
-  echo "no host in the ssh command: $args" >&2
-  exit 1
+if [[ -n $pid ]]; then
+  args=$(ps -o args= -p "$pid" 2>/dev/null) || {
+    echo "the ssh process $pid is gone" >&2
+    exit 1
+  }
+  # shellcheck disable=SC2086 # split the command line into words
+  set -- $args
+  shift # the word "ssh"
+  parse_ssh "$@"
+  if [[ -z $DEST ]]; then
+    echo "no host in the ssh command: $args" >&2
+    exit 1
+  fi
 fi
 
 dir=${CLIPSSH_REMOTE_DIR:-/tmp}
@@ -110,7 +126,7 @@ remote="$dir/clipboard-$(date +%s)-$RANDOM.png"
 
 # BatchMode stops a password prompt: the script has no terminal. umask 077
 # keeps the image at mode 0600 on the host, as clipssh does.
-if ! ssh "${SSH_OPTS[@]}" -o BatchMode=yes -o ConnectTimeout=10 "$DEST" \
+if ! ssh ${SSH_OPTS[@]+"${SSH_OPTS[@]}"} -o BatchMode=yes -o ConnectTimeout=10 "$DEST" \
   "umask 077 && mkdir -p '$dir' && cat > '$remote'" <"$tmp" 2>"$tmp.err"; then
   echo "the upload to $DEST failed: $(tail -n 1 "$tmp.err")" >&2
   exit 1
