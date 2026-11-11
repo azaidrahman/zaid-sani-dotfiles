@@ -72,6 +72,11 @@ rex.bind("ctrl+space>y", "commit_draft")
 -- because tmux uses prefix+p for previous-window.
 rex.bind("ctrl+space>p", "bb_prs")
 
+-- prefix+v: special paste. In an ssh pane, send the clipboard image to the
+-- host and paste its path there (special_paste.lua). tmux uses prefix+i, and
+-- there you paste the path yourself.
+rex.bind("ctrl+space>v", "special_paste")
+
 -- prefix+D: move the focused float into the layout, as a regular pane
 -- (dock.lua). tmux has no floats, so this key has no tmux copy.
 rex.bind("ctrl+space>shift+d", "dock_float")
@@ -175,6 +180,7 @@ require("commit_draft")
 require("bb_prs")
 require("dock")
 require("zen")
+require("special_paste")
 
 -- Keep a copy of the tabs of each host for the Alfred workflow Rex Tabs
 -- (scripts/remote-tabs-watcher.lua). If a watcher runs already, the new one
