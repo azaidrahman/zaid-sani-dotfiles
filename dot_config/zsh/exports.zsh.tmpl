@@ -59,6 +59,15 @@ export CLAUDE_PUSH_DISABLE=1
 # it starts, so a change applies to the next session, not to a running one.
 export CLAUDE_PUSH_ALWAYS=1
 
+# === Claude Code images in Rex ===
+# Claude Code draws images only in a terminal that it knows: kitty or Ghostty.
+# Rex reports the name "rex", so Claude Code shows text in place of an image.
+# Rex draws kitty graphics, because it uses libghostty. This variable tells
+# Claude Code to draw images. The image-peek mod needs it for its previews.
+if [ "$TERM_PROGRAM" = "rex" ]; then
+    export CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1
+fi
+
 # No banner and no sound on the Mac. The phone now rings for the same events, so
 # the Mac alert is a second interruption for one thing. The tmux tab colour still
 # shows the state of every session, and that is enough while you sit here.

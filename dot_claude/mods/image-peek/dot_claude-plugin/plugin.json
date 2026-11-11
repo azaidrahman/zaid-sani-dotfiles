@@ -1,0 +1,6 @@
+{
+  "name": "image-peek",
+  "version": "0.1.0",
+  "description": "Show thumbnails of the [Image #N] chips in the prompt box, above the prompt",
+  "types": "./types/index.d.ts"
+}
