@@ -97,6 +97,11 @@ run = 'layout floating'
 [[on-window-detected]]
 if.app-id = 'com.apple.clock'
 run = 'layout floating'
+# ChatGPT has a small window that stays on top of all other windows.
+# If the app is tiled, that window breaks the layout.
+[[on-window-detected]]
+if.app-id = 'com.openai.codex'
+run = 'layout floating'
 
 # Left monitor
 # Workspace 1 - Terminal/Apps
