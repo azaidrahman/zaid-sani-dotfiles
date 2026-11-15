@@ -127,7 +127,7 @@ hyper	⇪	⌘u	selHome	select to the start of the line
 hyper	⇪	⌘p	selEnd	select to the end of the line
 hyper	⇪	x	⌫	delete_or_backspace
 hyper	⇪	⇧x	⌦	delete_forward
-hyper	⇪	f	mission	mission control
+hyper	⇪	f	peek	alfred window peek (screenshots)
 hyper	⇪	c	clip	alfred clipboard
 hyper	⇪	s	snippet	alfred snippets
 hyper	⇪	z	zuno	alfred zuno search

@@ -1,0 +1,189 @@
+#!/bin/bash
+# winpeek: a window switcher for AeroSpace that shows a screenshot of each
+# window. The "Window Peek" Alfred workflow runs it. Hyper+F opens it.
+#
+# Usage:
+#   winpeek list        Print Alfred JSON: one row for each AeroSpace window.
+#   winpeek capture     Take a new screenshot of each window.
+#   winpeek focus <id>  Focus the window. AeroSpace goes to its workspace.
+#
+# The icon of a row is the last screenshot of the window. Press Shift or
+# Cmd+Y in Alfred to see the screenshot at full size (Quick Look).
+#
+# AeroSpace hides the windows of other workspaces off the screen, but macOS
+# still keeps their content. Thus "screencapture -l <window id>" gets the
+# current content of a hidden window. A capture takes about 0.1 seconds.
+#
+# The list does not wait for the captures. It shows the screenshots that are
+# in the cache, and it starts "winpeek capture" in the background. While the
+# capture runs, the list tells Alfred to run it again, so the new screenshots
+# show after a short time.
+#
+# Each screenshot has a new file name (<window id>.<time>.jpg). Alfred keeps
+# images in a cache by path, so a file with the same name can show an old
+# image.
+#
+# The screenshots can show private text. The cache directory has mode 0700.
+#
+# The Alfred workflow is in the Alfred sync folder. It holds only info.plist
+# and the icon. This script is in chezmoi.
+set -uo pipefail
+
+# Alfred runs scripts with a minimal PATH. Add Homebrew at the end, so that
+# the stubs of the tests come first.
+export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+umask 077
+
+CACHE="${WINPEEK_CACHE:-$HOME/Library/Caches/winpeek}"
+# Do not start a capture if the last capture started less than this many
+# seconds ago.
+MIN_INTERVAL="${WINPEEK_MIN_INTERVAL:-3}"
+# A lock that is older than this many seconds is from a capture that stopped.
+STALE_LOCK=20
+# The number of captures that run at the same time.
+JOBS=6
+LOCK="$CACHE/capture.lock"
+STAMP="$CACHE/last-capture"
+SELF="${BASH_SOURCE[0]}"
+
+aero_windows() {
+  aerospace list-windows --all --json \
+    --format '%{window-id} %{workspace} %{app-name} %{app-bundle-path} %{window-title}'
+}
+
+now() { date +%s; }
+
+mtime() { stat -f %m "$1" 2>/dev/null || echo 0; }
+
+# Remove the lock if it is stale. Return 0 if a capture runs.
+capture_running() {
+  [ -d "$LOCK" ] || return 1
+  if [ $(($(now) - $(mtime "$LOCK"))) -gt "$STALE_LOCK" ]; then
+    rmdir "$LOCK" 2>/dev/null
+    return 1
+  fi
+  return 0
+}
+
+# Start a capture in the background, unless one runs or one ran recently.
+# The capture must not keep stdout open, because Alfred waits for EOF.
+maybe_start_capture() {
+  capture_running && return 0
+  [ $(($(now) - $(mtime "$STAMP"))) -lt "$MIN_INTERVAL" ] && return 1
+  nohup "$SELF" capture </dev/null >/dev/null 2>&1 &
+  return 0
+}
+
+# Set SHOT to the newest screenshot of a window. Return 1 if there is none.
+# It sets a variable and does not print, so the caller needs no subshell.
+shot_for() {
+  local f best=0 m
+  SHOT=""
+  for f in "$CACHE/$1".*.jpg; do
+    [ -e "$f" ] || continue
+    m=${f##*/}; m=${m#*.}; m=${m%.jpg}
+    if [ "$m" -gt "$best" ]; then best=$m; SHOT=$f; fi
+  done
+  [ -n "$SHOT" ]
+}
+
+cmd_list() {
+  mkdir -p "$CACHE" && chmod 700 "$CACHE"
+  local windows focused rerun=false
+  if ! windows=$(aero_windows 2>/dev/null); then
+    printf '{"items":[{"title":"AeroSpace does not answer","subtitle":"Start AeroSpace, then try again","valid":false}]}\n'
+    return 0
+  fi
+  focused=$(aerospace list-windows --focused --format '%{window-id}' 2>/dev/null)
+
+  # A capture that starts now, or one that runs, gives new screenshots soon.
+  maybe_start_capture && rerun=true
+
+  # The newest screenshot of each window, as "<id> TAB <path>" lines.
+  local shots="" id
+  for id in $(jq -r '.[]."window-id"' <<<"$windows"); do
+    shot_for "$id" && shots+="$id"$'\t'"$SHOT"$'\n'
+  done
+
+  jq -n --argjson w "$windows" --arg shotlines "$shots" \
+    --arg focused "$focused" --argjson rerun "$rerun" '
+    ($shotlines | split("\n") | map(select(length > 0) | split("\t") | {(.[0]): .[1]})
+      | add // {}) as $shots
+    |
+    # Numbered workspaces first, in number order, then the named ones.
+    def wskey: (.workspace | tonumber? // 1e9) as $n | [$n, .workspace];
+    ($w | map(select((."window-id" | tostring) != $focused)) | sort_by(wskey))
+      + ($w | map(select((."window-id" | tostring) == $focused)))
+    | map(
+        (."window-id" | tostring) as $id
+        | ($shots[$id] // null) as $shot
+        | (if ."window-title" == "" then ."app-name" else ."window-title" end) as $title
+        | {
+            uid: $id,
+            title: $title,
+            subtitle: ("Workspace \(.workspace) · \(."app-name")"
+                       + (if $id == $focused then " · focused" else "" end)),
+            arg: $id,
+            match: "\(."app-name") \($title) \(.workspace)",
+            icon: (if $shot then {path: $shot}
+                   else {type: "fileicon", path: ."app-bundle-path"} end)
+          }
+          + (if $shot then {quicklookurl: $shot} else {} end)
+      )
+    | {items: .}
+      + (if $rerun then {rerun: 0.3} else {} end)
+      + (if length == 0 then
+           {items: [{title: "No windows", subtitle: "AeroSpace lists no windows", valid: false}]}
+         else {} end)
+  '
+}
+
+# Take one screenshot. Keep the old one if the capture fails, for example for
+# a minimized window.
+capture_one() {
+  local id=$1 stamp=$2 tmp="$CACHE/tmp-$1-$2.jpg" f
+  if screencapture -x -o -t jpg -l "$id" "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+    mv -f "$tmp" "$CACHE/$id.$stamp.jpg"
+    for f in "$CACHE/$id".*.jpg; do
+      [ "$f" = "$CACHE/$id.$stamp.jpg" ] || rm -f "$f"
+    done
+  else
+    rm -f "$tmp"
+  fi
+}
+
+cmd_capture() {
+  mkdir -p "$CACHE" && chmod 700 "$CACHE"
+  capture_running && return 0
+  mkdir "$LOCK" 2>/dev/null || return 0
+  trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+  touch "$STAMP"
+
+  local windows ids stamp f id
+  windows=$(aero_windows 2>/dev/null) || return 1
+  ids=$(jq -r '.[]."window-id"' <<<"$windows")
+  # Milliseconds, so two captures in the same second get different names.
+  stamp=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
+
+  printf '%s\n' $ids | xargs -P "$JOBS" -I{} "$SELF" capture-one {} "$stamp"
+
+  # Remove the screenshots of windows that closed.
+  for f in "$CACHE"/*.jpg; do
+    [ -e "$f" ] || continue
+    id=${f##*/}; id=${id%%.*}
+    grep -qx "$id" <<<"$ids" || rm -f "$f"
+  done
+}
+
+cmd_focus() {
+  [ -n "${1:-}" ] || { echo "usage: winpeek focus <window id>" >&2; return 2; }
+  aerospace focus --window-id "$1"
+}
+
+case "${1:-}" in
+  list) cmd_list ;;
+  capture) cmd_capture ;;
+  capture-one) capture_one "$2" "$3" ;; # internal: cmd_capture runs it
+  focus) shift; cmd_focus "$@" ;;
+  *) sed -n '2,12p' "$SELF" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+esac

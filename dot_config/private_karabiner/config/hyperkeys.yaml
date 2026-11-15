@@ -78,7 +78,7 @@ hyper:
     shift: delete_forward # ⌦
 
   f:
-    -: "!Tup_arrow" # mission | mission control
+    -: "!CTOSf" # peek | alfred window peek (screenshots)
 
   c:
     -: "!CTOSc" # clip | alfred clipboard
