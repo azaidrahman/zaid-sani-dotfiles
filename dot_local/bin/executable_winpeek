@@ -3,7 +3,7 @@
 # window. The "Window Peek" Alfred workflow runs it. Hyper+F opens it.
 #
 # Usage:
-#   winpeek list        Print Alfred JSON: one row for each AeroSpace window.
+#   winpeek list        Print Alfred JSON: one row for each window.
 #   winpeek capture     Take a new screenshot of each window.
 #   winpeek focus <id>  Focus the window. AeroSpace goes to its workspace.
 #
@@ -51,6 +51,55 @@ aero_windows() {
     --format '%{window-id} %{workspace} %{app-name} %{app-bundle-path} %{window-title}'
 }
 
+# Print the normal windows (layer 0) that are on a screen, from the window
+# list of macOS, as JSON. Each window has: id, pid, owner, title, w, h.
+cg_windows() {
+  osascript -l JavaScript - <<'JXA'
+ObjC.import('CoreGraphics');
+const list = ObjC.castRefToObject($.CGWindowListCopyWindowInfo(
+  $.kCGWindowListOptionOnScreenOnly | $.kCGWindowListExcludeDesktopElements, 0));
+const out = [];
+for (let i = 0; i < list.count; i++) {
+  const w = list.objectAtIndex(i);
+  const get = (k) => { const v = w.objectForKey(k); return v.isNil() ? null : ObjC.unwrap(v); };
+  if (get('kCGWindowLayer') !== 0 || get('kCGWindowAlpha') === 0) continue;
+  const b = ObjC.deepUnwrap(w.objectForKey('kCGWindowBounds'));
+  out.push({id: get('kCGWindowNumber'), pid: get('kCGWindowOwnerPID'),
+            owner: get('kCGWindowOwnerName'), title: get('kCGWindowName') || '',
+            w: b.Width, h: b.Height});
+}
+JSON.stringify(out);
+JXA
+}
+
+# Print all windows as one JSON array: the AeroSpace windows, then the other
+# windows that macOS lists. AeroSpace does not manage some windows, for
+# example the windows of Wine apps (CrossOver), because their accessibility
+# subrole is AXUnknown and not AXStandardWindow. Such a window has no
+# workspace and has the pid of its app. Skip the windows with no title, and
+# the small ones, because those are helper windows.
+# Return 1 if AeroSpace does not answer.
+all_windows() {
+  local cg_file aero cg
+  cg_file=$(mktemp "$CACHE/cg.XXXXXX") || return 1
+  cg_windows >"$cg_file" 2>/dev/null &
+  local cg_pid=$!
+  aero=$(aero_windows 2>/dev/null)
+  local aero_rc=$?
+  wait "$cg_pid"
+  cg=$(cat "$cg_file"); rm -f "$cg_file"
+  [ "$aero_rc" -eq 0 ] || return 1
+  jq -n --argjson aero "$aero" --arg cg "$cg" '
+    ($cg | fromjson? // []) as $cg
+    | ($aero | map(."window-id")) as $known
+    | $aero + ($cg
+        | map(select((.id as $id | $known | index($id) | not)
+                     and .title != "" and .w >= 100 and .h >= 100))
+        | map({"window-id": .id, workspace: null, "app-name": .owner,
+               "app-bundle-path": null, "window-title": .title, pid: .pid}))
+  '
+}
+
 now() { date +%s; }
 
 mtime() { stat -f %m "$1" 2>/dev/null || echo 0; }
@@ -90,7 +139,7 @@ shot_for() {
 cmd_list() {
   mkdir -p "$CACHE" && chmod 700 "$CACHE"
   local windows focused rerun=false
-  if ! windows=$(aero_windows 2>/dev/null); then
+  if ! windows=$(all_windows); then
     printf '{"items":[{"title":"AeroSpace does not answer","subtitle":"Start AeroSpace, then try again","valid":false}]}\n'
     return 0
   fi
@@ -110,8 +159,11 @@ cmd_list() {
     ($shotlines | split("\n") | map(select(length > 0) | split("\t") | {(.[0]): .[1]})
       | add // {}) as $shots
     |
-    # Numbered workspaces first, in number order, then the named ones.
-    def wskey: (.workspace | tonumber? // 1e9) as $n | [$n, .workspace];
+    # Numbered workspaces first, in number order, then the named ones, then
+    # the windows that AeroSpace does not manage.
+    def wskey:
+      if .workspace == null then [2e9, ""]
+      else (.workspace | tonumber? // 1e9) as $n | [$n, .workspace] end;
     ($w | map(select((."window-id" | tostring) != $focused)) | sort_by(wskey))
       + ($w | map(select((."window-id" | tostring) == $focused)))
     | map(
@@ -121,14 +173,16 @@ cmd_list() {
         | {
             uid: $id,
             title: $title,
-            subtitle: ("Workspace \(.workspace) · \(."app-name")"
+            subtitle: ((if .workspace == null then "Not tiled" else "Workspace \(.workspace)" end)
+                       + " · \(."app-name")"
                        + (if $id == $focused then " · focused" else "" end)),
-            arg: $id,
-            match: "\(."app-name") \($title) \(.workspace)",
-            icon: (if $shot then {path: $shot}
-                   else {type: "fileicon", path: ."app-bundle-path"} end)
+            # A window that AeroSpace does not manage is focused by its app.
+            arg: (if .pid then "\($id)/\(.pid)" else $id end),
+            match: "\(."app-name") \($title) \(.workspace // "")"
           }
-          + (if $shot then {quicklookurl: $shot} else {} end)
+          + (if $shot then {icon: {path: $shot}, quicklookurl: $shot}
+             elif ."app-bundle-path" then {icon: {type: "fileicon", path: ."app-bundle-path"}}
+             else {} end)
       )
     | {items: .}
       + (if $rerun then {rerun: 0.3} else {} end)
@@ -160,7 +214,7 @@ cmd_capture() {
   touch "$STAMP"
 
   local windows ids stamp f id
-  windows=$(aero_windows 2>/dev/null) || return 1
+  windows=$(all_windows) || return 1
   ids=$(jq -r '.[]."window-id"' <<<"$windows")
   # Milliseconds, so two captures in the same second get different names.
   stamp=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
@@ -175,9 +229,17 @@ cmd_capture() {
   done
 }
 
+# The argument is "<window id>" for an AeroSpace window, or
+# "<window id>/<pid>" for a window that AeroSpace does not manage. Bring the
+# app of such a window to the front.
 cmd_focus() {
-  [ -n "${1:-}" ] || { echo "usage: winpeek focus <window id>" >&2; return 2; }
-  aerospace focus --window-id "$1"
+  [ -n "${1:-}" ] || { echo "usage: winpeek focus <window id>[/<pid>]" >&2; return 2; }
+  case "$1" in
+    */*)
+      case "${1#*/}" in ''|*[!0-9]*) echo "winpeek: bad pid: $1" >&2; return 2 ;; esac
+      osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is ${1#*/}) to true" ;;
+    *) aerospace focus --window-id "$1" ;;
+  esac
 }
 
 case "${1:-}" in
