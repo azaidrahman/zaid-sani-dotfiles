@@ -86,10 +86,12 @@ window_pairs() {
 }
 
 # Print the normal windows (layer 0) that are on a screen, from the window
-# list of macOS, as JSON. Each window has: id, pid, owner, title, w, h.
+# list of macOS, as JSON. Each window has: id, pid, owner, bundle, title, w,
+# h. The bundle is the bundle ID of the app, or null. SKIP_APPS needs it.
 cg_windows() {
   osascript -l JavaScript - <<'JXA'
 ObjC.import('CoreGraphics');
+ObjC.import('AppKit');
 const list = ObjC.castRefToObject($.CGWindowListCopyWindowInfo(
   $.kCGWindowListOptionOnScreenOnly | $.kCGWindowListExcludeDesktopElements, 0));
 const out = [];
@@ -98,9 +100,11 @@ for (let i = 0; i < list.count; i++) {
   const get = (k) => { const v = w.objectForKey(k); return v.isNil() ? null : ObjC.unwrap(v); };
   if (get('kCGWindowLayer') !== 0 || get('kCGWindowAlpha') === 0) continue;
   const b = ObjC.deepUnwrap(w.objectForKey('kCGWindowBounds'));
-  out.push({id: get('kCGWindowNumber'), pid: get('kCGWindowOwnerPID'),
-            owner: get('kCGWindowOwnerName'), title: get('kCGWindowName') || '',
-            w: b.Width, h: b.Height});
+  const pid = get('kCGWindowOwnerPID');
+  const app = $.NSRunningApplication.runningApplicationWithProcessIdentifier(pid);
+  const bundle = (app.isNil() || app.bundleIdentifier.isNil()) ? null : ObjC.unwrap(app.bundleIdentifier);
+  out.push({id: get('kCGWindowNumber'), pid: pid, owner: get('kCGWindowOwnerName'), bundle: bundle,
+            title: get('kCGWindowName') || '', w: b.Width, h: b.Height});
 }
 JSON.stringify(out);
 JXA
@@ -155,7 +159,7 @@ all_windows() {
         | map(select((.id as $id | $known | index($id) | not)
                      and .title != "" and .w >= 100 and .h >= 100))
         | map({"window-id": .id, workspace: null, "app-pid": .pid, "app-name": .owner,
-               "app-bundle-id": null, "app-bundle-path": null, "window-title": .title}))
+               "app-bundle-id": .bundle, "app-bundle-path": null, "window-title": .title}))
   '
 }
 
@@ -355,7 +359,9 @@ cmd_capture() {
 
 # AeroSpace runs this when the focus changes. Take a screenshot of the window
 # that had the focus before, because its content can be new. Skip the
-# windows of SKIP_APPS.
+# windows of SKIP_APPS. If the bundle ID is not known, also skip the window,
+# because it can be a window of SKIP_APPS. An old record (from an older
+# winpeek) has no bundle ID. The next full capture gets such a window.
 cmd_on_focus() {
   mkdir -p "$CACHE" && chmod 700 "$CACHE"
   local current id pid bundle
@@ -363,7 +369,8 @@ cmd_on_focus() {
   read -r id pid bundle 2>/dev/null <"$LAST_FOCUS"
   printf '%s\n' "$current" >"$LAST_FOCUS"
   [ -n "${id:-}" ] && [ "$id" != "${current%% *}" ] || return 0
-  skipped_app "${bundle:-}" && return 0
+  [ -n "${bundle:-}" ] || return 0
+  skipped_app "$bundle" && return 0
   capture_pairs "$id $pid"
 }
 

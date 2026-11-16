@@ -158,9 +158,13 @@ check "on-focus takes a screenshot of the window that lost the focus" "1 0" \
   "$(ls "$WINPEEK_CACHE"/40.*.jpg 2>/dev/null | wc -l | tr -d ' ') $(ls "$WINPEEK_CACHE"/20.*.jpg 2>/dev/null | wc -l | tr -d ' ')"
 
 # winpeek takes no screenshot of a 1Password window, from a full capture or
-# from on-focus. The list removes an old screenshot of such a window, and
-# shows the app icon.
+# from on-focus. This includes a window that AeroSpace does not manage (91),
+# such as Quick Access. The list removes an old screenshot of such a window,
+# and shows the app icon.
 echo "[$(win 30 web 3 Vivaldi Docs),$(win 90 1 9 1Password Vault com.1password.1password)]" > "$TMP/windows.json"
+mv "$TMP/cg.json" "$TMP/cg.json.all"
+echo '[{"id":91,"pid":9,"owner":"1Password","bundle":"com.1password.1password","title":"Quick Access","w":700,"h":400}]' \
+  > "$TMP/cg.json"
 echo old > "$WINPEEK_CACHE/90.1.jpg"
 touch "$WINPEEK_CACHE/last-capture"
 out=$("$WINPEEK" list)
@@ -170,8 +174,18 @@ echo "90 9 com.1password.1password" > "$TMP/focused"
 "$WINPEEK" on-focus
 echo "30 3 com.test.Vivaldi" > "$TMP/focused"
 "$WINPEEK" on-focus
-check "no screenshot of a 1Password window; the list shows the app icon" "0 fileicon" \
-  "$(ls "$WINPEEK_CACHE"/90.*.jpg 2>/dev/null | wc -l | tr -d ' ') $(jq -r '.items[] | select(.uid == "90") | .icon.type' <<<"$out")"
+check "no screenshot of a 1Password window; the list shows the app icon" "0 0 fileicon" \
+  "$(ls "$WINPEEK_CACHE"/90.*.jpg 2>/dev/null | wc -l | tr -d ' ') $(ls "$WINPEEK_CACHE"/91.*.jpg 2>/dev/null | wc -l | tr -d ' ') $(jq -r '.items[] | select(.uid == "90") | .icon.type' <<<"$out")"
+mv "$TMP/cg.json.all" "$TMP/cg.json"
+
+# A record from an older winpeek has no bundle ID, so it can be a 1Password
+# window. on-focus takes no screenshot from it.
+rm -f "$WINPEEK_CACHE"/30.*.jpg
+echo "30 3" > "$WINPEEK_CACHE/last-focus"
+echo "90 9 com.1password.1password" > "$TMP/focused"
+"$WINPEEK" on-focus
+check "on-focus takes no screenshot from a record with no bundle ID" "0" \
+  "$(ls "$WINPEEK_CACHE"/30.*.jpg 2>/dev/null | wc -l | tr -d ' ')"
 
 rm -f "$TMP/windows.json"
 check "list: one item if AeroSpace does not answer" "AeroSpace does not answer" \
