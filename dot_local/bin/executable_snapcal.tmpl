@@ -1,0 +1,558 @@
+#!/usr/bin/env -S uv run --script --quiet
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
+"""Make calendar events from a screenshot.
+
+Run it with no argument to drag a region of the screen. Give a path to read
+an image file instead. Claude reads the image and finds the events. The
+HUD then shows the proposed events, with these options:
+
+1. Confirm: add the events to the calendar.
+2. Follow up question: ask Claude for a change in plain words, for
+   example "make it 45 minutes".
+3. Change calendar: select a different calendar for these events.
+4. Edit: edit the title, the time, the location, or the notes of one
+   event, or remove the event. With more than one event, select the
+   event first.
+
+The script writes the events to Calendar.app. Calendar.app syncs to Google,
+and Dot.app reads the same store, so the script needs no API credentials.
+
+Keyboard Maestro runs this script on hyper+d. The HUD is the timer-hud
+binary of the karabiner config, the same HUD that punch uses.
+
+Options:
+  --dry-run   Print the events as JSON. Show no HUD and write nothing.
+"""
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from contextlib import contextmanager
+from datetime import datetime, timedelta
+from pathlib import Path
+
+# Keyboard Maestro starts the script with a minimal PATH.
+os.environ["PATH"] = ":".join(
+    ["/opt/homebrew/bin", "/usr/local/bin", os.environ.get("PATH", "/usr/bin:/bin")])
+
+MODEL = "sonnet"
+# The main Google calendar has the name of its account. The address comes
+# from the chezmoi data, because this repository is public.
+DEFAULT_CALENDAR = "{{ .personalEmail }}"
+HUD = Path.home() / ".config/karabiner/scripts/timer-hud"
+LOG = Path.home() / ".local/state/snapcal.log"
+# The calendars that other tools own. The picker does not show them, or a
+# calendar with "holidays" in its name.
+HIDDEN = {"Task Punch", "Todoist", "Scheduled Reminders"}
+
+SCHEMA = {
+    "type": "object",
+    "properties": {
+        "events": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "start": {"type": "string",
+                              "description": "Local time, YYYY-MM-DDTHH:MM"},
+                    "end": {"type": "string",
+                            "description": "Local time, YYYY-MM-DDTHH:MM"},
+                    "all_day": {"type": "boolean"},
+                    "location": {"type": "string"},
+                    "notes": {"type": "string"},
+                },
+                "required": ["title", "start", "end", "all_day",
+                             "location", "notes"],
+            },
+        },
+    },
+    "required": ["events"],
+}
+
+PROMPT = """Read the image at {path}. Find each calendar event in it: a \
+meeting, appointment, deadline, booking, flight, or other item with a date.
+
+The current local time is {now} ({tz}). Resolve relative dates such as \
+"next Thursday" or "tomorrow" against this time. If the image gives a time in \
+another time zone, convert it to local time and write the original time in \
+the notes. If the image gives no year, use the next date that is not in the \
+past.
+
+For each event:
+- title: short and specific, as a person would write it in a calendar.
+- start and end: local time as YYYY-MM-DDTHH:MM.
+- If there is no end time, use 1 hour after the start.
+- If there is no time, set all_day to true, use 00:00 for start, and use \
+00:00 of the next day for end.
+- location: the place or the meeting link, or an empty string.
+- notes: other useful details from the image, such as a booking reference, \
+or an empty string.
+
+If the image has no event, return an empty list."""
+
+FOLLOW_UP = """
+
+You already read this image. These are the events that you found, after the \
+edits of the user:
+{events}
+
+The user asks for this change:
+{request}
+
+Apply the change and return the full list of events. Keep each event that \
+the change does not touch as it is."""
+
+# The text HUD shows this as the placeholder of the time field.
+WHEN_HINT = "2026-12-01 14:00 - 15:30  or  2026-12-01 all day"
+
+
+def log(msg: str) -> None:
+    """Append to the log. The log holds the text of the screenshots, so
+    only the user can read it."""
+    LOG.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    with os.fdopen(fd, "a") as f:
+        f.write(f"{datetime.now().isoformat(timespec='seconds')} {msg}\n")
+
+
+# --- HUD ---------------------------------------------------------------
+
+def toast(text: str) -> None:
+    """Show a short message. Notification Center drops the osascript and
+    the Keyboard Maestro notifications on this machine, so the HUD shows a
+    toast instead."""
+    try:
+        subprocess.Popen([str(HUD), "toast", text],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        pass
+
+
+@contextmanager
+def working(text: str):
+    """Show a toast for as long as the block runs."""
+    try:
+        proc = subprocess.Popen([str(HUD), "toast", "--hold", text],
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL)
+    except OSError:
+        proc = None
+    try:
+        yield
+    finally:
+        if proc:
+            proc.terminate()
+
+
+def pick(prompt: str, items: list[str], step: str, select: int = 0,
+         back: bool = False, search: bool = False, body: str = ""):
+    """Show the list picker. Return the index, "back", or None on escape."""
+    args = [str(HUD), "pick", "--select", str(select), "--step", step]
+    if back:
+        args.append("--back")
+    if search:
+        args.append("--search")
+    if body:
+        args += ["--body", body]
+    r = subprocess.run(args + [prompt, *items], capture_output=True,
+                       text=True, timeout=300)
+    out = r.stdout.strip()
+    if out == "back":
+        return "back"
+    try:
+        index = int(out)
+    except ValueError:
+        return None
+    return index if 0 <= index < len(items) else None
+
+
+def ask(prompt: str, step: str, value: str = "", placeholder: str = "",
+        allow_empty: bool = False) -> str | None:
+    """Ask for one line of text. Return the text, or None on escape."""
+    args = [str(HUD), "text", "--step", step, "--value", value]
+    if allow_empty:
+        args.append("--allow-empty")
+    r = subprocess.run(args + [prompt, placeholder], capture_output=True,
+                       text=True, timeout=300)
+    if r.returncode != 0:
+        return None
+    return r.stdout.rstrip("\n")
+
+
+# --- Claude ------------------------------------------------------------
+
+def extract(image: Path, events: list[dict] | None = None,
+            request: str = "") -> list[dict]:
+    """Return the events in the image. With a request, change the given
+    events as the user asks."""
+    now = datetime.now().astimezone()
+    prompt = PROMPT.format(path=image, now=now.strftime("%A %Y-%m-%d %H:%M"),
+                           tz=now.tzname())
+    if request:
+        prompt += FOLLOW_UP.format(events=json.dumps(events, indent=2),
+                                   request=request)
+    # The text in the image can try to give Claude instructions. Thus Claude
+    # gets the Read tool only, and --restricted confines the tool to the
+    # private directory that holds only the image. --restricted also skips
+    # the hooks and the plugins of the user settings, and
+    # --strict-mcp-config skips the MCP servers.
+    cmd = [
+        "claude", "-p", prompt,
+        "--model", MODEL,
+        "--output-format", "json",
+        "--json-schema", json.dumps(SCHEMA),
+        "--restricted",
+        "--tools", "Read",
+        "--allowedTools", "Read",
+        "--add-dir", str(image.parent),
+        "--no-session-persistence",
+        "--strict-mcp-config",
+    ]
+    r = subprocess.run(cmd, capture_output=True, text=True,
+                       cwd=image.parent, timeout=180)
+    if r.returncode != 0:
+        raise RuntimeError(f"claude failed: {(r.stderr or r.stdout).strip()[:300]}")
+    data = json.loads(r.stdout).get("structured_output")
+    if data is None:
+        raise RuntimeError("claude gave no structured output")
+    return data["events"]
+
+
+# --- Event text --------------------------------------------------------
+
+def when(ev: dict) -> str:
+    """Return the time of the event in the short form of the review list."""
+    start = datetime.fromisoformat(ev["start"])
+    end = datetime.fromisoformat(ev["end"])
+    if ev["all_day"]:
+        last = end - timedelta(days=1)
+        if last.date() <= start.date():
+            return f"{start:%a %d %b}, all day"
+        return f"{start:%a %d %b} – {last:%a %d %b}, all day"
+    if start.date() == end.date():
+        return f"{start:%a %d %b %H:%M}–{end:%H:%M}"
+    return f"{start:%a %d %b %H:%M} – {end:%a %d %b %H:%M}"
+
+
+def when_text(ev: dict) -> str:
+    """Return the time of the event in the form that parse_when reads."""
+    start = datetime.fromisoformat(ev["start"])
+    end = datetime.fromisoformat(ev["end"])
+    if ev["all_day"]:
+        return f"{start:%Y-%m-%d} all day"
+    if start.date() == end.date():
+        return f"{start:%Y-%m-%d %H:%M} - {end:%H:%M}"
+    return f"{start:%Y-%m-%d %H:%M} - {end:%Y-%m-%d %H:%M}"
+
+
+def parse_when(text: str) -> tuple[datetime, datetime, bool]:
+    """Read the time field. Return the start, the end, and the all-day flag.
+
+    Accepted forms:
+      2026-12-01 all day
+      2026-12-01 14:00 - 15:30
+      2026-12-01 22:00 - 2026-12-02 01:00
+    Raise ValueError for any other text.
+    """
+    text = " ".join(text.replace("–", "-").split())
+    lower = text.lower()
+    if lower.endswith("all day") or len(lower) == 10:
+        day = datetime.strptime(lower.removesuffix("all day").strip(), "%Y-%m-%d")
+        return day, day + timedelta(days=1), True
+    left, sep, right = text.partition(" - ")
+    if not sep:
+        raise ValueError(text)
+    start = datetime.strptime(left.strip(), "%Y-%m-%d %H:%M")
+    right = right.strip()
+    if len(right) <= 5:
+        t = datetime.strptime(right, "%H:%M")
+        end = start.replace(hour=t.hour, minute=t.minute)
+    else:
+        end = datetime.strptime(right, "%Y-%m-%d %H:%M")
+    if end <= start:
+        raise ValueError(text)
+    return start, end, False
+
+
+def short(text: str, width: int = 40) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= width else text[:width - 1] + "…"
+
+
+# --- Review ------------------------------------------------------------
+
+def plural(n: int, word: str) -> str:
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
+def details(ev: dict, calendar: str = "") -> str:
+    """Return the lines of the body card for one event."""
+    lines = [f"When:  {when(ev)}"]
+    if ev["location"]:
+        lines.append(f"Where:  {short(ev['location'], 60)}")
+    if calendar:
+        lines.append(f"Calendar:  {calendar}")
+    if ev["notes"]:
+        lines.append(f"Notes:  {short(ev['notes'], 60)}")
+    return "\n".join(lines)
+
+
+def summary(events: list[dict], calendar: str) -> str:
+    """Return the lines of the body card for more than one event."""
+    lines = [f"{i}.  {short(e['title'], 30)}  ·  {when(e)}"
+             for i, e in enumerate(events, 1)]
+    lines.append(f"Calendar:  {calendar}")
+    return "\n".join(lines)
+
+
+def edit_event(ev: dict) -> dict | None:
+    """Edit one event. Return the event, or None if the user removed it."""
+    select = 0
+    while True:
+        items = ["Title", "When", "Location", "Notes", "Remove this event"]
+        choice = pick(short(ev["title"], 50), items, "Edit event",
+                      select=select, back=True, body=details(ev))
+        if choice in (None, "back"):
+            return ev
+        select = choice
+        if choice == 0:
+            text = ask("Title", "Edit event", value=ev["title"])
+            if text:
+                ev["title"] = text
+        elif choice == 1:
+            value = when_text(ev)
+            while True:
+                text = ask("When", "Edit event", value=value,
+                           placeholder=WHEN_HINT)
+                if text is None:
+                    break
+                try:
+                    start, end, all_day = parse_when(text)
+                except ValueError:
+                    toast("Use the form 2026-12-01 14:00 - 15:30")
+                    value = text
+                    continue
+                ev["start"] = start.strftime("%Y-%m-%dT%H:%M")
+                ev["end"] = end.strftime("%Y-%m-%dT%H:%M")
+                ev["all_day"] = all_day
+                break
+        elif choice == 2:
+            text = ask("Location", "Edit event", value=ev["location"],
+                       allow_empty=True)
+            if text is not None:
+                ev["location"] = text
+        elif choice == 3:
+            text = ask("Notes", "Edit event", value=ev["notes"],
+                       allow_empty=True)
+            if text is not None:
+                ev["notes"] = text
+        else:
+            return None
+
+
+def edit(events: list[dict]) -> list[dict]:
+    """Edit the events. With more than one event, ask which event first.
+    Return the events after the edits."""
+    events = list(events)
+    select = 0
+    while events:
+        if len(events) == 1:
+            i = 0
+        else:
+            items = [f"{short(e['title'], 30)} · {when(e)}" for e in events]
+            i = pick("Which event?", items, "Edit event", select=select,
+                     back=True)
+            if i in (None, "back"):
+                return events
+            select = i
+        changed = edit_event(dict(events[i]))
+        if changed is None:
+            events.pop(i)
+            select = 0
+        else:
+            events[i] = changed
+        if len(events) <= 1:
+            return events
+    return events
+
+
+def pick_calendar(current: str) -> str:
+    names = writable_calendars()
+    select = names.index(current) if current in names else 0
+    choice = pick("Change calendar", names, "Calendar", select=select,
+                  back=True, search=True)
+    return names[choice] if isinstance(choice, int) else current
+
+
+def follow_up(image: Path, events: list[dict]) -> list[dict]:
+    """Ask Claude to change the events. Return the new events, or the old
+    events if the user cancelled or Claude failed."""
+    request = ask("Follow up question", "Follow up",
+                  placeholder="e.g. it is on the 19th, make it 45 minutes")
+    if not request:
+        return events
+    try:
+        with working("Asking Claude…"):
+            changed = extract(image, events, request)
+    except Exception as exc:
+        log(f"error: {exc}")
+        toast(f"Claude failed: {short(str(exc), 60)}")
+        return events
+    log(f"changed with {request!r}: {json.dumps(changed)}")
+    return changed
+
+
+def review(image: Path, events: list[dict]) -> tuple[list[dict], str] | None:
+    """Show the proposal until the user confirms or cancels.
+
+    Return the events and the calendar, or None if the user cancelled.
+    """
+    calendar = DEFAULT_CALENDAR
+    select = 0
+    while True:
+        if not events:
+            choice = pick("No events found", ["Follow up question", "Cancel"],
+                          "Event proposed")
+            if choice != 0:
+                return None
+            events = follow_up(image, events)
+            continue
+        if len(events) == 1:
+            step = "Event proposed"
+            prompt = short(events[0]["title"], 50)
+            body = details(events[0], calendar)
+        else:
+            step = plural(len(events), "event") + " proposed"
+            prompt = plural(len(events), "event")
+            body = summary(events, calendar)
+        items = ["Confirm", "Follow up question", "Change calendar", "Edit"]
+        choice = pick(prompt, items, step, select=select, body=body)
+        if choice in (None, "back"):
+            return None
+        select = choice
+        if choice == 0:
+            return events, calendar
+        if choice == 1:
+            events = follow_up(image, events)
+        elif choice == 2:
+            calendar = pick_calendar(calendar)
+        else:
+            events = edit(events)
+
+
+# --- Calendar.app ------------------------------------------------------
+
+def osascript(script: str, *args: str) -> str:
+    r = subprocess.run(["osascript", "-", *args], input=script,
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(f"osascript failed: {r.stderr.strip() or 'no output'}")
+    return r.stdout.rstrip("\n")
+
+
+def writable_calendars() -> list[str]:
+    script = '''
+tell application "Calendar"
+  set out to {}
+  repeat with c in calendars
+    if writable of c then set end of out to name of c
+  end repeat
+end tell
+set AppleScript's text item delimiters to linefeed
+return out as text'''
+    seen: list[str] = []
+    for name in osascript(script).splitlines():
+        if (name not in HIDDEN and "holidays" not in name.lower()
+                and name not in seen):
+            seen.append(name)
+    return seen
+
+
+# Build the dates from components, because AppleScript parses a date string
+# with the locale of the machine.
+_CREATE = '''
+on mkdate(y, m, d, h, mi)
+  set t to current date
+  set day of t to 1
+  set year of t to y as integer
+  set month of t to m as integer
+  set day of t to d as integer
+  set hours of t to h as integer
+  set minutes of t to mi as integer
+  set seconds of t to 0
+  return t
+end mkdate
+
+on run argv
+  set {calName, t, loc, notes, allDay} to items 1 thru 5 of argv
+  set s to mkdate(item 6 of argv, item 7 of argv, item 8 of argv, item 9 of argv, item 10 of argv)
+  set e to mkdate(item 11 of argv, item 12 of argv, item 13 of argv, item 14 of argv, item 15 of argv)
+  tell application "Calendar" to tell calendar calName
+    set ev to make new event with properties {summary:t, start date:s, end date:e, location:loc, description:notes, allday event:(allDay is "true")}
+    return uid of ev
+  end tell
+end run'''
+
+
+def create(calendar: str, ev: dict) -> str:
+    s = datetime.fromisoformat(ev["start"])
+    e = datetime.fromisoformat(ev["end"])
+    parts = [str(x) for d in (s, e) for x in (d.year, d.month, d.day, d.hour, d.minute)]
+    return osascript(_CREATE, calendar, ev["title"], ev["location"],
+                     ev["notes"], "true" if ev["all_day"] else "false", *parts)
+
+
+# --- Main --------------------------------------------------------------
+
+def main(argv: list[str]) -> int:
+    dry = "--dry-run" in argv
+    paths = [a for a in argv if not a.startswith("--")]
+    # The temporary directory holds the screenshot until the review ends,
+    # because a follow-up request sends the image to Claude again.
+    with tempfile.TemporaryDirectory(prefix="snapcal-") as tmp:
+        # The image is always in the private directory, so Claude can read
+        # no other file. A given path is copied there.
+        image = Path(tmp) / "shot.png"
+        if paths:
+            shutil.copyfile(Path(paths[0]).expanduser(), image)
+        else:
+            # No -x flag: the shutter sound tells the user that the capture
+            # worked.
+            subprocess.run(["screencapture", "-i", str(image)], check=False)
+            if not image.exists():
+                return 0  # The user pressed escape.
+        if dry:
+            events = extract(image)
+        else:
+            with working("Screenshot captured\nClaude is reading the events…"):
+                events = extract(image)
+        log(f"extracted {json.dumps(events)}")
+        if dry:
+            print(json.dumps(events, indent=2))
+            return 0
+        result = review(image, events)
+    if result is None:
+        return 0
+    events, calendar = result
+    for ev in events:
+        log(f"created {create(calendar, ev)} in {calendar}: {ev['title']}")
+    n = len(events)
+    toast(f"Added {n} event{'s' if n != 1 else ''} to {calendar}")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except Exception as exc:  # Show every failure, because KM hides stderr.
+        log(f"error: {exc}")
+        if "--dry-run" in sys.argv:
+            raise
+        toast(f"snapcal failed: {short(str(exc), 60)} (see {LOG.name})")
+        sys.exit(1)

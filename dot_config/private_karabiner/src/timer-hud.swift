@@ -341,8 +341,15 @@ if CommandLine.arguments.count >= 2 && CommandLine.arguments[1] == "pill" {
 // Toast mode: a short bottom-center message, no timer plist, no ticker.
 // The punch tracker uses this because Notification Center drops
 // its notifications on this machine.
+//
+//   timer-hud toast [--hold] "<text>"
+//
+// With --hold, the toast stays until the caller kills the process, or
+// for 180 seconds. A caller uses it to show that a slow job runs.
 if CommandLine.arguments.count >= 3 && CommandLine.arguments[1] == "toast" {
-    let text = CommandLine.arguments[2]
+    let hold = CommandLine.arguments[2] == "--hold"
+    guard !hold || CommandLine.arguments.count >= 4 else { exit(2) }
+    let text = CommandLine.arguments[hold ? 3 : 2]
 
     let maxWidth: CGFloat = 420
     let padding: CGFloat = 16
@@ -355,17 +362,15 @@ if CommandLine.arguments.count >= 3 && CommandLine.arguments[1] == "toast" {
     label.lineBreakMode = .byWordWrapping
     label.maximumNumberOfLines = 0
 
-    // Measure the text so the toast hugs it, wrapping only past maxWidth.
-    let attrs = [NSAttributedString.Key.font: font]
-    let unwrapped = (text as NSString).size(withAttributes: attrs)
-    let textWidth = min(unwrapped.width, maxWidth - padding * 2)
-    let boundingBox = (text as NSString).boundingRect(
-        with: NSSize(width: textWidth, height: .greatestFiniteMagnitude),
-        options: [.usesLineFragmentOrigin],
-        attributes: attrs)
+    // Measure the label itself so the toast hugs it, wrapping only past
+    // maxWidth. The cell adds its own inset, so a size from NSString is a
+    // few points too small and the label clips the last line.
+    let fit = label.cell!.cellSize(forBounds: NSRect(
+        x: 0, y: 0, width: maxWidth - padding * 2,
+        height: .greatestFiniteMagnitude))
 
-    let toastWidth = ceil(boundingBox.width) + padding * 2
-    let toastHeight = ceil(boundingBox.height) + padding * 2
+    let toastWidth = ceil(fit.width) + padding * 2
+    let toastHeight = ceil(fit.height) + padding * 2
 
     let toastView = NSView(frame: NSRect(x: 0, y: 0, width: toastWidth, height: toastHeight))
     toastView.wantsLayer = true
@@ -397,7 +402,7 @@ if CommandLine.arguments.count >= 3 && CommandLine.arguments[1] == "toast" {
 
     toastPanel.orderFront(nil)
 
-    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + (hold ? 180 : 2.5)) {
         app.terminate(nil)
     }
 
@@ -530,10 +535,13 @@ if CommandLine.arguments.count >= 3 && CommandLine.arguments[1] == "score" {
 // named "skip" must stay expressible. The digits variant accepts digit
 // keys only and refuses an empty confirm.
 //
-//   timer-hud text [--step "<label>"] [--allow-empty] "<prompt>" ["<placeholder>"]
+//   timer-hud text [--step "<label>"] [--allow-empty] [--value "<text>"] \
+//       "<prompt>" ["<placeholder>"]
 //   timer-hud digits [--step "<label>"] "<prompt>" ["<placeholder>"]
 //
 // With --allow-empty, the return key on a blank line prints an empty line.
+// With --value, the field starts with that text, so the user can edit a
+// value instead of typing it again.
 //
 if CommandLine.arguments.count >= 3 &&
    (CommandLine.arguments[1] == "text" || CommandLine.arguments[1] == "digits") {
@@ -544,6 +552,7 @@ if CommandLine.arguments.count >= 3 &&
     // --allow-empty lets the return key confirm a blank line. The caller
     // uses it for an answer that is optional.
     var allowEmpty = false
+    var initialValue = ""
     flags: while argIndex < CommandLine.arguments.count {
         switch CommandLine.arguments[argIndex] {
         case "--step" where argIndex + 1 < CommandLine.arguments.count:
@@ -552,6 +561,9 @@ if CommandLine.arguments.count >= 3 &&
         case "--allow-empty":
             allowEmpty = true
             argIndex += 1
+        case "--value" where argIndex + 1 < CommandLine.arguments.count:
+            initialValue = CommandLine.arguments[argIndex + 1]
+            argIndex += 2
         default:
             break flags
         }
@@ -590,6 +602,7 @@ if CommandLine.arguments.count >= 3 &&
     let field = NSTextField(frame: NSRect(x: 24, y: 44, width: panelWidth - 48, height: 28))
     field.font = hudFont(ofSize: 14, weight: .regular)
     field.placeholderString = placeholder
+    field.stringValue = initialValue
     field.wantsLayer = true
     field.layer?.cornerRadius = 8
     field.focusRingType = .none
@@ -916,8 +929,12 @@ if CommandLine.arguments.count >= 7 && CommandLine.arguments[1] == "time" {
 // timeout.
 //
 //   timer-hud pick [--select <n>] [--step "<label>"] [--back] [--search] \
-//       [--ctrl-key <char>=<token>] "<prompt>" "<item>" "<item>" ...
+//       [--ctrl-key <char>=<token>] [--body "<text>"] \
+//       "<prompt>" "<item>" "<item>" ...
 //
+// --body shows more text under the prompt, one line for each line of the
+// text. The caller uses it to show the details of the item that the pick
+// asks about.
 // --step names the step of a multi-step flow and turns on the n key,
 // which takes the highlighted item. --back turns on the p key, which
 // prints back and lets the caller show the step before this one.
@@ -936,8 +953,12 @@ if CommandLine.arguments.count >= 4 && CommandLine.arguments[1] == "pick" {
     var canSearch = false
     var ctrlChar = ""
     var ctrlToken = ""
+    var body = ""
     flags: while argIndex < CommandLine.arguments.count {
         switch CommandLine.arguments[argIndex] {
+        case "--body" where argIndex + 1 < CommandLine.arguments.count:
+            body = CommandLine.arguments[argIndex + 1]
+            argIndex += 2
         case "--select" where argIndex + 1 < CommandLine.arguments.count:
             selected = Int(CommandLine.arguments[argIndex + 1]) ?? 0
             argIndex += 2
@@ -1012,8 +1033,12 @@ if CommandLine.arguments.count >= 4 && CommandLine.arguments[1] == "pick" {
     let rowHeight: CGFloat = 32
     let searchArea: CGFloat = canSearch ? 24 : 0
     let headArea: CGFloat = (stepLabel.isEmpty ? 42 : 62) + searchArea
+    let bodyLines = body.isEmpty ? [] : body.components(separatedBy: "\n")
+    let bodyLineHeight: CGFloat = 19
+    let bodyArea: CGFloat = bodyLines.isEmpty
+        ? 0 : bodyLineHeight * CGFloat(bodyLines.count) + 22
     let footArea: CGFloat = 34
-    let panelHeight = headArea + rowHeight * CGFloat(visible) + footArea
+    let panelHeight = headArea + bodyArea + rowHeight * CGFloat(visible) + footArea
 
     let root = NSView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight))
     root.wantsLayer = true
@@ -1041,6 +1066,28 @@ if CommandLine.arguments.count >= 4 && CommandLine.arguments[1] == "pick" {
                               y: panelHeight - (stepLabel.isEmpty ? 54 : 74),
                               width: panelWidth - 28, height: 18)
     if canSearch { root.addSubview(queryLabel) }
+
+    // The body sits in a card between the prompt and the rows. Each line
+    // is its own label, so a long line truncates and never wraps.
+    if !bodyLines.isEmpty {
+        let card = NSView(frame: NSRect(x: 14, y: panelHeight - headArea - bodyArea + 8,
+                                        width: panelWidth - 28, height: bodyArea - 12))
+        card.wantsLayer = true
+        card.layer?.backgroundColor = hudGray(1, 0.04).cgColor
+        card.layer?.cornerRadius = 8
+        for (i, line) in bodyLines.enumerated() {
+            let label = NSTextField(labelWithString: line)
+            label.font = hudFont(ofSize: 13, weight: .regular)
+            label.textColor = hudGray(1, 0.8)
+            label.lineBreakMode = .byTruncatingTail
+            label.frame = NSRect(
+                x: 12,
+                y: card.frame.height - 5 - bodyLineHeight * CGFloat(i + 1),
+                width: card.frame.width - 24, height: bodyLineHeight - 2)
+            card.addSubview(label)
+        }
+        root.addSubview(card)
+    }
 
     var rows: [NSView] = []
     var numbers: [NSTextField] = []
