@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Actions</key>
+	<array>
+		<dict>
+			<key>ActionUID</key>
+			<integer>4101</integer>
+			<key>DisplayKind</key>
+			<string>None</string>
+			<key>HonourFailureSettings</key>
+			<true/>
+			<key>IncludeStdErr</key>
+			<true/>
+			<key>IncludedVariables</key>
+			<array>
+				<string>9999</string>
+			</array>
+			<key>MacroActionType</key>
+			<string>ExecuteShellScript</string>
+			<key>Path</key>
+			<string></string>
+			<key>Source</key>
+			<string>Nothing</string>
+			<key>Text</key>
+			<string>/opt/homebrew/bin/uv run --script --quiet "$HOME/.local/bin/snapcal"</string>
+			<key>TimeOutAbortsMacro</key>
+			<true/>
+			<key>TrimResults</key>
+			<true/>
+			<key>TrimResultsNew</key>
+			<true/>
+			<key>UseText</key>
+			<true/>
+		</dict>
+	</array>
+	<key>Name</key>
+	<string>Screenshot to Calendar</string>
+	<key>Triggers</key>
+	<array>
+		<dict>
+			<key>FireType</key>
+			<string>Pressed</string>
+			<key>KeyCode</key>
+			<integer>2</integer>
+			<key>MacroTriggerType</key>
+			<string>HotKey</string>
+			<key>Modifiers</key>
+			<integer>6912</integer>
+		</dict>
+	</array>
+	<key>UID</key>
+	<string>0D59B814-A555-4725-93B1-29A652474362</string>
+</dict>
+</plist>
