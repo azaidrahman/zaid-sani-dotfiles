@@ -66,14 +66,19 @@ echo "notify $*" >> "$STUB_LOG"
 EOF
 # osascript: the bookmark script only reads a file, so it runs for real.
 # "make new window" adds window 20 to the AeroSpace windows, and returns the
-# Vivaldi id 777. "vivaldi.js windows" returns $STUB_VIV, and
+# Vivaldi id 777. If the last argument is a URL, "new-window <URL>" goes to
+# the log. "vivaldi.js windows" returns $STUB_VIV, and
 # "vivaldi.js window-title" returns $STUB_WTITLE. Key codes and window
 # closes go to the log.
 cat > "$TMP/bin/osascript" <<'EOF'
 #!/bin/sh
 case "$*" in
   *bookmarks.js*) exec /usr/bin/osascript "$@" ;;
-  *"make new window"*) echo 20 >> "$STUB_DIR/windows"; echo 777; exit 0 ;;
+  *"make new window"*)
+    echo 20 >> "$STUB_DIR/windows"
+    for last; do :; done
+    case "$last" in http*) echo "new-window $last" >> "$STUB_LOG" ;; esac
+    echo 777; exit 0 ;;
   *vivaldi.js*windows) printf '%s\n' "$STUB_VIV"; exit 0 ;;
   *vivaldi.js*window-empty*) echo "$STUB_EMPTY"; exit 0 ;;
   *vivaldi.js*window-title*) echo "$STUB_WTITLE"; exit 0 ;;
@@ -166,7 +171,7 @@ run "driver override" 0 "log=tab gmail Work https://example.com/u/1" notify - ta
 run "unknown tab" 2 "unknown tab nope" "log=tab" - tab nope
 run "use" 0 "state=fake;;osascript -l JavaScript $home/lib/set-default.js com.example.fake" notify gone use fake
 run "tabs not supported" 0 'fake cannot list tabs;;"valid":false' notify - tabs
-run "bookmarks of all spaces" 0 'Work board;;Home recipes;;"arg":"https://example.com/board";;"variables":{"space":"Zaid"}' "Untagged page" - bookmarks
+run "bookmarks of all spaces" 0 'Work board;;Home recipes;;"arg":"https://example.com/board";;"variables":{"space":"Zaid"};;"cmd":{"subtitle":"New window · https://example.com/board","arg":"https://example.com/board","variables":{"window":"new"}}' "Untagged page" - bookmarks
 run "open a URL in a space" 0 "log=open-in Zaid 3 https://example.com/recipes" notify - open-in Zaid https://example.com/recipes
 run "open --float: a driver that cannot float opens the URL" 0 "log=open -b com.example.fake https://example.com/todo" notify - \
   open --float https://example.com/todo https://example.com/todo
@@ -187,6 +192,12 @@ BROWSER_DRIVER=vivaldi STUB_FOCUSED=10 STUB_TITLES='10|false|false|Mail - Vivald
 BROWSER_DRIVER=vivaldi STUB_FOCUSED=20 STUB_TITLES='10|false|false|Mail - Vivaldi' STUB_EMPTY=yes \
   run "own window: keep the new window when it shows an empty workspace" 0 "key 20" close - \
   space-window Zaid
+# A new window shows no workspace. Load the URL in it, focus it, and send no
+# workspace key.
+BROWSER_DRIVER=vivaldi \
+  run "open-window: open the URL in a new window" 0 \
+  "new-window https://example.com/recipes;;aerospace focus --window-id 20" "key " - \
+  open-window https://example.com/recipes
 BROWSER_DRIVER=vivaldi STUB_TITLES='10|false|false|Mail - Vivaldi' STUB_VIV=$'normal\t1\tMail' \
   run "no space: ⌃⇧1 (key code 18) shows the tabs in no workspace" 0 \
   "aerospace focus --window-id 10;;key 18" - - no-space

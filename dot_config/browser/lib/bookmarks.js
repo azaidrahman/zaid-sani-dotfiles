@@ -9,6 +9,8 @@
 // space. The bookmarks of the current space come first, then the other
 // spaces in order. The arg of each item is the URL of the bookmark, and the
 // item variable "space" is its space: Alfred gives it to the next action.
+// With ⌘, the item variable "window" is "new" in place of "space": the next
+// action then opens the URL in a new window that shows no space.
 ObjC.import('Foundation');
 
 function item(title, subtitle) {
@@ -49,6 +51,7 @@ function run(argv) {
         subtitle: `${space} · ${b.arg}`,
         arg: b.arg,
         variables: { space },
+        mods: { cmd: { subtitle: `New window · ${b.arg}`, arg: b.arg, variables: { window: 'new' } } },
         match: `${b.title} ${b.arg} ${space} ${tags.join(' ')}`,
       },
     });

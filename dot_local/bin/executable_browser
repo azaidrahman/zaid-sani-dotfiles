@@ -20,6 +20,8 @@
 #                                   floating window
 #   browser open-in <space> <url>   show the space, then focus the tab of
 #                                   the URL in it, or open the URL there
+#   browser open-window <url>       open the URL in a new window that
+#                                   shows no space
 #   browser use <driver>            use the driver, and make its browser
 #                                   the default browser
 #   browser current                 print the name of the active driver
@@ -27,7 +29,7 @@
 # Each browser has a driver: $BROWSER_HOME/drivers/<name>.sh. A driver sets
 # DRIVER_APP and DRIVER_BUNDLE, and defines one function for each action that
 # it can do: drv_space, drv_space_window, drv_no_space, drv_tab, drv_tabs,
-# drv_focus_tab, drv_focus_url, drv_open_in, drv_float, and
+# drv_focus_tab, drv_focus_url, drv_open_in, drv_open_window, drv_float, and
 # drv_current_space.
 # If the driver cannot do an action, or the action fails, the command shows a
 # notification. "browser tabs" and "browser bookmarks" show the error as an
@@ -75,7 +77,7 @@ fail() {
 }
 
 usage() {
-  sed -n '3,26s/^# \{0,1\}//p' "$0" >&2
+  sed -n '3,28s/^# \{0,1\}//p' "$0" >&2
   fail 2 "unknown action: ${action:-none}"
 }
 
@@ -171,7 +173,7 @@ case "$action" in
     echo "browser: now using $1"
     exit 0
     ;;
-  space | space-window | no-space | tab | tabs | bookmarks | focus-tab | open | open-in) ;;
+  space | space-window | no-space | tab | tabs | bookmarks | focus-tab | open | open-in | open-window) ;;
   *) usage ;;
 esac
 
@@ -233,5 +235,9 @@ case "$action" in
     [ $# -eq 2 ] || usage
     index=$(space_index "$1") || fail 2 "unknown space $1"
     call drv_open_in "$1" "$index" "$2"
+    ;;
+  open-window)
+    [ $# -eq 1 ] || usage
+    call drv_open_window "$1"
     ;;
 esac
