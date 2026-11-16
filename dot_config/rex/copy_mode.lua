@@ -5,7 +5,12 @@
 -- read-only nvim buffer. Press v or V to select text, then y to copy it and
 -- quit. Press q to quit without a copy. See scripts/copy-mode-nvim.lua.
 --
--- To run the action without the key, use `rex do copy_mode`.
+-- The copy_jump action opens the same float, but it starts with a jump. Type
+-- the start of a word, then press the label of the match to put the cursor
+-- there. Then select and copy as in copy mode.
+--
+-- To run an action without the key, use `rex do copy_mode` or
+-- `rex do copy_jump`.
 
 local SHELL = "com.superlogical.terminal.shell"
 
@@ -20,7 +25,8 @@ local GATE = 'exec "${REX_COPY_MODE:-${XDG_CONFIG_HOME:-$HOME/.config}/rex/scrip
 -- The float fills this fraction of the window, as in diff_review.lua.
 local WIDTH, HEIGHT = 0.98, 0.96
 
-local function open(ctx)
+-- mode is "jump" for copy_jump. It is nil for copy_mode.
+local function open(ctx, mode)
   local view = assert(rex.session.view{ session_id = ctx.session_id })
   local block_id = ctx.block_id
   if not block_id then
@@ -41,7 +47,7 @@ local function open(ctx)
       flavor = SHELL,
       label = "copy",
       options = {
-        command = { "sh", "-c", GATE, "copy-mode.sh", ctx.session_id or "", block_id },
+        command = { "sh", "-c", GATE, "copy-mode.sh", ctx.session_id or "", block_id, mode },
       },
     },
   })
@@ -55,4 +61,12 @@ rex.action{
   description = "Copy text from the focused pane. Move with vim keys, select with v, then press y to copy.",
   keywords = "copy mode scrollback select yank vim",
   run = function(ctx) return open(ctx) end,
+}
+
+rex.action{
+  name = "copy_jump",
+  title = "Copy Mode: Jump",
+  description = "Copy mode that starts with a jump. Type the start of a word, then press its label.",
+  keywords = "copy mode jump flash search word select yank vim",
+  run = function(ctx) return open(ctx, "jump") end,
 }
