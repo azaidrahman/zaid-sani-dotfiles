@@ -6,7 +6,7 @@ set -u
 EVENT="${1:-}"
 PANE="${TMUX_PANE:-}"
 # Which agent is talking. Claude Code leaves this unset; the pi extension sets
-# CLAUDE_NOTIFY_AGENT=pi so banners and pushes say who finished.
+# CLAUDE_NOTIFY_AGENT=pi so banners say who finished.
 AGENT="${CLAUDE_NOTIFY_AGENT:-Claude Code}"
 AGENT_SHORT="${CLAUDE_NOTIFY_AGENT:-Claude}"
 
@@ -15,14 +15,6 @@ AGENT_SHORT="${CLAUDE_NOTIFY_AGENT:-Claude}"
 HOOK_LIB="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib"
 . "$HOOK_LIB/tmux-lib.sh"
 
-# The phone sink is optional. chezmoi could apply this hook before the library, so a
-# missing module degrades to a no-op instead of breaking every notification.
-if [ -f "$HOOK_LIB/push-telegram.sh" ]; then
-    . "$HOOK_LIB/push-telegram.sh"
-else
-    push_telegram() { :; }
-fi
-
 SESSION=$(tq '#{session_name}'); SESSION=${SESSION:-unknown}
 WINDOW=$(tq '#{window_index}'); WINDOW=${WINDOW:-0}
 WIN_ID=$(tq '#{window_id}')
@@ -30,9 +22,6 @@ WNAME=$(tq '#{window_name}'); WNAME=${WNAME:-claude}
 LOGO="$HOME/.claude/claude-logo.png"
 LOG_ALERT="$HOME/.tmux/scripts/log-alert.sh"
 FOCUS_DB="$HOME/Library/DoNotDisturb/DB/Assertions.json"
-
-# Seconds the finished turn ran, set once by the stop handler. Empty when unknown.
-TURN_ELAPSED=""
 
 # Focus modes in which an audible cue is unwelcome regardless of how blocked the
 # session is. Everything else (Work, Personal, Do Not Disturb, Reduce Interruptions)
@@ -224,7 +213,8 @@ clear_pane_state() {
     recompute_window_state
 }
 
-# notify <tier> <message> <status> — tier is `attn` (Claude needs you) or `done` (turn
+
+# notify <tier> <message> — tier is `attn` (Claude needs you) or `done` (turn
 # finished). The tier decides three things:
 #
 #   sound  — both tiers chime, but with deliberately dissimilar samples so the two
@@ -248,113 +238,6 @@ active_focus_mode() {
     [ -f "$FOCUS_DB" ] || return 0
     jq -r '.data[0].storeAssertionRecords[]?.assertionDetails.assertionDetailsModeIdentifier // empty' \
         "$FOCUS_DB" 2>/dev/null | head -n 1
-}
-
-# Seconds since the last keyboard or mouse input, empty if the probe fails. IOKit
-# reports this in nanoseconds. $CLAUDE_PUSH_IOREG exists so the tests can point the
-# probe at a path that does not exist.
-hid_idle_secs() {
-    "${CLAUDE_PUSH_IOREG:-ioreg}" -c IOHIDSystem 2>/dev/null \
-        | awk '/HIDIdleTime/ { print int($NF / 1000000000); exit }'
-}
-
-# True when the screen is locked. The key is absent while unlocked, and some macOS
-# versions report it as false instead, so test the value rather than the key.
-screen_locked() {
-    "${CLAUDE_PUSH_IOREG:-ioreg}" -n Root -d1 -a 2>/dev/null \
-        | grep -A1 'CGSSessionScreenIsLocked' \
-        | grep -q '<true/>'
-}
-
-# True when you are away from this Mac, which is the only time the phone should ring.
-# While you are at the keyboard the Mac notification already has your attention, and
-# a second buzz in your pocket is pure noise — which is how a topic ends up muted.
-#
-# A lock counts as away on its own. If you lock the screen and walk off, idle time is
-# still near zero for the next few minutes, and that is exactly the window where the
-# push matters most.
-#
-# If the probe fails we report present, so nothing is pushed. That is deliberate: a
-# missed push costs you less than a phone buzzing on the desk, and the local
-# notification has already fired either way.
-user_is_away() {
-    [ -n "${CLAUDE_PUSH_ALWAYS:-}" ] && return 0
-    screen_locked && return 0
-    local idle threshold
-    threshold="${CLAUDE_PUSH_IDLE_SECS:-300}"
-    idle=$(hid_idle_secs)
-    [ -n "$idle" ] || { dlog "away-gate: no idle reading -> assume present"; return 1; }
-    [ "$idle" -ge "$threshold" ]
-}
-
-# Where this turn's start time is recorded. One file for each Claude session, so
-# concurrent sessions keep separate clocks. session_id comes from the hook payload;
-# the pane id and the parent pid are fallbacks for when it is absent.
-turn_clock_file() {
-    local key
-    key=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
-    [ -n "$key" ] || key="${PANE:-$PPID}"
-    key=$(printf '%s' "$key" | tr -c 'A-Za-z0-9_-' '_')
-    mkdir -p "$HOME/.claude/turn" 2>/dev/null
-    printf '%s/.claude/turn/%s' "$HOME" "$key"
-}
-
-# Start the clock for this turn. Runs on `working`, which fires both when you send a
-# prompt and on every tool call. Only the first one records a time, so a long turn
-# full of tool calls does not keep looking brand new.
-turn_start() {
-    local f; f=$(turn_clock_file)
-    [ -f "$f" ] && return 0
-    date +%s > "$f" 2>/dev/null
-    dlog "turn: clock started"
-}
-
-# Drop this session's clock, and age out any that were orphaned. A crash skips
-# SessionEnd, so those clocks are never cleared by their own session — the next
-# clean exit removes anything left from a previous day. Pruning here rather than in
-# turn_start matters: turn_start runs on every tool call, and a find on that path
-# would be paid thousands of times a day.
-turn_clear() {
-    rm -f "$(turn_clock_file)" 2>/dev/null
-    find "$HOME/.claude/turn" -type f -mtime +1 -delete 2>/dev/null
-    dlog "turn: clock cleared, stale clocks pruned"
-}
-
-# Seconds this turn has run, empty when no clock exists. Clears the clock.
-turn_elapsed() {
-    local f start; f=$(turn_clock_file)
-    [ -f "$f" ] || return 0
-    start=$(cat "$f" 2>/dev/null)
-    rm -f "$f" 2>/dev/null
-    case "$start" in ''|*[!0-9]*) return 0 ;; esac
-    printf '%s' "$(( $(date +%s) - start ))"
-}
-
-# Should a FINISHED turn reach the phone? Only when it ran long enough that you
-# stopped watching it. A turn that took three seconds finished while you were
-# reading it, and a message about it is noise — at roughly 40 turns a day, that
-# noise is what buries the messages that matter.
-#
-# This gates `done` only. A blocked session always reaches you, however quick it
-# was, because being quick is no reason to leave you stuck.
-#
-# With no clock at all — the hook was added mid-turn, or the file was cleared — push
-# rather than swallow it. Failing toward a message is the safer direction here,
-# unlike the away-gate, where a false push is the annoying outcome.
-# Reads $TURN_ELAPSED rather than calling turn_elapsed itself. The stop handler
-# clears the clock exactly once, before it decides anything, so a turn that is not
-# pushed still ends its clock. Otherwise a suppressed turn would leave its start
-# time behind and make the NEXT turn look long enough to push.
-done_is_worth_pushing() {
-    local elapsed threshold
-    threshold="${CLAUDE_PUSH_DONE_MIN_SECS:-60}"
-    elapsed="$TURN_ELAPSED"
-    if [ -z "$elapsed" ]; then
-        dlog "turn: no clock -> push anyway"
-        return 0
-    fi
-    dlog "turn: ran ${elapsed}s, threshold ${threshold}s"
-    [ "$elapsed" -ge "$threshold" ]
 }
 
 # Play an alert sound ourselves instead of asking terminal-notifier to do it.
@@ -384,26 +267,8 @@ play_sound() {
     ( afplay "$f" >/dev/null 2>&1 & ) >/dev/null 2>&1
 }
 
-# Map a status word to the colored dot that leads the push. The colors are the
-# same ones the tmux window turns for that state (see @claude_state in
-# visual.conf), so a red dot on the phone and a red tab on the Mac mean one
-# thing. Telegram has no colored text, and the phone strips bold from the lock
-# screen, so an emoji is the only color that survives into the notification.
-push_glyph() {
-    case "$1" in
-        PERMISSION) printf '\360\237\224\264' ;;  # red    — blocked on your approval
-        QUESTION)   printf '\360\237\237\243' ;;  # purple — Claude asked you something
-        INPUT)      printf '\360\237\237\241' ;;  # yellow — idle, waiting on you
-        DONE)       printf '\360\237\237\242' ;;  # green  — turn finished
-    esac
-}
-
 notify() {
-    # $3 is the status word for the phone: the push leads with it, because a
-    # collapsed Telegram notification gives you one line to decide whether to pick
-    # the phone up. The Mac banner keeps the tier title — there the app name is the
-    # first thing you read, so the status has to follow it, not replace it.
-    local tier="$1" msg="$2" status="$3"
+    local tier="$1" msg="$2"
     # Subtitle = session + the window's topic, so concurrent sessions are easy to
     # tell apart. Prefer @claude_base (the clean auto-named topic, no status glyph);
     # fall back to the window name with any leading glyph/spaces stripped.
@@ -425,37 +290,11 @@ notify() {
         *)    title='Claude Code';             sound="${CLAUDE_NOTIFY_SOUND_DONE:-Tink}"; via_afplay='' ;;
     esac
 
-    # The phone, but only when you are not here to see the Mac. This runs BEFORE the
-    # terminal-notifier guard below on purpose: the two sinks are independent, and a
-    # machine without that cask installed should still be able to reach you.
-    # push_telegram detaches its own request, so this cannot block the stop path.
-    #
-    # The push names the machine; the local notification does not. One Telegram chat
-    # collects every machine, so a buzz that does not say `aqua` or `onyx` cannot tell
-    # you which one is blocked. On the Mac itself the name is noise — you are looking
-    # at it. Set $CLAUDE_PUSH_HOST to override the label.
-    if user_is_away; then
-        local host push_sub
-        host="${CLAUDE_PUSH_HOST:-$(hostname -s 2>/dev/null)}"
-        push_sub="$sub"
-        [ -n "$host" ] && push_sub="$host · $sub"
-        if [ "$tier" = "attn" ] || done_is_worth_pushing; then
-            dlog "push: away -> phone, tier=$tier host=$host"
-            local glyph
-            glyph=$(push_glyph "$status")
-            [ -n "$glyph" ] && status="$glyph $status"
-            push_telegram "$tier" "$status" "$push_sub" "$msg"
-        else
-            dlog "push: done but the turn was short, skipping"
-        fi
-    else
-        dlog "push: present -> Mac only, tier=$tier"
-    fi
-
-    # The Mac banner and its cue are optional. Once the phone rings for everything,
-    # they are a second alert for the same event. CLAUDE_NOTIFY_LOCAL=0 drops both.
-    # The tmux tab colour and the window name still change, and those are the ambient
-    # signal at the desk — this only removes the interruption.
+    # The Mac banner and its cue are optional. In Rex, Claude Code reports its own
+    # state with OSC 7501, and Rex shows a notification for the same event. Thus,
+    # this banner is a second alert. CLAUDE_NOTIFY_LOCAL=0 drops both the banner
+    # and the cue. The tab state still changes, and that is the ambient signal at
+    # the desk.
     if [ "${CLAUDE_NOTIFY_LOCAL:-1}" = "0" ]; then
         dlog "local: suppressed by CLAUDE_NOTIFY_LOCAL=0"
         return 0
@@ -520,17 +359,16 @@ dlog "event fired (session=$SESSION wname=[$WNAME])"
 case "$EVENT" in
     working)
         autoname_protect
-        turn_start
         window_status working
         ;;
     permission_prompt)
         MSG=$(read_message)
-        notify attn "${MSG:-Permission requested}" PERMISSION
+        notify attn "${MSG:-Permission requested}"
         window_status permission
         ;;
     idle_prompt)
         MSG=$(read_message)
-        notify attn "${MSG:-$AGENT_SHORT is idle}" INPUT
+        notify attn "${MSG:-$AGENT_SHORT is idle}"
         window_status idle
         alert_tmux
         ;;
@@ -539,20 +377,18 @@ case "$EVENT" in
         # subtitle. Notifying before capture left the very first notification of a
         # session with no topic label.
         autoname_capture
-        TURN_ELAPSED=$(turn_elapsed)
         if ends_with_question; then
             dlog "stop: turn ended with a question -> question state"
-            notify attn "$AGENT_SHORT asked you a question" QUESTION
+            notify attn "$AGENT_SHORT asked you a question"
             window_status question
         else
-            notify done "$AGENT_SHORT finished" DONE
+            notify done "$AGENT_SHORT finished"
             window_status done
         fi
         alert_tmux
         ;;
     exit)
         clear_pane_state
-        turn_clear
         ;;
     *)
         echo "notify-tmux.sh: unknown event '$EVENT'" >&2

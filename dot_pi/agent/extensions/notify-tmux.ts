@@ -1,7 +1,7 @@
 // Drive the shared notify-tmux.sh hook from pi's lifecycle, so a pi session
-// gets the same tmux colours, Mac banners, and Telegram pushes as Claude Code.
+// gets the same tmux colours and Mac banners as Claude Code.
 //
-//   pi before_agent_start  -> working   (turn clock starts, window turns busy)
+//   pi before_agent_start  -> working   (window turns busy)
 //   pi tool_call           -> working   (idempotent in the hook)
 //   pi agent_end           -> stop      (done, or question if the reply ends in "?")
 //   pi session_shutdown    -> exit      (clears the pane state)
