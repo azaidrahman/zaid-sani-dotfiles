@@ -22,7 +22,7 @@ from lib.generator import (LAYERS, generate_app_rules, generate_layer,
                             generate_hyper_rules, generate_hyper_help,
                             load_hyperkeys, print_mapping, generate_key_index,
                             generate_fkey_index, generate_hyper_fkey_index,
-                            live_fkey_actions)
+                            live_fkey_actions, check_hyper_misc)
 from lib import kmhotkeys
 
 # -- Paths --------------------------------------------------------------------
@@ -189,6 +189,12 @@ fkey_rows = (generate_fkey_index(edn, shortcut_sections)
 problems = kmhotkeys.check(km_hotkeys, edn, fkey_rows)
 if problems:
     sys.exit('error: Keyboard Maestro hotkeys:\n  ' + '\n  '.join(problems))
+
+# Stop before a write when a hand-written hyper rule and its help do not match
+base_text = open(os.path.join(dir_path, 'karabiner.base.edn')).read()
+problems = check_hyper_misc(base_text, hyper_data)
+if problems:
+    sys.exit('error: hand-written hyper rules:\n  ' + '\n  '.join(problems))
 
 # -- Write --------------------------------------------------------------------
 

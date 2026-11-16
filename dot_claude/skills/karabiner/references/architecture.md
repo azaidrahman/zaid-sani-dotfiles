@@ -13,6 +13,7 @@
 | `data/devices_*.json` | Per-device UI settings (simple_modifications etc.), merged back in on deploy. |
 | `lib/*.py`, `scripts/generate.py` | The Python generator (parser, F-key pool, EDN block generation). |
 | `lib/kmhotkeys.py` | Reads the hotkeys of the Keyboard Maestro macros (`../keyboardmaestro/exact_macros/`) into the help, and stops the build when a hotkey clashes with a rule. Tests: `python3 -m unittest lib.test_kmhotkeys`. |
+| `check_hyper_misc` in `lib/generator.py` | Stops the build when a hand-written hyper rule in `karabiner.base.edn` and the `misc:` help in `hyperkeys.yaml` do not match. Tests: `uv run --with pyyaml python -m unittest lib.test_hyper_misc`. |
 | `src/add-keymap/` | Go source for the `add-keymap` CLI; compiled binary committed at `scripts/executable_add-keymap`. |
 
 ## `build.sh` does two things

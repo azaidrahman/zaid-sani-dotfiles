@@ -509,6 +509,46 @@ def _help_key_line(section, key, mappings, labels, descs):
     return ' '.join(parts)
 
 
+# A rule that starts with a hyper "from" key, e.g. "[:!QWERt" or "[:!CQWERspacebar".
+# Mandatory modifiers come after "!", optional ones after "#".
+HAND_HYPER_RULE = re.compile(r'^\s*\[+\s*:!([A-Z]*)(?:#[A-Z]+)?([a-z][a-z0-9_]*)\s', re.M)
+MOD_LETTERS = {'C': 'cmd', 'T': 'ctrl', 'O': 'opt', 'S': 'shift'}
+
+
+def hand_hyper_rules(base_text):
+    """Return the hyper rules that are hand-written in karabiner.base.edn.
+
+    Each rule is (goku key, frozenset of the added modifier names). The text
+    between BEGIN/END markers is generated, so it is skipped.
+    """
+    text = re.sub(r';; BEGIN .*?;; END [A-Z-]+', '', base_text, flags=re.S)
+    rules = set()
+    for mods, key in HAND_HYPER_RULE.findall(text):
+        if set('QWER') <= set(mods):
+            rules.add((key, frozenset(MOD_LETTERS[m] for m in mods if m in MOD_LETTERS)))
+    return rules
+
+
+def check_hyper_misc(base_text, hyper_data):
+    """Return a problem for each hand-written hyper rule with no "misc" help, and the reverse."""
+    rules = hand_hyper_rules(base_text)
+    declared = set()
+    for key, mappings in (hyper_data.get('misc') or {}).items():
+        goku_key = GOKU_NAMES.get(str(key), str(key))
+        for mod in mappings:
+            declared.add((goku_key, frozenset() if mod == '-' else frozenset(mod.split('+'))))
+
+    def name(rule):
+        key, mods = rule
+        return 'hyper+' + ''.join(m + '+' for m in sorted(mods)) + key
+
+    problems = [f'{name(r)} is a rule in karabiner.base.edn, but config/hyperkeys.yaml "misc" has no help for it'
+                for r in sorted(rules - declared, key=name)]
+    problems += [f'{name(r)} is in config/hyperkeys.yaml "misc", but karabiner.base.edn has no rule for it'
+                 for r in sorted(declared - rules, key=name)]
+    return problems
+
+
 def generate_help_block(app_t, ws_t, layer_help_lines, hyper_help_line):
     """Generate the full HELP-TEXT EDN block."""
     return (
@@ -590,9 +630,8 @@ def generate_key_index(app_entries, ws_entries, ws_shift_entries,
                 # The description says what the key does. The goku code is the fallback.
                 desc = (hyper_descs or {}).get((section, key, mod))
                 add('hyper', disp, label, desc or str(action))
-    # Hand-written help and search keys, which are not in hyperkeys.yaml
+    # The help key. generate_hyper_rules makes its rule, not hyperkeys.yaml.
     add('hyper', '/', 'guide (hold)', 'hyper help overlay')
-    add('hyper', '⇧/', 'key search', 'open the key search HUD')
     for hk in km_hotkeys:
         if hk.kind == 'hyper':
             add('hyper', hk.key, km_labels.get(hk.macro, hk.macro), f'{hk.name} (KM)')

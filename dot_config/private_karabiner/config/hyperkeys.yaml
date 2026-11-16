@@ -35,7 +35,12 @@
 #   \  → backslash     `  → grave_accent_and_tilde
 #   space → spacebar
 #
-# "misc" section: keys handled in CapsLock-to-Hyper (not Hyper Navigation)
+# "misc" section: the help text of the hyper rules in karabiner.base.edn.
+# This section makes no rule. Write the rule by hand in karabiner.base.edn,
+# outside the BEGIN/END markers, then add the key here. The build stops if a
+# hand-written hyper rule has no "misc" entry, or a "misc" entry has no rule.
+# The action value is only a note. It is the fallback text when the comment
+# has no description.
 
 hyper:
   h:
@@ -133,10 +138,21 @@ hyper:
 
 misc:
   spacebar:
+    -: "!Tspacebar" # lang | language switch (ctrl+space)
     cmd: "!TCspacebar" # emoji
 
   escape:
     -: "!Tcaps_lock" # caps
+    shift: "display-rescue" # rescue | bring the built-in display back
+
+  t:
+    -: "toggle-topbar" # top bar | toggle the mouse to the top of the screen
+
+  f1:
+    -: "autoclick" # autoclk | toggle the autoclicker at the pointer
+
+  "/":
+    shift: "key-search" # search | open the key search HUD
 
 # "ctrl" section: keys that you push while you hold Tab (Tab held = Ctrl).
 # This section makes no rule. It only gives the help text. The keys show on

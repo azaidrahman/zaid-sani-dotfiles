@@ -34,6 +34,12 @@ Always edit in the chezmoi source, then deploy. Don't edit `~/.config/karabiner/
 | **Hyper** (vim nav) | CapsLock | `config/hyperkeys.yaml` | declarative `key: {-: action, modifier: action}` |
 | **Hand-written rules** (caps→hyper, Tab→Ctrl, double-tap, layer triggers) | — | `karabiner.base.edn` (outside `BEGIN/END` markers) | raw Goku EDN |
 
+### Help for a hand-written hyper rule
+
+Some hyper rules run a command, so they are hand-written in `karabiner.base.edn`, for example hyper+t (top bar) and hyper+f1 (autoclick). Put the help for each one in the `misc:` section of `config/hyperkeys.yaml`. That section makes no rule. It only gives the help, on the Hyper board and in the overlay. Do not put a hyper rule in `extras.yaml`, because the extras list shows a raw `⇪t` combo.
+
+The build compares the two files. It stops with `error: hand-written hyper rules` if a hyper rule in `base.edn` has no `misc` entry, or if a `misc` entry has no rule. The key and the modifiers must match: `[:!QWERSescape …]` needs `escape: {shift: …}`.
+
 > The README's claim that the app launcher lives in `help-text.yaml` is **stale** — it's `app.yaml`. `help-text.yaml` holds only the workspace layer.
 
 ## Keyboard Maestro hotkeys in the help
@@ -94,4 +100,5 @@ grep '<AppOrKey>' ~/.config/karabiner/karabiner.json               # VERIFY it c
 | Ran `goku` but the change didn't take | You edited the chezmoi source — run `./build.sh && chezmoi apply` first (goku reads the deployed path) |
 | Put the app launcher in `help-text.yaml` | App launcher is `app.yaml`; `help-text.yaml` is workspace only |
 | Used a glyph like `[` in EDN | Use the key name `open_bracket` |
+| Listed a hand-written hyper rule in `extras.yaml` as `⇪key` | Move it to `misc:` in `hyperkeys.yaml`. See "Help for a hand-written hyper rule" |
 | Added a Keyboard Maestro hotkey to `extras.yaml`, or a pass-through rule to `hyperkeys.yaml` | Remove it. The build reads macro hotkeys from the macro files. See "Keyboard Maestro hotkeys in the help" |
