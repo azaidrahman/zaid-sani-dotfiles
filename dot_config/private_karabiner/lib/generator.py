@@ -442,10 +442,11 @@ def generate_hyper_rules(hyper_data, labels):
     return '\n'.join(lines)
 
 
-def generate_hyper_help(hyper_data, labels, descs=None):
+def generate_hyper_help(hyper_data, labels, descs=None, km_hotkeys=()):
     """Generate concise help text: one line per key, modifiers inline.
 
     The overlay has space, so it shows the description when there is one.
+    The hyper hotkeys of Keyboard Maestro macros follow the hyperkeys.yaml keys.
     """
     descs = descs or {}
     hyper_keys = hyper_data.get('hyper', {})
@@ -456,6 +457,12 @@ def generate_hyper_help(hyper_data, labels, descs=None):
         line = _help_key_line('hyper', key, mappings, labels, descs)
         if line:
             key_lines.append(line)
+    for hk in km_hotkeys:
+        if hk.kind == 'hyper':
+            # Escape for the EDN string that holds the overlay text
+            key = hk.key.replace('\\', '\\\\')
+            name = hk.name.replace('\\', '\\\\').replace('"', '\\"')
+            key_lines.append(f'{key}:{name} (KM)')
 
     # Misc keys on one line
     misc_parts = []
@@ -502,6 +509,46 @@ def _help_key_line(section, key, mappings, labels, descs):
     return ' '.join(parts)
 
 
+# A rule that starts with a hyper "from" key, e.g. "[:!QWERt" or "[:!CQWERspacebar".
+# Mandatory modifiers come after "!", optional ones after "#".
+HAND_HYPER_RULE = re.compile(r'^\s*\[+\s*:!([A-Z]*)(?:#[A-Z]+)?([a-z][a-z0-9_]*)\s', re.M)
+MOD_LETTERS = {'C': 'cmd', 'T': 'ctrl', 'O': 'opt', 'S': 'shift'}
+
+
+def hand_hyper_rules(base_text):
+    """Return the hyper rules that are hand-written in karabiner.base.edn.
+
+    Each rule is (goku key, frozenset of the added modifier names). The text
+    between BEGIN/END markers is generated, so it is skipped.
+    """
+    text = re.sub(r';; BEGIN .*?;; END [A-Z-]+', '', base_text, flags=re.S)
+    rules = set()
+    for mods, key in HAND_HYPER_RULE.findall(text):
+        if set('QWER') <= set(mods):
+            rules.add((key, frozenset(MOD_LETTERS[m] for m in mods if m in MOD_LETTERS)))
+    return rules
+
+
+def check_hyper_misc(base_text, hyper_data):
+    """Return a problem for each hand-written hyper rule with no "misc" help, and the reverse."""
+    rules = hand_hyper_rules(base_text)
+    declared = set()
+    for key, mappings in (hyper_data.get('misc') or {}).items():
+        goku_key = GOKU_NAMES.get(str(key), str(key))
+        for mod in mappings:
+            declared.add((goku_key, frozenset() if mod == '-' else frozenset(mod.split('+'))))
+
+    def name(rule):
+        key, mods = rule
+        return 'hyper+' + ''.join(m + '+' for m in sorted(mods)) + key
+
+    problems = [f'{name(r)} is a rule in karabiner.base.edn, but config/hyperkeys.yaml "misc" has no help for it'
+                for r in sorted(rules - declared, key=name)]
+    problems += [f'{name(r)} is in config/hyperkeys.yaml "misc", but karabiner.base.edn has no rule for it'
+                 for r in sorted(declared - rules, key=name)]
+    return problems
+
+
 def generate_help_block(app_t, ws_t, layer_help_lines, hyper_help_line):
     """Generate the full HELP-TEXT EDN block."""
     return (
@@ -536,11 +583,18 @@ INDEX_TRIGGERS = {
 
 def generate_key_index(app_entries, ws_entries, ws_shift_entries,
                        shortcut_sections, live_fkeys, hyper_data, hyper_labels,
-                       extras_entries=(), hyper_descs=None):
+                       extras_entries=(), hyper_descs=None,
+                       km_hotkeys=(), km_labels=None):
     """Build the consolidated key index for the search HUD.
+
+    km_hotkeys are the hotkeys of the Keyboard Maestro macros. A hyper hotkey
+    goes in the hyper layer. Any other combo goes in the extra rows. An F-key
+    hotkey has no row of its own, because its shortcut layer row shows it.
+    km_labels maps a macro file name to a short label.
 
     Returns a list of TSV rows: layer, trigger, key, label, action.
     """
+    km_labels = km_labels or {}
     rows = []
 
     def add(layer, key, label, action):
@@ -576,14 +630,20 @@ def generate_key_index(app_entries, ws_entries, ws_shift_entries,
                 # The description says what the key does. The goku code is the fallback.
                 desc = (hyper_descs or {}).get((section, key, mod))
                 add('hyper', disp, label, desc or str(action))
-    # Hand-written help and search keys, which are not in hyperkeys.yaml
+    # The help key. generate_hyper_rules makes its rule, not hyperkeys.yaml.
     add('hyper', '/', 'guide (hold)', 'hyper help overlay')
-    add('hyper', '⇧/', 'key search', 'open the key search HUD')
+    for hk in km_hotkeys:
+        if hk.kind == 'hyper':
+            add('hyper', hk.key, km_labels.get(hk.macro, hk.macro), f'{hk.name} (KM)')
 
     # Hand-written base.edn bindings, declared in config/extras.yaml
     for entry in extras_entries:
         combo, label, extra = parse_entry(entry)
         rows.append(('extra', '', combo, label or '', extra or ''))
+    for hk in km_hotkeys:
+        if hk.kind == 'extra':
+            rows.append(('extra', '', hk.mods + hk.key,
+                         km_labels.get(hk.macro, hk.macro), f'{hk.name} (KM)'))
 
     # Ctrl keys from hyperkeys.yaml (Tab held)
     for key, mappings in (hyper_data.get('ctrl') or {}).items():

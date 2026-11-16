@@ -147,10 +147,15 @@ hyper	⇪	m	ytMusic	alfred youtube music
 hyper	⇪	0	ice bar	!QWER0
 hyper	⇪	q	freekey	mouseless freekey (hold)
 hyper	⇪	⌃o	audio	alfred audio out
+hyper	⇪	spacebar	lang	language switch (ctrl+space)
 hyper	⇪	⌘spacebar	emoji	!TCspacebar
 hyper	⇪	escape	caps	!Tcaps_lock
+hyper	⇪	⇧escape	rescue	bring the built-in display back
+hyper	⇪	t	top bar	toggle the mouse to the top of the screen
+hyper	⇪	f1	autoclk	toggle the autoclicker at the pointer
+hyper	⇪	⇧/	search	open the key search HUD
 hyper	⇪	/	guide (hold)	hyper help overlay
-hyper	⇪	⇧/	key search	open the key search HUD
+hyper	⇪	d	snapcal	Screenshot to Calendar (KM)
 extra		⌥R hold	app layer	hold Right Option = app launcher
 extra		⌥L hold	workspace	hold Left Option = aerospace layer
 extra		⇧⌥R hold	l1 layer	Left Shift + Right Option = shortcut layer 1
@@ -162,16 +167,13 @@ extra		tab hold	ctrl	Tab held = Ctrl, tap = Tab
 extra		⌥R ⌥R	time	double-tap Right Option = time HUD
 extra		⇧⌥R 2x	timer	double-tap Shift+Right Option = timer HUD
 extra		\ \	notif centre	double-tap backslash = Notification Centre
-extra		⇪t	top bar	toggle mouse to top of screen
-extra		⇪f1	autoclick	toggle autoclicker at the pointer
-extra		⇪space	lang	language switch (ctrl+space)
 extra		⌥L,	vol-	volume down (SoundSource on aqua)
 extra		⌥L.	vol+	volume up (SoundSource on aqua)
 extra		⌥L]	next app	cmd+tab
 extra		⌥L[	prev app	cmd+shift+tab
-extra		⌥⌘\	arc tab → window	move the current Arc tab to a new window
 extra		layer /	layer help	hold a layer, press / = that layer's overlay
 extra		⇪?	key search	this HUD (also ctrl+shift+/)
+extra		⌥⌘\	arc tab → window	Arc: Move Current Tab to New Window (KM)
 extra		⌃a	start	Tab+a: go to the start of the line
 extra		⌃⌘a	selStart	Tab+cmd+a: select to the start of the line
 extra		⌃e	end	Tab+e: go to the end of the line

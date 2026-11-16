@@ -22,7 +22,8 @@ from lib.generator import (LAYERS, generate_app_rules, generate_layer,
                             generate_hyper_rules, generate_hyper_help,
                             load_hyperkeys, print_mapping, generate_key_index,
                             generate_fkey_index, generate_hyper_fkey_index,
-                            live_fkey_actions)
+                            live_fkey_actions, check_hyper_misc)
+from lib import kmhotkeys
 
 # -- Paths --------------------------------------------------------------------
 
@@ -45,6 +46,17 @@ shortcut_sections = parse_yaml(shortcuts_path) if os.path.exists(shortcuts_path)
 shortcut_grouped = parse_yaml_grouped(shortcuts_path) if os.path.exists(shortcuts_path) else {}
 pool_map = load_pool(pool_path)
 extras_sections = parse_yaml(extras_path) if os.path.exists(extras_path) else {}
+
+# Hotkeys of the Keyboard Maestro macros. No YAML file declares them.
+try:
+    km_hotkeys = kmhotkeys.load(kmhotkeys.find_macros_dir(dir_path))
+except kmhotkeys.HotkeyError as e:
+    sys.exit(f'error: {e}')
+# Optional short labels, by macro file name. The default is the file name.
+km_labels = {}
+for entry in extras_sections.get('km-labels', []):
+    macro, label, _ = parse_entry(entry)
+    km_labels[macro] = label
 
 edn = open(edn_path).read()
 
@@ -97,7 +109,7 @@ for ln in sorted(LAYERS.keys()):
 
 # Hyper (declarative from YAML)
 hyper_data, hyper_labels, hyper_descs = load_hyperkeys(hyperkeys_path)
-hyper_t = generate_hyper_help(hyper_data, hyper_labels, hyper_descs)
+hyper_t = generate_hyper_help(hyper_data, hyper_labels, hyper_descs, km_hotkeys)
 hyper_help_line = (
     '       :show-hyper-help {:noti {:id "org.pqrs.notificaion_message_hyper"\n'
     '                                :text "' + hyper_t + '"}}\n'
@@ -167,22 +179,36 @@ hyper_block = generate_hyper_rules(hyper_data, hyper_labels)
 if hyper_block:
     edn = replace_block(edn, r';; BEGIN HYPER-RULES.*?;; END HYPER-RULES', hyper_block, 'hyper-rules')
 
+# -- Check --------------------------------------------------------------------
+
+# F-key index for the F-keys tab of the search HUD, read from the rules just built
+fkey_rows = (generate_fkey_index(edn, shortcut_sections)
+             + generate_hyper_fkey_index(hyper_data, hyper_labels))
+
+# Stop before a write when a macro hotkey cannot work or cannot show in the help
+problems = kmhotkeys.check(km_hotkeys, edn, fkey_rows)
+if problems:
+    sys.exit('error: Keyboard Maestro hotkeys:\n  ' + '\n  '.join(problems))
+
+# Stop before a write when a hand-written hyper rule and its help do not match
+base_text = open(os.path.join(dir_path, 'karabiner.base.edn')).read()
+problems = check_hyper_misc(base_text, hyper_data)
+if problems:
+    sys.exit('error: hand-written hyper rules:\n  ' + '\n  '.join(problems))
+
 # -- Write --------------------------------------------------------------------
 
 open(edn_path, 'w').write(edn)
 save_pool(pool_path, pool_map)
 
-# Consolidated key index for the search HUD (ctrl+shift+/)
-# F-key index for the F-keys tab of the search HUD, read from the rules just written
-fkey_rows = (generate_fkey_index(edn, shortcut_sections)
-             + generate_hyper_fkey_index(hyper_data, hyper_labels))
 fkey_index_path = os.path.join(dir_path, 'data', 'fkey-index.tsv')
 open(fkey_index_path, 'w').write('\n'.join(fkey_rows) + '\n')
 
+# Consolidated key index for the search HUD (ctrl+shift+/)
 index_rows = generate_key_index(
     app_sections.get('app', []), ws_entries + ws_pass_entries, ws_shift_entries,
     shortcut_sections, live_fkey_actions(fkey_rows), hyper_data, hyper_labels,
-    extras_sections.get('extras', []), hyper_descs)
+    extras_sections.get('extras', []), hyper_descs, km_hotkeys, km_labels)
 index_path = os.path.join(dir_path, 'data', 'keymap-index.tsv')
 open(index_path, 'w').write('\n'.join(index_rows) + '\n')
 

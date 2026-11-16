@@ -35,6 +35,32 @@ Keyboard Maestro macros in the **Chezmoi-Managed** group are file-managed, one m
 - Write the new `.kmmacros` file as a single-macro plist dict in the chezmoi source, then follow the edit flow above.
 - Remember: imports must be **group-wrapped** XML (an array of macro dicts under a macro group), not a bare macro dict — Keyboard Maestro silently ignores a plain macro-array import that isn't wrapped in a group.
 
+## Hotkeys and the help HUD
+
+The Karabiner build reads the hotkey of each macro from the macro files. Thus the key search HUD (caps+? or ctrl+shift+/) and the hyper help (hold caps, push /) show it. Do not add the hotkey to a Karabiner file by hand. Do not add a Karabiner rule for it.
+
+The build puts each hotkey in one of three places:
+
+| Hotkey | Where the help shows it | Example |
+|--------|-------------------------|---------|
+| cmd+ctrl+opt+shift + key | the Hyper layer, as CapsLock + key | snapcal: hyper+d |
+| an F-key from F13 to F20 | the row of the shortcut layer that sends the F-key | punch: l1 w sends cmd+opt+F17 |
+| any other combo | the extras list | arc tab: cmd+opt+\ |
+
+CapsLock held sends cmd+ctrl+opt+shift. Thus a hyper hotkey reaches Keyboard Maestro with no Karabiner rule.
+
+The short label is the macro file name. To set a different label, add a line to `km-labels:` in `dot_config/private_karabiner/config/extras.yaml`. The description is the macro name.
+
+When you add or change a hotkey, do these steps:
+
+1. Set the hotkey in the macro file, or set it in the editor and run `km-export`.
+2. Run `bash dot_config/private_karabiner/executable_build.sh`.
+3. If the build stops with `error: Keyboard Maestro hotkeys`, fix the hotkey. A hyper hotkey must not be a Karabiner rule. An F-key hotkey must have a shortcut layer that sends it.
+4. Deploy and compile as the karabiner skill shows (`chezmoi apply ~/.config/karabiner`, then `goku`).
+5. Open the HUD and look at the key. Do not stop at the line in `data/keymap-index.tsv`. A correct line can still show in the wrong place.
+
+The code is in `dot_config/private_karabiner/lib/kmhotkeys.py`. If the build stops with `unknown key code`, add the key to `KEYCODES` in that file.
+
 ## Capturing GUI-made edits (export)
 
 If a macro was edited by hand in the Keyboard Maestro Editor, capture it back into chezmoi rather than letting source and live state drift:
@@ -79,5 +105,6 @@ For the full scriptable surface, see the sdefs:
 | Edited a macro outside "Chezmoi-Managed" via files | Only that group is file-managed; leave other macros to the GUI |
 | Assumed the run_onchange hook always ran `km-apply` | It skips (exit 0) when KM Engine isn't running — run `km-apply` manually after starting KM |
 | A macro shows disabled instead of gone after a sync | Stray macros in the group get **disabled**, not deleted — this is expected, not a bug |
+| Added a macro hotkey to `extras.yaml` or `hyperkeys.yaml` by hand | The build reads hotkeys from the macro files. Remove the hand-written line. See "Hotkeys and the help HUD" |
 | Touched `~/.config/keyboardmaestro/Keyboard Maestro Macros.kmsync` | That's Keyboard Maestro's own binary sync file — never edit or touch it |
 | `error: macro group "Chezmoi-Managed" not found` on a new machine | Shouldn't happen anymore — `km-apply` auto-creates the group. If it does, KM's `make new macro group` may have failed silently; check KM is actually running and retry |
