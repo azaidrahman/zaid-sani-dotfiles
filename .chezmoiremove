@@ -92,3 +92,8 @@ tests/test-omp.zsh
 .config/borders/border-focus.sh
 .config/borders/border-toggle.sh
 .config/borders
+
+# The Telegram push for Claude Code is retired. Claude Code reports its state to
+# Rex, and Rex sends the notification. The old module is in
+# archive/claude/telegram-push/.
+.claude/lib/push-telegram.sh

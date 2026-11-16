@@ -29,8 +29,7 @@ bash -n "$HOOK" || { echo "FAIL - hook has a syntax error"; exit 1; }
 TMPD=$(mktemp -d)
 trap 'rm -rf "$TMPD"' EXIT
 STUB="$TMPD/bin"; ARGS="$TMPD/argv"; PLAYED="$TMPD/played"
-PUSHED="$TMPD/pushed"; KC="$TMPD/kc"
-mkdir -p "$STUB" "$KC" "$TMPD/home/Library/DoNotDisturb/DB"
+mkdir -p "$STUB" "$TMPD/home/Library/DoNotDisturb/DB"
 
 # afplay stub: records which sound file play_sound tried to play. The attn tier plays
 # its cue this way rather than via -sound, because Focus does not gate afplay.
@@ -55,48 +54,6 @@ cat > "$STUB/terminal-notifier" <<EOF
 printf '%s\n' "\$@" >> "$ARGS"
 EOF
 chmod +x "$STUB/terminal-notifier"
-
-# curl stub: records the phone push argv NUL-delimited, so a message containing
-# newlines or quotes cannot corrupt the record boundaries.
-cat > "$STUB/curl" <<EOF
-#!/usr/bin/env bash
-printf '%s\0' "\$@" >> "$PUSHED"
-EOF
-chmod +x "$STUB/curl"
-
-# security stub: serves whatever the test placed in $KC/<service>, so the real
-# keychain is never touched. No file means a non-zero exit, exactly as the real
-# command reports an absent entry. Credentials start ABSENT — tests that expect a
-# push call creds_on first.
-cat > "$STUB/security" <<EOF
-#!/usr/bin/env bash
-svc=""
-while [ \$# -gt 0 ]; do
-  case "\$1" in -s) svc="\${2:-}"; shift 2 ;; *) shift ;; esac
-done
-f="$KC/\$svc"
-[ -f "\$f" ] || exit 44
-cat "\$f"
-EOF
-chmod +x "$STUB/security"
-
-# ioreg stub: drives the away-gate deterministically. Without it the gate would read
-# the real machine, and a test run would pass or fail depending on whether the user
-# happened to be touching the keyboard. \$TMPD/idle holds HID idle seconds; the
-# presence of \$TMPD/locked means the screen is locked.
-cat > "$STUB/ioreg" <<EOF
-#!/usr/bin/env bash
-idle=\$(cat "$TMPD/idle" 2>/dev/null || echo 0)
-case " \$* " in
-  *" -c IOHIDSystem "*)
-    printf '    "HIDIdleTime" = %s\n' "\$(( idle * 1000000000 ))" ;;
-  *)
-    if [ -f "$TMPD/locked" ]; then
-      printf '        <key>CGSSessionScreenIsLocked</key>\n        <true/>\n'
-    fi ;;
-esac
-EOF
-chmod +x "$STUB/ioreg"
 
 # A tmux stub that always fails. Unsetting \$TMUX is NOT enough to isolate: the tmux
 # CLI happily connects to the default server anyway, so tq() would resolve to the
@@ -125,7 +82,7 @@ done < <(env)
 
 run() {
   local event="$1" json="$2"; shift 2
-  : > "$ARGS"; : > "$PLAYED"; : > "$PUSHED"
+  : > "$ARGS"; : > "$PLAYED"
   printf '%s' "$json" | env -u TMUX -u TMUX_PANE \
     ${CLEAN_ENV[@]+"${CLEAN_ENV[@]}"} \
     HOME="$TMPD/home" \
@@ -135,27 +92,6 @@ run() {
   for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$PLAYED" ] && break; sleep 0.1; done
 }
 
-# Presence controls for the away-gate. Default: at the keyboard, screen unlocked.
-present()  { printf '0'   > "$TMPD/idle"; rm -f "$TMPD/locked"; }
-away()     { printf '900' > "$TMPD/idle"; rm -f "$TMPD/locked"; }
-locked()   { printf '0'   > "$TMPD/idle"; : > "$TMPD/locked"; }
-creds_on() { printf 'BOTTOKEN123' > "$KC/telegram-claude-bot-token"
-             printf '99887766'    > "$KC/telegram-claude-chat-id"; }
-creds_off(){ rm -f "$KC"/*; }
-present; creds_off
-
-# run_push <event> <json> [ENV=val ...] — like run(), but waits on the detached curl
-# rather than on afplay, so push assertions are not racy.
-run_push() {
-  run "$@"
-  for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$PUSHED" ] && break; sleep 0.1; done
-}
-pushed()   { [ -s "$PUSHED" ] && echo yes || echo no; }
-pushval()  { local p="$1" a; while IFS= read -r -d '' a; do
-               case "$a" in "$p"*) printf '%s' "${a#"$p"}"; return 0 ;; esac
-             done < "$PUSHED"; printf '(absent)'; }
-pushhas()  { local p="$1" a; while IFS= read -r -d '' a; do
-               [ "$a" = "$p" ] && { echo yes; return; }; done < "$PUSHED"; echo no; }
 val()  { awk -v f="$1" '$0==f{getline; print; exit}' "$ARGS"; }        # value after a flag
 has()  { grep -qxF -- "$1" "$ARGS" && echo yes || echo no; }           # flag present?
 calls(){ grep -cxF -- '-title' "$ARGS"; }                              # notify() invocations
@@ -288,207 +224,19 @@ check "permission: survives empty stdin" "1"            "$(calls)"
 run stop '{"transcript_path":"/nonexistent/path.jsonl"}'
 check "stop: missing transcript -> done" "Claude Code"  "$(val -title)"
 
-# --- phone push: the away-gate ----------------------------------------------
-# A phone that buzzes while you are sitting at the terminal is noise, and noise is
-# how a topic ends up muted. The Mac notification is enough while you are present.
-creds_on
-present
-run_push permission_prompt '{"message":"Bash wants to run rm"}'
-check "present: no push"              "no"  "$(pushed)"
-check "present: still notifies Mac"   "1"   "$(calls)"
-
-away
-run_push permission_prompt '{"message":"Bash wants to run rm"}'
-check "away: pushes to phone"         "yes" "$(pushed)"
-
-# Locking and walking away leaves idle time at zero for the first few minutes —
-# exactly the window where the push matters most. A lock must count as away.
-locked
-run_push permission_prompt '{"message":"x"}'
-check "locked: pushes despite idle=0" "yes" "$(pushed)"
-
-# The threshold is tunable, like CLAUDE_NOTIFY_SILENT_MODES.
-present; printf '90' > "$TMPD/idle"
-run_push permission_prompt '{"message":"x"}'
-check "90s idle under default 300s"   "no"  "$(pushed)"
-run_push permission_prompt '{"message":"x"}' CLAUDE_PUSH_IDLE_SECS=60
-check "90s idle over a 60s threshold" "yes" "$(pushed)"
-
-# An escape hatch for verifying a new bot without waiting out the threshold.
-present
-run_push permission_prompt '{"message":"x"}' CLAUDE_PUSH_ALWAYS=1
-check "CLAUDE_PUSH_ALWAYS overrides"  "yes" "$(pushed)"
-
-# If the idle probe cannot be read, assume the user is present. A missed push costs
-# less than a phone buzzing on the desk, and the Mac notification already fired.
-away
-run_push permission_prompt '{"message":"x"}' CLAUDE_PUSH_IOREG=/nonexistent/ioreg
-check "no idle probe -> no push"      "no"  "$(pushed)"
-
-# --- phone push: tiers and content ------------------------------------------
-away
-run_push permission_prompt '{"message":"Bash wants to run rm -rf /tmp/x"}'
-check "attn push: audible"            "no"  "$(pushhas 'disable_notification=true')"
-check "attn push: body carried"       "yes" \
-      "$(case "$(pushval 'text=')" in *'rm -rf /tmp/x'*) echo yes;; *) echo no;; esac)"
-# The phone gets one collapsed line to work with, so the status leads. "Claude Code"
-# is redundant there — the message already comes from the Claude bot. A colored dot
-# leads the status word: Telegram has no colored text, and the lock screen drops
-# bold, so an emoji is the only color that reaches the notification. Each color is
-# the one the tmux window turns for that state.
-check "attn push: status leads"       "🔴 PERMISSION" "$(pushval 'text=' | head -1)"
-check "attn push: session carried"    "yes" \
-      "$(case "$(pushval 'text=')" in *unknown*) echo yes;; *) echo no;; esac)"
-
-# One Telegram chat aggregates every machine, so the push must name the machine that
-# is asking. Without this, aqua and onyx are indistinguishable in your pocket.
-run_push permission_prompt '{"message":"x"}' CLAUDE_PUSH_HOST=onyx
-check "push names the machine"        "yes" \
-      "$(case "$(pushval 'text=')" in *'onyx · '*) echo yes;; *) echo no;; esac)"
-# The local notification must stay clean. You are looking at that Mac, so repeating
-# its name in the subtitle is noise.
-check "Mac subtitle omits hostname"   "no" \
-      "$(case "$(val -subtitle)" in *onyx*) echo yes;; *) echo no;; esac)"
-
-run_push stop "{\"transcript_path\":\"$ST\"}"
-check "done push: silent"             "yes" "$(pushhas 'disable_notification=true')"
-check "done push: status leads"       "🟢 DONE" "$(pushval 'text=' | head -1)"
-run_push stop "{\"transcript_path\":\"$QT\"}"
-check "question push: audible"        "no"  "$(pushhas 'disable_notification=true')"
-check "question push: status leads"   "🟣 QUESTION" "$(pushval 'text=' | head -1)"
-run_push idle_prompt '{"message":"x"}'
-check "idle push: status leads"       "🟡 INPUT" "$(pushval 'text=' | head -1)"
-
-# --- phone push: gates ------------------------------------------------------
-run_push permission_prompt '{"message":"x"}' CLAUDE_PUSH_DISABLE=1
-check "CLAUDE_PUSH_DISABLE -> no push" "no" "$(pushed)"
-creds_off
-run_push permission_prompt '{"message":"x"}'
-check "no credentials -> no push"     "no"  "$(pushed)"
-check "no credentials still notifies" "1"   "$(calls)"
-creds_on
-
-# Events that carry no notification must carry no push either.
-run_push working '{}'
-check "working: no push"              "no"  "$(pushed)"
-run_push exit '{}'
-check "exit: no push"                 "no"  "$(pushed)"
-
-# The phone sink must not depend on terminal-notifier. These are independent
-# transports, and a machine without that cask should still reach you.
-mv "$STUB/terminal-notifier" "$TMPD/tn.hidden"
-run_push permission_prompt '{"message":"x"}'
-check "pushes without terminal-notifier" "yes" "$(pushed)"
-mv "$TMPD/tn.hidden" "$STUB/terminal-notifier"
-
-# A missing module must not break the hook — chezmoi could apply the hook first.
-away
-mv "$BASE/lib/push-telegram.sh" "$TMPD/mod.hidden" 2>/dev/null && {
-  run_push permission_prompt '{"message":"x"}'
-  check "absent module: no push"      "no"  "$(pushed)"
-  check "absent module: hook survives" "1"  "$(calls)"
-  mv "$TMPD/mod.hidden" "$BASE/lib/push-telegram.sh"
-}
-
 # --- the local Mac notification can be switched off --------------------------
-# The phone now rings for everything, so the Mac banner and its cue are a second
-# alert for the same event. CLAUDE_NOTIFY_LOCAL=0 drops both. The tmux tab colour
-# and the window name are unaffected — they are the ambient signal at the desk.
-creds_on; away
-run_push permission_prompt '{"message":"x"}' CLAUDE_NOTIFY_LOCAL=0
-check "local off: no terminal-notifier" "0"   "$(calls)"
+# In Rex, Claude Code reports its own state, and Rex shows a notification for it.
+# Thus, the Mac banner and its cue are a second alert for the same event.
+# CLAUDE_NOTIFY_LOCAL=0 drops both. The tmux tab colour is unaffected.
+run permission_prompt '{"message":"x"}' CLAUDE_NOTIFY_LOCAL=0
+check "local off: no terminal-notifier" "0"      "$(calls)"
 check "local off: no sound"             "(none)" "$(played)"
-check "local off: phone still pushed"   "yes" "$(pushed)"
-run_push stop "{\"transcript_path\":\"$ST\"}" CLAUDE_NOTIFY_LOCAL=0
+run stop "{\"transcript_path\":\"$ST\"}" CLAUDE_NOTIFY_LOCAL=0
 check "local off: done is silent too"   "(none)" "$(played)"
-check "local off: done no banner"       "0"   "$(calls)"
+check "local off: done no banner"       "0"      "$(calls)"
 # Default must stay ON, so clearing the export restores the old behaviour.
-run_push permission_prompt '{"message":"x"}'
-check "local on by default"             "1"   "$(calls)"
-
-# --- done pushes only for slow turns -----------------------------------------
-# A finished turn is worth a message only if you were away long enough to have
-# stopped watching. Short turns you saw happen. The turn clock starts on the first
-# `working` of a turn and is cleared by `stop`.
-turn_reset() { rm -f "$TMPD/home/.claude/turn"/* 2>/dev/null; }
-# Start a turn, then age its clock by rewriting the recorded start time.
-age_turn() { # seconds
-  local f
-  f=$(ls "$TMPD/home/.claude/turn"/* 2>/dev/null | head -1)
-  [ -n "$f" ] && printf '%s' "$(( $(date +%s) - $1 ))" > "$f"
-}
-
-turn_reset
-run working '{}'                      # turn begins
-run_push stop "{\"transcript_path\":\"$ST\"}"
-check "fast turn: no done push"       "no"  "$(pushed)"
-
-turn_reset
-run working '{}'
-age_turn 300
-run_push stop "{\"transcript_path\":\"$ST\"}"
-check "slow turn: done pushed"        "yes" "$(pushed)"
-
-# The threshold is tunable.
-turn_reset
-run working '{}'
-age_turn 30
-run_push stop "{\"transcript_path\":\"$ST\"}"
-check "30s turn under default 60s"    "no"  "$(pushed)"
-turn_reset
-run working '{}'
-age_turn 30
-run_push stop "{\"transcript_path\":\"$ST\"}" CLAUDE_PUSH_DONE_MIN_SECS=10
-check "30s turn over a 10s threshold" "yes" "$(pushed)"
-
-# A blocked session must ALWAYS reach the phone. Being quick is not a reason to
-# leave you stuck, so the duration gate applies to `done` only.
-turn_reset
-run working '{}'
-run_push permission_prompt '{"message":"x"}'
-check "fast turn: attn still pushes"  "yes" "$(pushed)"
-turn_reset
-run working '{}'
-run_push stop "{\"transcript_path\":\"$QT\"}"
-check "fast turn: question still pushes" "yes" "$(pushed)"
-
-# The clock must not restart on every tool call. PreToolUse fires `working` too, so
-# a long turn full of tool calls would otherwise always look brand new.
-turn_reset
-run working '{}'
-age_turn 300
-run working '{}'                      # a tool call mid-turn
-run working '{}'
-run_push stop "{\"transcript_path\":\"$ST\"}"
-check "tool calls do not reset the clock" "yes" "$(pushed)"
-
-# With no clock at all (hook restarted mid-turn), push rather than swallow it.
-turn_reset
-run_push stop "{\"transcript_path\":\"$ST\"}"
-check "no clock -> push anyway"       "yes" "$(pushed)"
-
-# A session that never reaches `stop` — a crash, or SessionEnd — must not leave its
-# clock behind. At ~187 sessions a week these would accumulate forever.
-turn_reset
-run working '{"session_id":"leaky"}'
-check "working creates a clock"       "1" "$(ls "$TMPD/home/.claude/turn" 2>/dev/null | wc -l | tr -d ' ')"
-run exit '{"session_id":"leaky"}'
-check "exit clears its own clock"     "0" "$(ls "$TMPD/home/.claude/turn" 2>/dev/null | wc -l | tr -d ' ')"
-
-# A crash skips SessionEnd entirely, so old clocks must also age out. The next clean
-# exit prunes them.
-turn_reset
-mkdir -p "$TMPD/home/.claude/turn"
-printf '123' > "$TMPD/home/.claude/turn/ancient"
-touch -t 202001010000 "$TMPD/home/.claude/turn/ancient"
-printf '456' > "$TMPD/home/.claude/turn/fresh"
-run exit '{"session_id":"other"}'
-check "exit prunes stale clocks"      "0" \
-      "$(ls "$TMPD/home/.claude/turn/ancient" 2>/dev/null | wc -l | tr -d ' ')"
-check "exit keeps a fresh clock"      "1" \
-      "$(ls "$TMPD/home/.claude/turn/fresh" 2>/dev/null | wc -l | tr -d ' ')"
-
-turn_reset; present; creds_off
+run permission_prompt '{"message":"x"}'
+check "local on by default"             "1"      "$(calls)"
 
 echo
 [ "$fail" -eq 0 ] && echo "All notify-tmux tests passed." || echo "Some notify-tmux tests FAILED."
