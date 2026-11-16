@@ -61,6 +61,9 @@ rex.bind("ctrl+space>b", "toggle_hold")
 -- prefix+e: review the changes of a git worktree in tuicr (diff_review.lua).
 rex.bind("ctrl+space>e", "diff_review")
 
+-- prefix+c: copy text from the focused pane with vim keys (copy_mode.lua).
+rex.bind("ctrl+space>c", "copy_mode")
+
 -- prefix+f: pick a tab from all sessions (tab_picker.lua).
 rex.bind("ctrl+space>f", "tab_picker")
 
@@ -181,6 +184,7 @@ require("bb_prs")
 require("dock")
 require("zen")
 require("special_paste")
+require("copy_mode")
 
 -- Keep a copy of the tabs of each host for the Alfred workflow Rex Tabs
 -- (scripts/remote-tabs-watcher.lua). If a watcher runs already, the new one
