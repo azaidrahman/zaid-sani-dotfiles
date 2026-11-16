@@ -12,12 +12,13 @@
 | `data/fkey-pool.json` | Persistent F-key slot assignments for l1/l2/l3 (never reshuffled). |
 | `data/devices_*.json` | Per-device UI settings (simple_modifications etc.), merged back in on deploy. |
 | `lib/*.py`, `scripts/generate.py` | The Python generator (parser, F-key pool, EDN block generation). |
+| `lib/kmhotkeys.py` | Reads the hotkeys of the Keyboard Maestro macros (`../keyboardmaestro/exact_macros/`) into the help, and stops the build when a hotkey clashes with a rule. Tests: `python3 -m unittest lib.test_kmhotkeys`. |
 | `src/add-keymap/` | Go source for the `add-keymap` CLI; compiled binary committed at `scripts/executable_add-keymap`. |
 
 ## `build.sh` does two things
 
 1. `sed` merges `layers.edn` into `karabiner.base.edn` at the `;; {{LAYERS}}` marker → writes `karabiner.edn`.
-2. `uv run scripts/generate.py` rewrites the `;; BEGIN <NAME> … ;; END <NAME>` blocks in `karabiner.edn` from the YAML configs + `fkey-pool.json` (help text, app rules, shortcut layers, workspace rules, hyper rules).
+2. `uv run scripts/generate.py` rewrites the `;; BEGIN <NAME> … ;; END <NAME>` blocks in `karabiner.edn` from the YAML configs + `fkey-pool.json` (help text, app rules, shortcut layers, workspace rules, hyper rules). It also reads the Keyboard Maestro macro hotkeys for the help text and the key index.
 
 `uv` handles PyYAML automatically — no venv/pip. Anything you type **between** `BEGIN/END` markers, or anywhere in `karabiner.edn`, is discarded on the next build. Hand-written rules must go in `karabiner.base.edn` outside the markers.
 

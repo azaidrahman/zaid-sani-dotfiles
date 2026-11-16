@@ -36,6 +36,23 @@ Always edit in the chezmoi source, then deploy. Don't edit `~/.config/karabiner/
 
 > The README's claim that the app launcher lives in `help-text.yaml` is **stale** — it's `app.yaml`. `help-text.yaml` holds only the workspace layer.
 
+## Keyboard Maestro hotkeys in the help
+
+A Keyboard Maestro macro can own a hotkey directly, for example snapcal on hyper+d. No file in this directory declares that hotkey. The build reads it from `dot_config/keyboardmaestro/exact_macros/*.kmmacros` (`lib/kmhotkeys.py`) and puts it in the help:
+
+- cmd+ctrl+opt+shift + key: the Hyper layer, the same as a `hyperkeys.yaml` key. It needs no rule, because CapsLock held already sends those four modifiers.
+- F13 to F20: no new row. The row of the shortcut layer that sends the F-key shows it.
+- Any other combo: the extras list.
+
+Do not mirror a macro hotkey in `extras.yaml` or `hyperkeys.yaml`. Do not add a rule that sends the same key back. The build stops with `error: Keyboard Maestro hotkeys` in two cases:
+
+- A Karabiner rule takes a hyper hotkey, so the macro never fires.
+- No shortcut layer sends an F-key hotkey.
+
+For the full steps, see "Hotkeys and the help HUD" in the keyboard-maestro skill.
+
+**Verify what the person sees.** After a change to the help, open the HUD (caps+?) or the hyper overlay (hold caps, push /) and find the key. A correct line in `data/keymap-index.tsv` can still show in the wrong place. For example, an extras line `⇪d` shows as a raw combo in the list, not on the Hyper board.
+
 ## Goku modifier legend
 
 | Code | Modifier | Code | Modifier | | Symbol | Meaning |
@@ -77,3 +94,4 @@ grep '<AppOrKey>' ~/.config/karabiner/karabiner.json               # VERIFY it c
 | Ran `goku` but the change didn't take | You edited the chezmoi source — run `./build.sh && chezmoi apply` first (goku reads the deployed path) |
 | Put the app launcher in `help-text.yaml` | App launcher is `app.yaml`; `help-text.yaml` is workspace only |
 | Used a glyph like `[` in EDN | Use the key name `open_bracket` |
+| Added a Keyboard Maestro hotkey to `extras.yaml`, or a pass-through rule to `hyperkeys.yaml` | Remove it. The build reads macro hotkeys from the macro files. See "Keyboard Maestro hotkeys in the help" |

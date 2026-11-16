@@ -442,10 +442,11 @@ def generate_hyper_rules(hyper_data, labels):
     return '\n'.join(lines)
 
 
-def generate_hyper_help(hyper_data, labels, descs=None):
+def generate_hyper_help(hyper_data, labels, descs=None, km_hotkeys=()):
     """Generate concise help text: one line per key, modifiers inline.
 
     The overlay has space, so it shows the description when there is one.
+    The hyper hotkeys of Keyboard Maestro macros follow the hyperkeys.yaml keys.
     """
     descs = descs or {}
     hyper_keys = hyper_data.get('hyper', {})
@@ -456,6 +457,12 @@ def generate_hyper_help(hyper_data, labels, descs=None):
         line = _help_key_line('hyper', key, mappings, labels, descs)
         if line:
             key_lines.append(line)
+    for hk in km_hotkeys:
+        if hk.kind == 'hyper':
+            # Escape for the EDN string that holds the overlay text
+            key = hk.key.replace('\\', '\\\\')
+            name = hk.name.replace('\\', '\\\\').replace('"', '\\"')
+            key_lines.append(f'{key}:{name} (KM)')
 
     # Misc keys on one line
     misc_parts = []
@@ -536,11 +543,18 @@ INDEX_TRIGGERS = {
 
 def generate_key_index(app_entries, ws_entries, ws_shift_entries,
                        shortcut_sections, live_fkeys, hyper_data, hyper_labels,
-                       extras_entries=(), hyper_descs=None):
+                       extras_entries=(), hyper_descs=None,
+                       km_hotkeys=(), km_labels=None):
     """Build the consolidated key index for the search HUD.
+
+    km_hotkeys are the hotkeys of the Keyboard Maestro macros. A hyper hotkey
+    goes in the hyper layer. Any other combo goes in the extra rows. An F-key
+    hotkey has no row of its own, because its shortcut layer row shows it.
+    km_labels maps a macro file name to a short label.
 
     Returns a list of TSV rows: layer, trigger, key, label, action.
     """
+    km_labels = km_labels or {}
     rows = []
 
     def add(layer, key, label, action):
@@ -579,11 +593,18 @@ def generate_key_index(app_entries, ws_entries, ws_shift_entries,
     # Hand-written help and search keys, which are not in hyperkeys.yaml
     add('hyper', '/', 'guide (hold)', 'hyper help overlay')
     add('hyper', '⇧/', 'key search', 'open the key search HUD')
+    for hk in km_hotkeys:
+        if hk.kind == 'hyper':
+            add('hyper', hk.key, km_labels.get(hk.macro, hk.macro), f'{hk.name} (KM)')
 
     # Hand-written base.edn bindings, declared in config/extras.yaml
     for entry in extras_entries:
         combo, label, extra = parse_entry(entry)
         rows.append(('extra', '', combo, label or '', extra or ''))
+    for hk in km_hotkeys:
+        if hk.kind == 'extra':
+            rows.append(('extra', '', hk.mods + hk.key,
+                         km_labels.get(hk.macro, hk.macro), f'{hk.name} (KM)'))
 
     # Ctrl keys from hyperkeys.yaml (Tab held)
     for key, mappings in (hyper_data.get('ctrl') or {}).items():

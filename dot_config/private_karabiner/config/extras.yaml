@@ -5,8 +5,15 @@
 # (outside the BEGIN/END markers). When you add a hand-written rule there,
 # mirror it here so the key search HUD (caps+? / ctrl+shift+/) can find it.
 #
-# Keyboard Maestro hotkeys also go here. Karabiner does not make these keys.
-# The macros are in dot_config/keyboardmaestro/exact_macros/.
+# Do NOT add Keyboard Maestro hotkeys to "extras". The build reads them from
+# the macro files in dot_config/keyboardmaestro/exact_macros/ (see
+# lib/kmhotkeys.py):
+# - A cmd+ctrl+opt+shift hotkey shows in the Hyper layer (CapsLock + key).
+# - An F13 to F20 hotkey shows on the row of the shortcut layer that sends it.
+# - Any other combo shows in the extras list.
+#
+# "km-labels" is optional. It gives a macro a short label (7 characters show
+# on a keycap). Format: macro file name without .kmmacros | label
 
 extras:
   # Layer triggers
@@ -35,9 +42,9 @@ extras:
   - ⌥L] | next app | cmd+tab
   - ⌥L[ | prev app | cmd+shift+tab
 
-  # Keyboard Maestro macros (not Karabiner rules)
-  - ⌥⌘\ | arc tab → window | move the current Arc tab to a new window
-
   # Help
   - layer / | layer help | hold a layer, press / = that layer's overlay
   - ⇪? | key search | this HUD (also ctrl+shift+/)
+
+km-labels:
+  - arc-move-tab-to-new-window | arc tab → window
