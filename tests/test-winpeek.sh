@@ -78,14 +78,14 @@ check() { # name expected actual
   fi
 }
 
-win() { # id workspace pid app title
-  printf '{"window-id":%s,"workspace":"%s","app-pid":%s,"app-name":"%s","app-bundle-path":"/Applications/%s.app","window-title":"%s"}' \
-    "$1" "$2" "$3" "$4" "$4" "$5"
+win() { # id workspace pid app title [bundle id]
+  printf '{"window-id":%s,"workspace":"%s","app-pid":%s,"app-name":"%s","app-bundle-id":"%s","app-bundle-path":"/Applications/%s.app","window-title":"%s"}' \
+    "$1" "$2" "$3" "$4" "${6:-com.test.$4}" "$4" "$5"
 }
 
 echo "[$(win 30 web 3 Vivaldi Docs),$(win 10 2 1 Slack ''),$(win 20 10 2 Rex shell),$(win 40 1 4 Mail Inbox)]" \
   > "$TMP/windows.json"
-echo "40 4" > "$TMP/focused"
+echo "40 4 com.test.Mail" > "$TMP/focused"
 
 # A capture writes one screenshot for each window, with the app icon on it.
 "$WINPEEK" capture
@@ -152,10 +152,26 @@ check "list: an old full capture starts a full capture" "yes" \
 # run only records the focused window.
 rm -f "$WINPEEK_CACHE"/40.*.jpg "$WINPEEK_CACHE"/20.*.jpg
 "$WINPEEK" on-focus
-echo "20 2" > "$TMP/focused"
+echo "20 2 com.test.Rex" > "$TMP/focused"
 "$WINPEEK" on-focus
 check "on-focus takes a screenshot of the window that lost the focus" "1 0" \
   "$(ls "$WINPEEK_CACHE"/40.*.jpg 2>/dev/null | wc -l | tr -d ' ') $(ls "$WINPEEK_CACHE"/20.*.jpg 2>/dev/null | wc -l | tr -d ' ')"
+
+# winpeek takes no screenshot of a 1Password window, from a full capture or
+# from on-focus. The list removes an old screenshot of such a window, and
+# shows the app icon.
+echo "[$(win 30 web 3 Vivaldi Docs),$(win 90 1 9 1Password Vault com.1password.1password)]" > "$TMP/windows.json"
+echo old > "$WINPEEK_CACHE/90.1.jpg"
+touch "$WINPEEK_CACHE/last-capture"
+out=$("$WINPEEK" list)
+rm -f "$WINPEEK_CACHE/last-capture"
+"$WINPEEK" capture
+echo "90 9 com.1password.1password" > "$TMP/focused"
+"$WINPEEK" on-focus
+echo "30 3 com.test.Vivaldi" > "$TMP/focused"
+"$WINPEEK" on-focus
+check "no screenshot of a 1Password window; the list shows the app icon" "0 fileicon" \
+  "$(ls "$WINPEEK_CACHE"/90.*.jpg 2>/dev/null | wc -l | tr -d ' ') $(jq -r '.items[] | select(.uid == "90") | .icon.type' <<<"$out")"
 
 rm -f "$TMP/windows.json"
 check "list: one item if AeroSpace does not answer" "AeroSpace does not answer" \

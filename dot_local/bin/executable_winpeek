@@ -32,6 +32,8 @@
 # after the list prints its path.
 #
 # The screenshots can show private text. The cache directory has mode 0700.
+# winpeek takes no screenshot of the windows of the apps in SKIP_APPS, for
+# example 1Password.
 #
 # The Alfred workflow is in the Alfred sync folder. It holds only info.plist
 # and the icon. This script is in chezmoi.
@@ -54,13 +56,33 @@ STALE_LOCK=20
 JOBS=6
 LOCK="$CACHE/capture.lock"
 STAMP="$CACHE/last-capture"
-# The window that had the focus last, as "<window id> <pid>".
+# The window that had the focus last, as "<window id> <pid> <bundle id>".
 LAST_FOCUS="$CACHE/last-focus"
+# winpeek takes no screenshot of the windows of these apps, because they show
+# secrets. The list shows the app icon for such a window. Separate the bundle
+# IDs with spaces.
+SKIP_APPS="${WINPEEK_SKIP_APPS-com.1password.1password}"
 SELF="${BASH_SOURCE[0]}"
 
 aero_windows() {
   aerospace list-windows --all --json \
-    --format '%{window-id} %{workspace} %{app-pid} %{app-name} %{app-bundle-path} %{window-title}'
+    --format '%{window-id} %{workspace} %{app-pid} %{app-name} %{app-bundle-id} %{app-bundle-path} %{window-title}'
+}
+
+# Return 0 if winpeek must not take a screenshot of the app.
+skipped_app() {
+  [ -n "${1:-}" ] && [[ " $SKIP_APPS " == *" $1 "* ]]
+}
+
+# Print "<window id> <pid>" for each window in the JSON array. With "skip",
+# print only the windows of SKIP_APPS. Without it, print only the others.
+window_pairs() {
+  jq -r --arg skip "$SKIP_APPS" --arg mode "${2:-capture}" '
+    ($skip | split(" ") | map(select(length > 0))) as $s
+    | .[]
+    | select(((."app-bundle-id" // "") as $b | any($s[]; . == $b)) == ($mode == "skip"))
+    | "\(."window-id") \(."app-pid")"
+  ' <<<"$1"
 }
 
 # Print the normal windows (layer 0) that are on a screen, from the window
@@ -133,7 +155,7 @@ all_windows() {
         | map(select((.id as $id | $known | index($id) | not)
                      and .title != "" and .w >= 100 and .h >= 100))
         | map({"window-id": .id, workspace: null, "app-pid": .pid, "app-name": .owner,
-               "app-bundle-path": null, "window-title": .title}))
+               "app-bundle-id": null, "app-bundle-path": null, "window-title": .title}))
   '
 }
 
@@ -219,8 +241,9 @@ capture_pairs() {
   xargs -P "$JOBS" -L 1 "$SELF" capture-one "$(stamp_ms)" <<<"$pairs"
 }
 
-# Take a screenshot of each window in the JSON array. Remove the screenshots
-# of windows that closed, and the icons of apps that quit. Do nothing if a
+# Take a screenshot of each window in the JSON array, except the windows of
+# SKIP_APPS. Remove the other screenshots: of windows that closed, and of
+# windows of SKIP_APPS. Remove the icons of apps that quit. Do nothing if a
 # full capture runs already.
 capture_windows() {
   local windows=$1 pairs ids pids f id pid
@@ -228,7 +251,7 @@ capture_windows() {
   trap 'rmdir "$LOCK" 2>/dev/null' EXIT
   touch "$STAMP"
 
-  pairs=$(jq -r '.[] | "\(."window-id") \(."app-pid")"' <<<"$windows")
+  pairs=$(window_pairs "$windows")
   ids=$(cut -d' ' -f1 <<<"$pairs")
   pids=$(cut -d' ' -f2 <<<"$pairs" | sort -u)
   capture_pairs "$pairs"
@@ -257,11 +280,18 @@ cmd_list() {
   fi
   focused=$(aerospace list-windows --focused --format '%{window-id}' 2>/dev/null)
 
+  # Remove the screenshots of the windows of SKIP_APPS at once. A screenshot
+  # from before the app was in SKIP_APPS can show secrets.
+  local id pid pairs missing=""
+  while read -r id pid; do
+    [ -n "$id" ] && rm -f "$CACHE/$id".*.jpg
+  done < <(window_pairs "$windows" skip)
+
   # Take a screenshot of each window that has none, for example a new window.
-  local id pid missing=""
+  pairs=$(window_pairs "$windows")
   while read -r id pid; do
     [ -n "$id" ] && ! shot_for "$id" && missing+="$id $pid"$'\n'
-  done < <(jq -r '.[] | "\(."window-id") \(."app-pid")"' <<<"$windows")
+  done <<<"$pairs"
   capture_pairs "${missing%$'\n'}"
 
   # Keep the other screenshots fresh for the next list. The full capture must
@@ -272,7 +302,7 @@ cmd_list() {
 
   # The newest screenshot of each window, as "<id> TAB <path>" lines.
   local shots=""
-  for id in $(jq -r '.[]."window-id"' <<<"$windows"); do
+  for id in $(cut -d' ' -f1 <<<"$pairs"); do
     shot_for "$id" && shots+="$id"$'\t'"$SHOT"$'\n'
   done
 
@@ -324,15 +354,17 @@ cmd_capture() {
 }
 
 # AeroSpace runs this when the focus changes. Take a screenshot of the window
-# that had the focus before, because its content can be new.
+# that had the focus before, because its content can be new. Skip the
+# windows of SKIP_APPS.
 cmd_on_focus() {
   mkdir -p "$CACHE" && chmod 700 "$CACHE"
-  local last current
-  last=$(cat "$LAST_FOCUS" 2>/dev/null)
-  current=$(aerospace list-windows --focused --format '%{window-id} %{app-pid}' 2>/dev/null)
+  local current id pid bundle
+  current=$(aerospace list-windows --focused --format '%{window-id} %{app-pid} %{app-bundle-id}' 2>/dev/null)
+  read -r id pid bundle 2>/dev/null <"$LAST_FOCUS"
   printf '%s\n' "$current" >"$LAST_FOCUS"
-  [ -n "$last" ] && [ "${last%% *}" != "${current%% *}" ] || return 0
-  capture_pairs "$last"
+  [ -n "${id:-}" ] && [ "$id" != "${current%% *}" ] || return 0
+  skipped_app "${bundle:-}" && return 0
+  capture_pairs "$id $pid"
 }
 
 # The argument is "<window id>" for an AeroSpace window, or
