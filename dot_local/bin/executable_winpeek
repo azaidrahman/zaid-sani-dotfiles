@@ -3,25 +3,33 @@
 # window. The "Window Peek" Alfred workflow runs it. Hyper+F opens it.
 #
 # Usage:
-#   winpeek list        Print Alfred JSON: one row for each window.
+#   winpeek list        Print Alfred JSON: one item for each window.
 #   winpeek capture     Take a new screenshot of each window.
+#   winpeek on-focus    Take a screenshot of the window that lost the focus.
 #   winpeek focus <id>  Focus the window. AeroSpace goes to its workspace.
 #
-# The icon of a row is the last screenshot of the window. Press Shift or
-# Cmd+Y in Alfred to see the screenshot at full size (Quick Look).
+# The workflow shows the items in a Grid View. The image of an item is the
+# screenshot of the window, with the icon of the app in the bottom-right
+# corner. Press Shift or Cmd+Y in Alfred to see the screenshot at full size
+# (Quick Look).
 #
 # AeroSpace hides the windows of other workspaces off the screen, but macOS
 # still keeps their content. Thus "screencapture -l <window id>" gets the
-# current content of a hidden window. A capture takes about 0.1 seconds.
+# current content of a hidden window.
 #
-# The list does not wait for the captures. It shows the screenshots that are
-# in the cache, and it starts "winpeek capture" in the background. While the
-# capture runs, the list tells Alfred to run it again, so the new screenshots
-# show after a short time.
+# The list must be fast, and the Grid View of Alfred does not use the "rerun"
+# key, so it cannot show new screenshots after it opens. Thus the screenshots
+# come before the list opens:
+#   - AeroSpace runs "winpeek on-focus" when the focus changes. It takes a
+#     screenshot of the window that you left.
+#   - The list takes a screenshot only of a window that has none.
+#   - If the last full capture is old, the list starts a full capture in the
+#     background, for the next list.
 #
 # Each screenshot has a new file name (<window id>.<time>.jpg). Alfred keeps
 # images in a cache by path, so a file with the same name can show an old
-# image.
+# image. An old screenshot stays for one minute, because Alfred can read it
+# after the list prints its path.
 #
 # The screenshots can show private text. The cache directory has mode 0700.
 #
@@ -35,20 +43,24 @@ export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
 umask 077
 
 CACHE="${WINPEEK_CACHE:-$HOME/Library/Caches/winpeek}"
-# Do not start a capture if the last capture started less than this many
+# The app icons, as <pid>.png.
+ICONS="$CACHE/icons"
+# The list starts a full capture if the last one started more than this many
 # seconds ago.
-MIN_INTERVAL="${WINPEEK_MIN_INTERVAL:-3}"
+FULL_INTERVAL="${WINPEEK_FULL_INTERVAL:-30}"
 # A lock that is older than this many seconds is from a capture that stopped.
 STALE_LOCK=20
 # The number of captures that run at the same time.
 JOBS=6
 LOCK="$CACHE/capture.lock"
 STAMP="$CACHE/last-capture"
+# The window that had the focus last, as "<window id> <pid>".
+LAST_FOCUS="$CACHE/last-focus"
 SELF="${BASH_SOURCE[0]}"
 
 aero_windows() {
   aerospace list-windows --all --json \
-    --format '%{window-id} %{workspace} %{app-name} %{app-bundle-path} %{window-title}'
+    --format '%{window-id} %{workspace} %{app-pid} %{app-name} %{app-bundle-path} %{window-title}'
 }
 
 # Print the normal windows (layer 0) that are on a screen, from the window
@@ -72,12 +84,37 @@ JSON.stringify(out);
 JXA
 }
 
+# Write the icon of each app to <dir>/<pid>.png, at 256 x 256 pixels. Skip a
+# pid that has no app or no icon.
+# Usage: save_icons <dir> <pid>...
+save_icons() {
+  osascript -l JavaScript - "$@" <<'JXA'
+ObjC.import('AppKit');
+function run(argv) {
+  const dir = argv[0], size = 256;
+  for (const pid of argv.slice(1)) {
+    const app = $.NSRunningApplication.runningApplicationWithProcessIdentifier(Number(pid));
+    if (app.isNil() || app.icon.isNil()) continue;
+    const rep = $.NSBitmapImageRep.alloc.initWithBitmapDataPlanesPixelsWidePixelsHighBitsPerSampleSamplesPerPixelHasAlphaIsPlanarColorSpaceNameBytesPerRowBitsPerPixel(
+      null, size, size, 8, 4, true, false, $.NSDeviceRGBColorSpace, 0, 0);
+    $.NSGraphicsContext.saveGraphicsState;
+    $.NSGraphicsContext.setCurrentContext($.NSGraphicsContext.graphicsContextWithBitmapImageRep(rep));
+    app.icon.drawInRectFromRectOperationFraction($.NSMakeRect(0, 0, size, size), $.NSZeroRect,
+      $.NSCompositingOperationSourceOver, 1);
+    $.NSGraphicsContext.restoreGraphicsState;
+    rep.representationUsingTypeProperties($.NSBitmapImageFileTypePNG, $())
+      .writeToFileAtomically(dir + '/' + pid + '.png', true);
+  }
+}
+JXA
+}
+
 # Print all windows as one JSON array: the AeroSpace windows, then the other
 # windows that macOS lists. AeroSpace does not manage some windows, for
 # example the windows of Wine apps (CrossOver), because their accessibility
 # subrole is AXUnknown and not AXStandardWindow. Such a window has no
-# workspace and has the pid of its app. Skip the windows with no title, and
-# the small ones, because those are helper windows.
+# workspace. Skip the windows with no title, and the small ones, because
+# those are helper windows.
 # Return 1 if AeroSpace does not answer.
 all_windows() {
   local cg_file aero cg
@@ -95,8 +132,8 @@ all_windows() {
     | $aero + ($cg
         | map(select((.id as $id | $known | index($id) | not)
                      and .title != "" and .w >= 100 and .h >= 100))
-        | map({"window-id": .id, workspace: null, "app-name": .owner,
-               "app-bundle-path": null, "window-title": .title, pid: .pid}))
+        | map({"window-id": .id, workspace: null, "app-pid": .pid, "app-name": .owner,
+               "app-bundle-path": null, "window-title": .title}))
   '
 }
 
@@ -104,23 +141,16 @@ now() { date +%s; }
 
 mtime() { stat -f %m "$1" 2>/dev/null || echo 0; }
 
-# Remove the lock if it is stale. Return 0 if a capture runs.
-capture_running() {
-  [ -d "$LOCK" ] || return 1
-  if [ $(($(now) - $(mtime "$LOCK"))) -gt "$STALE_LOCK" ]; then
-    rmdir "$LOCK" 2>/dev/null
-    return 1
-  fi
-  return 0
-}
+# Milliseconds, so two captures in the same second get different names.
+stamp_ms() { perl -MTime::HiRes=time -e 'printf "%d", time * 1000'; }
 
-# Start a capture in the background, unless one runs or one ran recently.
-# The capture must not keep stdout open, because Alfred waits for EOF.
-maybe_start_capture() {
-  capture_running && return 0
-  [ $(($(now) - $(mtime "$STAMP"))) -lt "$MIN_INTERVAL" ] && return 1
-  nohup "$SELF" capture </dev/null >/dev/null 2>&1 &
-  return 0
+# Take a lock (a directory). Remove the lock first if it is stale. Return 1
+# if another process holds the lock.
+lock_take() {
+  if [ -d "$1" ] && [ $(($(now) - $(mtime "$1"))) -gt "$STALE_LOCK" ]; then
+    rmdir "$1" 2>/dev/null
+  fi
+  mkdir "$1" 2>/dev/null
 }
 
 # Set SHOT to the newest screenshot of a window. Return 1 if there is none.
@@ -136,26 +166,120 @@ shot_for() {
   [ -n "$SHOT" ]
 }
 
+# Read the icons of the apps that have none in the cache.
+# Usage: get_icons <pid>...
+get_icons() {
+  local pid todo=()
+  mkdir -p "$ICONS"
+  for pid in "$@"; do
+    [ -e "$ICONS/$pid.png" ] || todo+=("$pid")
+  done
+  [ ${#todo[@]} -eq 0 ] || save_icons "$ICONS" "${todo[@]}" >/dev/null 2>&1
+}
+
+# Draw the app icon in the bottom-right corner of the screenshot. The size of
+# the icon is one quarter of the short side of the screenshot. If the icon or
+# ImageMagick is missing, keep the screenshot as it is.
+add_badge() {
+  local shot=$1 icon=$2 out="$1.badge.jpg"
+  [ -s "$icon" ] && command -v magick >/dev/null || return 0
+  if magick "$shot" -set option:badge_size '%[fx:int(min(w,h)/4)]' \
+       -set option:badge_margin '%[fx:int(min(w,h)/32)]' \
+       \( "$icon" -resize '%[badge_size]x%[badge_size]' \) -gravity southeast \
+       -geometry '+%[badge_margin]+%[badge_margin]' -composite -quality 85 "$out" 2>/dev/null; then
+    mv -f "$out" "$shot"
+  else
+    rm -f "$out"
+  fi
+}
+
+# Take one screenshot and add the app icon. Keep the old screenshot if the
+# capture fails, for example for a minimized window. Skip the window if
+# another process captures it now.
+capture_one() {
+  local stamp=$1 id=$2 pid=$3
+  local lock="$CACHE/lock-$id" tmp="$CACHE/tmp-$id-$stamp.jpg" shot="$CACHE/$id.$stamp.jpg"
+  lock_take "$lock" || return 0
+  if screencapture -x -o -t jpg -l "$id" "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+    add_badge "$tmp" "$ICONS/$pid.png"
+    mv -f "$tmp" "$shot"
+    find "$CACHE" -maxdepth 1 -name "$id.*.jpg" ! -path "$shot" -mmin +1 -delete
+  else
+    rm -f "$tmp"
+  fi
+  rmdir "$lock" 2>/dev/null
+}
+
+# Take a screenshot of each window in the "<window id> <pid>" lines.
+capture_pairs() {
+  local pairs=$1
+  [ -n "$pairs" ] || return 0
+  # shellcheck disable=SC2046 # one pid in each word
+  get_icons $(cut -d' ' -f2 <<<"$pairs" | sort -u)
+  xargs -P "$JOBS" -L 1 "$SELF" capture-one "$(stamp_ms)" <<<"$pairs"
+}
+
+# Take a screenshot of each window in the JSON array. Remove the screenshots
+# of windows that closed, and the icons of apps that quit. Do nothing if a
+# full capture runs already.
+capture_windows() {
+  local windows=$1 pairs ids pids f id pid
+  lock_take "$LOCK" || return 0
+  trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+  touch "$STAMP"
+
+  pairs=$(jq -r '.[] | "\(."window-id") \(."app-pid")"' <<<"$windows")
+  ids=$(cut -d' ' -f1 <<<"$pairs")
+  pids=$(cut -d' ' -f2 <<<"$pairs" | sort -u)
+  capture_pairs "$pairs"
+
+  for f in "$CACHE"/*.jpg; do
+    [ -e "$f" ] || continue
+    id=${f##*/}; id=${id%%.*}
+    grep -qx "$id" <<<"$ids" || rm -f "$f"
+  done
+  for f in "$ICONS"/*.png; do
+    [ -e "$f" ] || continue
+    pid=${f##*/}; pid=${pid%.png}
+    grep -qx "$pid" <<<"$pids" || rm -f "$f"
+  done
+
+  rmdir "$LOCK" 2>/dev/null
+  trap - EXIT
+}
+
 cmd_list() {
   mkdir -p "$CACHE" && chmod 700 "$CACHE"
-  local windows focused rerun=false
+  local windows focused
   if ! windows=$(all_windows); then
     printf '{"items":[{"title":"AeroSpace does not answer","subtitle":"Start AeroSpace, then try again","valid":false}]}\n'
     return 0
   fi
   focused=$(aerospace list-windows --focused --format '%{window-id}' 2>/dev/null)
 
-  # A capture that starts now, or one that runs, gives new screenshots soon.
-  maybe_start_capture && rerun=true
+  # Take a screenshot of each window that has none, for example a new window.
+  local id pid missing=""
+  while read -r id pid; do
+    [ -n "$id" ] && ! shot_for "$id" && missing+="$id $pid"$'\n'
+  done < <(jq -r '.[] | "\(."window-id") \(."app-pid")"' <<<"$windows")
+  capture_pairs "${missing%$'\n'}"
+
+  # Keep the other screenshots fresh for the next list. The full capture must
+  # not keep stdout open, because Alfred waits for EOF.
+  if [ $(($(now) - $(mtime "$STAMP"))) -ge "$FULL_INTERVAL" ]; then
+    nohup "$SELF" capture </dev/null >/dev/null 2>&1 &
+  fi
 
   # The newest screenshot of each window, as "<id> TAB <path>" lines.
-  local shots="" id
+  local shots=""
   for id in $(jq -r '.[]."window-id"' <<<"$windows"); do
     shot_for "$id" && shots+="$id"$'\t'"$SHOT"$'\n'
   done
 
-  jq -n --argjson w "$windows" --arg shotlines "$shots" \
-    --arg focused "$focused" --argjson rerun "$rerun" '
+  # The footer of the grid shows the subtitle, so the subtitle ends with the
+  # time. Alfred has no other place for text in the grid.
+  jq -n --argjson w "$windows" --arg shotlines "$shots" --arg focused "$focused" \
+    --arg clock "$(date '+%-I:%M %p')" '
     ($shotlines | split("\n") | map(select(length > 0) | split("\t") | {(.[0]): .[1]})
       | add // {}) as $shots
     |
@@ -175,9 +299,10 @@ cmd_list() {
             title: $title,
             subtitle: ((if .workspace == null then "Not tiled" else "Workspace \(.workspace)" end)
                        + " · \(."app-name")"
-                       + (if $id == $focused then " · focused" else "" end)),
+                       + (if $id == $focused then " · focused" else "" end)
+                       + " · \($clock)"),
             # A window that AeroSpace does not manage is focused by its app.
-            arg: (if .pid then "\($id)/\(.pid)" else $id end),
+            arg: (if .workspace == null then "\($id)/\(."app-pid")" else $id end),
             match: "\(."app-name") \($title) \(.workspace // "")"
           }
           + (if $shot then {icon: {path: $shot}, quicklookurl: $shot}
@@ -185,48 +310,29 @@ cmd_list() {
              else {} end)
       )
     | {items: .}
-      + (if $rerun then {rerun: 0.3} else {} end)
       + (if length == 0 then
            {items: [{title: "No windows", subtitle: "AeroSpace lists no windows", valid: false}]}
          else {} end)
   '
 }
 
-# Take one screenshot. Keep the old one if the capture fails, for example for
-# a minimized window.
-capture_one() {
-  local id=$1 stamp=$2 tmp="$CACHE/tmp-$1-$2.jpg" f
-  if screencapture -x -o -t jpg -l "$id" "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
-    mv -f "$tmp" "$CACHE/$id.$stamp.jpg"
-    for f in "$CACHE/$id".*.jpg; do
-      [ "$f" = "$CACHE/$id.$stamp.jpg" ] || rm -f "$f"
-    done
-  else
-    rm -f "$tmp"
-  fi
-}
-
 cmd_capture() {
   mkdir -p "$CACHE" && chmod 700 "$CACHE"
-  capture_running && return 0
-  mkdir "$LOCK" 2>/dev/null || return 0
-  trap 'rmdir "$LOCK" 2>/dev/null' EXIT
-  touch "$STAMP"
-
-  local windows ids stamp f id
+  local windows
   windows=$(all_windows) || return 1
-  ids=$(jq -r '.[]."window-id"' <<<"$windows")
-  # Milliseconds, so two captures in the same second get different names.
-  stamp=$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')
+  capture_windows "$windows"
+}
 
-  printf '%s\n' $ids | xargs -P "$JOBS" -I{} "$SELF" capture-one {} "$stamp"
-
-  # Remove the screenshots of windows that closed.
-  for f in "$CACHE"/*.jpg; do
-    [ -e "$f" ] || continue
-    id=${f##*/}; id=${id%%.*}
-    grep -qx "$id" <<<"$ids" || rm -f "$f"
-  done
+# AeroSpace runs this when the focus changes. Take a screenshot of the window
+# that had the focus before, because its content can be new.
+cmd_on_focus() {
+  mkdir -p "$CACHE" && chmod 700 "$CACHE"
+  local last current
+  last=$(cat "$LAST_FOCUS" 2>/dev/null)
+  current=$(aerospace list-windows --focused --format '%{window-id} %{app-pid}' 2>/dev/null)
+  printf '%s\n' "$current" >"$LAST_FOCUS"
+  [ -n "$last" ] && [ "${last%% *}" != "${current%% *}" ] || return 0
+  capture_pairs "$last"
 }
 
 # The argument is "<window id>" for an AeroSpace window, or
@@ -245,7 +351,8 @@ cmd_focus() {
 case "${1:-}" in
   list) cmd_list ;;
   capture) cmd_capture ;;
-  capture-one) capture_one "$2" "$3" ;; # internal: cmd_capture runs it
+  capture-one) capture_one "$2" "$3" "$4" ;; # internal: capture_pairs runs it
+  on-focus) cmd_on_focus ;;
   focus) shift; cmd_focus "$@" ;;
-  *) sed -n '2,12p' "$SELF" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+  *) sed -n '2,14p' "$SELF" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
 esac

@@ -11,7 +11,12 @@ enable-normalization-flatten-containers = false
 enable-normalization-opposite-orientation-for-nested-containers = false
 after-login-command = []
 on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
-on-focus-changed = ['move-mouse window-lazy-center']
+# winpeek takes a screenshot of the window that lost the focus, so that the
+# Window Peek grid opens with no wait.
+on-focus-changed = [
+    'move-mouse window-lazy-center',
+    'exec-and-forget ~/.local/bin/winpeek on-focus',
+]
 
 
 # You can use it to add commands that run after AeroSpace startup.
