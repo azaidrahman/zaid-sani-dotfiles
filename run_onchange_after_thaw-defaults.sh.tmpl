@@ -1,0 +1,47 @@
+#!/bin/bash
+# Write the hotkeys of Thaw (com.stonerl.Thaw), the menu bar manager, on each
+# Mac.
+#
+# Thaw keeps its hotkeys in macOS defaults, not in a config file. This script
+# makes them the same on all Macs. Chezmoi runs it again when the contents of
+# this file change.
+#
+# If you change a hotkey in the Thaw settings, also change it here. If you do
+# not, the next change to this file sets the old hotkey again.
+set -euo pipefail
+{{ if ne .chezmoi.os "darwin" -}}
+exit 0
+{{ end -}}
+
+domain=com.stonerl.Thaw
+
+# Thaw stores each hotkey as the JSON text "[keyCode,modifiers]", in a data
+# value. The modifier bits are 1 Command, 2 Option, 4 Control, and 8 Shift.
+# Thus 15 is hyper.
+#
+# Hyper+0 (key code 29) opens "Search Menu Bar Items".
+hotkeys=(
+  SearchMenuBarItems "[29,15]"
+)
+
+# Thaw writes its defaults when it quits. A value written while Thaw runs can
+# thus be lost. Quit Thaw first, and open it again after the change.
+was_running=false
+if pgrep -qx Thaw; then
+  was_running=true
+  osascript -e 'quit app "Thaw"'
+  for _ in $(seq 1 50); do
+    pgrep -qx Thaw || break
+    sleep 0.1
+  done
+fi
+
+for ((i = 0; i < ${#hotkeys[@]}; i += 2)); do
+  hex=$(printf '%s' "${hotkeys[i + 1]}" | xxd -p | tr -d '\n')
+  # -dict-add keeps the hotkeys that this file does not set.
+  defaults write "$domain" Hotkeys -dict-add "${hotkeys[i]}" -data "$hex"
+done
+
+if $was_running; then
+  open -g -a Thaw
+fi
