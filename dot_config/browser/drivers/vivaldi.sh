@@ -295,6 +295,29 @@ drv_open_in() {
   fi
 }
 
+# drv_open_window <url>: open the URL in a new window that shows no
+# workspace. A new window shows the tabs that are in no workspace, and its
+# start page tab is in no workspace. The driver loads the URL in that tab,
+# so the window has one tab. Do not send a workspace key.
+# Not checked: a workspace rule that matches the URL can move the tab.
+drv_open_window() {
+  local before new
+  # If Vivaldi is not running, "make new window" starts it, and Vivaldi also
+  # opens its last session. Start it first, so that the new window is the
+  # only window that is new.
+  if ! pgrep -x Vivaldi > /dev/null; then
+    viv_focus_main || return 1
+  fi
+  before=$(aero_ids | tr '\n' ' ')
+  osascript -e 'on run argv' \
+    -e 'tell application "Vivaldi"' \
+    -e 'set w to make new window with properties {mode:"normal"}' \
+    -e 'set URL of active tab of w to item 1 of argv' \
+    -e 'end tell' -e 'end run' "$1" > /dev/null || return 1
+  new=$(aero_wait_new "$before") || return 1
+  aero_focus "$new"
+}
+
 # drv_tab <name> <space> <url prefix>
 drv_tab() {
   drv_focus_url "$3" "$3" "$2"
