@@ -56,6 +56,9 @@ different app comes to the front. An app is a game if macOS puts it in a games
 category, or if it supports Game Mode. World of Warcraft is a game. Its
 launcher and Battle.net are not.
 
+The `gamekeys` agent is on aqua only. On other machines, chezmoi does not
+deploy it, and the install script removes an earlier install.
+
 The "Game" profile has no complex rules. It keeps the modifier swaps of each
 keyboard. It does not keep the remaps of the mouse buttons. `run_onchange_after_goku.sh`
 makes the profile from the device settings of the "Zaid" profile.

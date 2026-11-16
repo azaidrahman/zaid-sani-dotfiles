@@ -9,16 +9,30 @@
 # and of the menu, or the old ones keep running.
 set -euo pipefail
 
+DIR="$HOME/.config/gamekeys"
+LABEL="com.zaid.gamekeys"
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+APP="$HOME/Applications/gamekeys.app"
+EXE="$APP/Contents/MacOS/gamekeys"
+
+{{ if ne (includeTemplate "hostname" $) "aqua" -}}
+# gamekeys is on aqua only. On other machines, remove an earlier install.
+# .chezmoiignore stops the deploy of ~/.config/gamekeys.
+pkill -f "^$EXE" 2>/dev/null || true
+# A bootout sends SIGTERM. The agent selects the main profile again before it
+# stops, so the keybinds stay on.
+launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+rm -f "$PLIST"
+rm -rf "$APP" "$DIR"
+exit 0
+{{ end -}}
+
 # A compiled binary is specific to one machine, so each Mac builds its own.
 # See docs/adr/0002-compile-swift-huds-on-each-machine.md.
 if ! command -v swiftc >/dev/null 2>&1; then
   echo "install-gamekeys: swiftc not found, skipping the build" >&2
   exit 0
 fi
-
-DIR="$HOME/.config/gamekeys"
-LABEL="com.zaid.gamekeys"
-PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 
 mkdir -p "$DIR/bin"
 echo "install-gamekeys: compiling gamekeys"
@@ -28,9 +42,6 @@ mv "$DIR/bin/gamekeys.new" "$DIR/bin/gamekeys"
 # The menu bar item is an app, so System Settings can list it as a login item.
 # The app holds a copy of the same binary. It starts in the `menu` mode because
 # it has no arguments.
-APP="$HOME/Applications/gamekeys.app"
-EXE="$APP/Contents/MacOS/gamekeys"
-
 first_install=true
 [[ -d $APP ]] && first_install=false
 

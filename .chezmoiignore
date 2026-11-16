@@ -71,6 +71,13 @@ archive/
 .config/karabiner/src/autoclick-hud.swift
 {{ end }}
 
+# gamekeys is on aqua only. On other machines, run_onchange_after_install-gamekeys.sh
+# removes the agent and the menu app. The "Game" and "WoW" Karabiner profiles
+# stay, but no agent selects them.
+{{ if ne (includeTemplate "hostname" $) "aqua" }}
+.config/gamekeys/
+{{ end }}
+
 # OpenLogi reads ~/.config/openlogi/config.toml, a symlink to openlogi.toml in
 # the source directory. Thus, saves from the app go into the repository. The
 # app keeps a lock file beside the target.
