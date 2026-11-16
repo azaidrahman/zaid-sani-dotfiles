@@ -36,10 +36,30 @@ vim.keymap.set('x', 'y', '"+y<Cmd>qa!<CR>')
 
 -- Load flash.nvim only if it is on disk. Do not fail if it is missing.
 local flash_dir = vim.fn.stdpath('data') .. '/lazy/flash.nvim'
-if vim.uv.fs_stat(flash_dir) then
+local has_flash = vim.uv.fs_stat(flash_dir) ~= nil
+if has_flash then
   vim.opt.runtimepath:append(flash_dir)
   require('flash').setup({})
   vim.keymap.set({ 'n', 'x', 'o' }, 'gs', function()
     require('flash').jump()
   end)
+end
+
+-- Jump mode (prefix+g). copy-mode.sh sets REX_COPY_JUMP to "jump".
+-- Start a flash jump at once: type the start of a word, then press its label.
+-- If flash.nvim is missing, start a / search: type the word, then Enter.
+if vim.env.REX_COPY_JUMP == 'jump' then
+  vim.api.nvim_create_autocmd('VimEnter', {
+    once = true,
+    callback = function()
+      -- Wait until the first screen is drawn, so that the labels show.
+      vim.schedule(function()
+        if has_flash then
+          require('flash').jump()
+        else
+          vim.api.nvim_feedkeys('/', 'n', false)
+        end
+      end)
+    end,
+  })
 end

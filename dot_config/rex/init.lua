@@ -64,6 +64,10 @@ rex.bind("ctrl+space>e", "diff_review")
 -- prefix+c: copy text from the focused pane with vim keys (copy_mode.lua).
 rex.bind("ctrl+space>c", "copy_mode")
 
+-- prefix+g: copy mode that starts with a jump. Type the start of a word, then
+-- press its label (copy_mode.lua).
+rex.bind("ctrl+space>g", "copy_jump")
+
 -- prefix+f: pick a tab from all sessions (tab_picker.lua).
 rex.bind("ctrl+space>f", "tab_picker")
 
