@@ -29,7 +29,8 @@
             :WoW  {}}
 
  :applications {:ghostty-utm ["^com\\.mitchellh\\.ghostty$"
-                              "^com\\.utmapp\\.UTM$"]}
+                              "^com\\.utmapp\\.UTM$"]
+                :ytm         ["^net\\.venipa\\.ytmdesktop$"]}
 
  :templates {:open          "open -a '%s'",
              :open-id       "open -b '%s'"
@@ -338,6 +339,17 @@
    [;; Double-tap \ → Notification Centre (⌘⌃⌥F9)
     [:backslash [:!CTOf9 ["bs-tapped" 0]] ["bs-tapped" 1]]
     [:backslash [:backslash ["bs-tapped" 1]] nil {:delayed {:invoked ["bs-tapped" 0] :canceled ["bs-tapped" 0]}}]]}
+
+  ;; YouTube Music for Desktop (YTMDesktop2) stops its Local API when the main
+  ;; window gets a close request. With "minimize to tray" on, the app only
+  ;; hides the window and continues to play, but the API stays off until the
+  ;; app restarts. Then ytm, Alfred, and ytm-mini do not work. Command+H hides
+  ;; the app and sends no close request, so it keeps the API on.
+  {:des "YouTube Music: Command+W hides the app"
+   :rules
+   [:ytm
+    [:!Cw :!Ch]
+    [:!Qw :!Qh]]}
 
   ; {:des "Ghostty/UTM: swap Cmd and Ctrl"
   ;  :rules

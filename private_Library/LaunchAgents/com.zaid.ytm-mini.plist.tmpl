@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ytm-mini is a mini player for YouTube Music for Desktop. It stays on top of
+  the other windows, on the second monitor from the left, in all AeroSpace
+  workspaces. It is hidden when only one monitor is connected, or when
+  YouTube Music plays nothing. See ~/.config/karabiner/src/ytm-mini.swift.
+  The build-huds chezmoi script compiles the program.
+  run_onchange_after_load-ytm-mini.sh loads this agent.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.zaid.ytm-mini</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{ .chezmoi.homeDir }}/.config/karabiner/scripts/ytm-mini</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+  <key>StandardOutPath</key>
+  <string>{{ .chezmoi.homeDir }}/Library/Logs/ytm-mini.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{ .chezmoi.homeDir }}/Library/Logs/ytm-mini.log</string>
+</dict>
+</plist>

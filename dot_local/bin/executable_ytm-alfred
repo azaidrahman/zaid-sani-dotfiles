@@ -62,7 +62,10 @@ if [[ $id =~ ^[A-Za-z0-9_-]+$ ]]; then
   fi
 fi
 
-jq -c --arg q "$query" --arg thumb "$thumb" '
+# ytm-mini keeps the hide state in its defaults. "1" means hidden.
+mini_hidden="$(defaults read com.zaid.ytm-mini hidden 2>/dev/null || echo 0)"
+
+jq -c --arg q "$query" --arg thumb "$thumb" --arg mini "$mini_hidden" '
   .state as $s | .track as $t |
   (if .volume == null then "" else "Now \(.volume) percent. " end) as $now |
   (if .volume == null then null else "vol \(.volume)%" end) as $vol |
@@ -108,7 +111,12 @@ jq -c --arg q "$query" --arg thumb "$thumb" '
         "dislike"; if $s.disliked then "disliked" else "dislike" end; "thumbs down"),
     row("Shuffle"; "Shuffle the queue"; "shuffle"; "shuffle"; "mix random"),
     row("Repeat"; "Change the repeat mode"; "repeat"; "repeat"; "loop"),
-    row("Open the player"; "Show the player of the menu bar icon"; "tray"; "player"; "tray mini window"),
+    row("Open the player"; "Show the player of the menu bar icon"; "tray"; "player"; "tray window"),
+    (if $mini == "1" then
+       row("Show the mini player"; "Show the album art on the second monitor"; "mini show"; "player"; "mini unhide")
+     else
+       row("Hide the mini player"; "Hide the album art on the second monitor"; "mini hide"; "player"; "mini unhide")
+     end),
     search_row(""),
     # The title does not say "YouTube Music". With those words, a song query
     # such as "music" would match this row and hide the search row.

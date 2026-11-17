@@ -25,6 +25,7 @@ process_name="YouTube Music for Desktop"
 # Contents/Frameworks. Tests set YTM_APP_PATTERN to find a fake app.
 app_pattern="${YTM_APP_PATTERN:-${process_name}.app/Contents/MacOS/}"
 hud_bin="${YTM_HUD_BIN:-$HOME/.config/karabiner/scripts/ytm-hud}"
+mini_bin="$HOME/.config/karabiner/scripts/ytm-mini"
 
 usage() {
   cat <<'EOF'
@@ -47,6 +48,8 @@ Usage: ytm <command>
   json                Show the track and the player state as one JSON object.
   thumb <file>        Save the album art of the current track to a file.
   tray                Open or close the player of the menu bar icon.
+  mini [command]      Control the mini player on the second monitor:
+                      toggle (the default), show, hide, or reset.
   restart             Stop YouTube Music and open it again. Use this when
                       the Local API does not answer.
   pair                Get an API token. Approve the request in the app.
@@ -294,6 +297,11 @@ case "${1:-}" in
     api GET /track/thumbnail >"$2"
     ;;
   tray) tray ;;
+  mini)
+    # The LaunchAgent com.zaid.ytm-mini runs the player. This call only sends
+    # a command to it.
+    exec "$mini_bin" "${2:-toggle}"
+    ;;
   restart) restart ;;
   pair) pair ;;
   -h | --help | help) usage ;;
