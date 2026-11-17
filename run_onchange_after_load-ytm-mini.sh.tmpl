@@ -1,0 +1,33 @@
+#!/bin/bash
+# plist hash: {{ include "private_Library/LaunchAgents/com.zaid.ytm-mini.plist.tmpl" | sha256sum }}
+# source hash: {{ include "dot_config/private_karabiner/src/ytm-mini.swift" | sha256sum }}
+#
+# Load the LaunchAgent of the YouTube Music mini player again (see the comment
+# in the plist). The build-huds script compiles a new binary when the Swift
+# source changes. The agent runs the new binary only after a restart, so a
+# change to the source also loads the agent again.
+{{ if eq .chezmoi.os "darwin" -}}
+set -euo pipefail
+
+LABEL=com.zaid.ytm-mini
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+BIN="$HOME/.config/karabiner/scripts/ytm-mini"
+DOMAIN="gui/$(id -u)"
+
+# If swiftc is not installed, build-huds makes no binary. Then do not load
+# the agent, because launchd would try to start a missing file.
+if [ ! -x "$BIN" ]; then
+  echo "load-ytm-mini: $BIN not found, skipping"
+  exit 0
+fi
+
+# A bootout returns before the agent stops. Wait until launchd forgets the
+# label, or the bootstrap fails with "Input/output error".
+launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+for _ in $(seq 1 50); do
+  launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1 || break
+  sleep 0.1
+done
+launchctl bootstrap "$DOMAIN" "$PLIST"
+echo "load-ytm-mini: the YouTube Music mini player runs on the second monitor"
+{{ end -}}
