@@ -55,7 +55,15 @@ if lockFD < 0 || flock(lockFD, LOCK_EX | LOCK_NB) != 0 {
     exit(0)
 }
 
-let base = "http://127.0.0.1:\(ProcessInfo.processInfo.environment["YTM_PORT"] ?? "13091")"
+// The port must be a number. Then a bad YTM_PORT cannot send the token to
+// a host other than 127.0.0.1.
+let port: Int = {
+    guard let p = Int(ProcessInfo.processInfo.environment["YTM_PORT"] ?? ""), (1...65535).contains(p) else {
+        return 13091
+    }
+    return p
+}()
+let base = "http://127.0.0.1:\(port)"
 let tokenPath: String = {
     let env = ProcessInfo.processInfo.environment
     let data = env["XDG_DATA_HOME"].flatMap { $0.isEmpty ? nil : $0 }
