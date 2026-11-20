@@ -26,6 +26,10 @@
 #    title that AeroSpace shows. The start page has an empty title in
 #    scripting, but AeroSpace shows "Start Page - Vivaldi". The view of the
 #    tabs in no workspace often shows the start page.
+# 9. Vivaldi scripting cannot move a tab to a different window. "move tab"
+#    fails, or the moved tab loses its page (2026-11-20). The command "Move
+#    Tab to New Window" moves the active tab, and the tab keeps its history.
+#    In the Vivaldi settings of the user, its shortcut is ⌘\.
 #
 # AeroSpace shows a Vivaldi window as "<title of the active tab> - Vivaldi".
 # A Picture in Picture window is also a Vivaldi window. The driver ignores it.
@@ -150,9 +154,7 @@ viv_show() {
 }
 
 # viv_key <position>: send the shortcut for the workspace at the position to
-# the focused Vivaldi window. Send it as soon as Vivaldi is the frontmost
-# application. If Vivaldi does not become frontmost in 1 second, stop, so
-# that the keys never go to a different application.
+# the focused Vivaldi window.
 viv_key() {
   local digit=$(($1 + 1)) code
   if [ "$digit" -gt 9 ]; then
@@ -160,8 +162,25 @@ viv_key() {
     return 1
   fi
   code=$(echo "$viv_digit_codes" | cut -d' ' -f"$digit")
-  osascript - "$code" <<'EOF'
+  viv_press "$code" control shift
+}
+
+# viv_press <key code> <modifier>...: press the key with the modifiers in the
+# focused Vivaldi window. A modifier is command, control, option, or shift.
+# Press it as soon as Vivaldi is the frontmost application. If Vivaldi does
+# not become frontmost in 1 second, stop, so that the key never goes to a
+# different application.
+viv_press() {
+  osascript - "$@" <<'EOF'
 on run argv
+  set mods to {}
+  repeat with i from 2 to count of argv
+    set m to item i of argv
+    if m is "command" then set end of mods to command down
+    if m is "control" then set end of mods to control down
+    if m is "option" then set end of mods to option down
+    if m is "shift" then set end of mods to shift down
+  end repeat
   tell application "System Events"
     set tries to 0
     repeat until frontmost of process "Vivaldi"
@@ -169,7 +188,7 @@ on run argv
       if tries > 40 then error "Vivaldi is not the frontmost application"
       delay 0.025
     end repeat
-    key code (item 1 of argv as integer) using {control down, shift down}
+    key code (item 1 of argv as integer) using mods
   end tell
 end run
 EOF
@@ -385,4 +404,21 @@ drv_focus_tab() {
     return 0
   fi
   [ "$2" = - ] || viv_js activate "$2" > /dev/null
+}
+
+# drv_tab_window <window id> <tab id> [<position>]: move the tab to a new
+# window. Focus the tab (see drv_focus_tab), then press ⌘\ (key code 42), the
+# shortcut of "Move Tab to New Window" (see check 9). Then focus the new
+# window.
+drv_tab_window() {
+  local before new
+  if [ "$2" = - ]; then
+    echo "no tab to move" >&2
+    return 1
+  fi
+  drv_focus_tab "$@" || return 1
+  before=$(aero_ids | tr '\n' ' ')
+  viv_press 42 command || return 1
+  new=$(aero_wait_new "$before") || return 1
+  aero_focus "$new"
 }

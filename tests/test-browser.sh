@@ -68,8 +68,9 @@ EOF
 # "make new window" adds window 20 to the AeroSpace windows, and returns the
 # Vivaldi id 777. If the last argument is a URL, "new-window <URL>" goes to
 # the log. "vivaldi.js windows" returns $STUB_VIV, and
-# "vivaldi.js window-title" returns $STUB_WTITLE. Key codes and window
-# closes go to the log.
+# "vivaldi.js window-title" returns $STUB_WTITLE. Key codes with their
+# modifiers, and window closes, go to the log. A key with ⌘ (the shortcut
+# "Move Tab to New Window") also adds window 20.
 cat > "$TMP/bin/osascript" <<'EOF'
 #!/bin/sh
 case "$*" in
@@ -86,7 +87,11 @@ esac
 if [ "${1:-}" = - ]; then
   body=$(cat)
   case "$body" in
-    *"key code"*) echo "key $2" >> "$STUB_LOG"; exit 0 ;;
+    *"key code"*)
+      shift
+      echo "key $*" >> "$STUB_LOG"
+      case " $* " in *" command "*) echo 20 >> "$STUB_DIR/windows" ;; esac
+      exit 0 ;;
     *close*) echo "close $2" >> "$STUB_LOG"; exit 0 ;;
   esac
 fi
@@ -250,6 +255,12 @@ BROWSER_DRIVER=vivaldi STUB_WTITLE=Video \
   STUB_TITLES=$'10|true|true|Mail - Vivaldi\n11|false|false|Video - Vivaldi' \
   run "focus tab: the tab - only shows the workspace" 0 \
   "aerospace focus --window-id 11;;key 19" "activate" - focus-tab 5 - 1
+# tab-window: focus the tab as focus-tab does, then press ⌘\ (key code 42),
+# and focus the new window 20.
+BROWSER_DRIVER=vivaldi STUB_WTITLE=Video \
+  STUB_TITLES=$'10|true|true|Mail - Vivaldi\n11|false|false|Video - Vivaldi' \
+  run "tab window: move the tab to a new window" 0 \
+  "activate 42;;key 42 command;;aerospace focus --window-id 20" - - tab-window 5 42 2
 
 # The URL matching of vivaldi.js, run for real. js_check loads vivaldi.js
 # from this repository with eval, to call its functions. It reads no other

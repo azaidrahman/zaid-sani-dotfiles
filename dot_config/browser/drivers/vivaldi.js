@@ -482,6 +482,9 @@ function run(argv) {
             title: t.title || t.url,
             subtitle: `${place} · ${t.url}`,
             arg: `${t.windowId} ${t.id}`,
+            // With ⌘, the item variable "window" is "new": the next action
+            // then moves the tab to a new window.
+            mods: { cmd: { subtitle: `Move to a new window · ${t.url}`, variables: { window: 'new' } } },
             match: `${t.title} ${t.url} ${w ? w.name : ''}`,
             icon,
           };
