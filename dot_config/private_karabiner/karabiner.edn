@@ -375,7 +375,8 @@
    [:WoW
     [:##f         :!QWERf         :wow-caps]
     [:##tab       :left_control   nil {:alone :tab}]
-    [:##caps_lock [:!Sleft_control ["wow-caps" 1]] nil
+    ;; Set the variable first. Karabiner holds only the last key in "to".
+    [:##caps_lock [["wow-caps" 1] :!Sleft_control] nil
      {:alone :keypad_slash :afterup ["wow-caps" 0]}]]}
 
 ;; BEGIN WORKSPACE-RULES (auto-generated from config/help-text.yaml)
