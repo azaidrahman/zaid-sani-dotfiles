@@ -145,7 +145,7 @@
     [:q "$HOME/.local/bin/browser space YouTube":app-launch]
     [:w [:open "Whatsapp"]                :app-launch]
     [:e [:open "Obsidian"]                :app-launch]
-    [:r [:open "Rex Beta"]                :app-launch]
+    [:r [:open "Rex"]                     :app-launch]
     [:t "$HOME/.config/karabiner/scripts/ghostty-window.sh":app-launch]
     [:i [:open "IINA"]                    :app-launch]
     [:o [:open "Todoist"]                 :app-launch]

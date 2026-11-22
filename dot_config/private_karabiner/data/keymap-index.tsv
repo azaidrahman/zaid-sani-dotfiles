@@ -32,7 +32,7 @@ app	⌥R	9	todoist	sh:$HOME/.local/bin/browser open --float https://todoistenhan
 app	⌥R	o	todoist(app)	Todoist
 app	⌥R	x	mixlet	Mixlet
 app	⌥R	0	claude	Claude
-app	⌥R	r	rex	Rex Beta
+app	⌥R	r	rex	Rex
 app	⌥R	m	ytm	YouTube Music for Desktop
 workspace	⌥L	1	ws1	workspace 1
 workspace	⌥L	2	ws2	workspace 2
