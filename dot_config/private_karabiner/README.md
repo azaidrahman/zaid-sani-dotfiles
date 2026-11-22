@@ -86,6 +86,10 @@ pinky key and the thumb give all 8 sets of binds:
 A tap sends its key when you release the key. The bottom-left keys keep their
 device swaps, so Command+Tab still works in the game.
 
+Caps Lock+F sends hyper+F. This key opens the Window Peek switcher in Alfred,
+the same as in the "Zaid" profile. Thus `CTRL-SHIFT-F` is not a bind from Caps
+Lock. Tab+Shift+F still sends `CTRL-SHIFT-F`.
+
 OpenLogi, not Karabiner, controls the MX Master 3. In WoW, the back and
 forward buttons send mouse buttons 4 and 5 (BUTTON4 and BUTTON5 in WoW). The
 gesture button sends F8. See `dot_config/openlogi/`.
