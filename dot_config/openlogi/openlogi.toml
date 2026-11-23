@@ -92,8 +92,13 @@ Click = "LaunchpadShow"
 # "Zaid": the default profile. It has the same mouse buttons as the "Zaid"
 # profile of Karabiner had. Per-app profiles, such as WoW, replace it.
 # Back sends hyper+f, the keys of the "Window Peek" Alfred workflow (winpeek).
+# Back uses System Events and not a CustomShortcut. OpenLogi types a
+# CustomShortcut on its virtual keyboard. Karabiner grabs that keyboard, and
+# Karabiner cannot tell it from the built-in keyboard. The Command to Option
+# swap of the built-in keyboard then changes hyper+f to Ctrl+Option+Shift+F.
+# System Events posts the keys after Karabiner, so the keys stay as they are.
 [devices."unit:7aa40479".bindings]
-Back = { CustomShortcut = "Cmd+Ctrl+Alt+Shift+F" }
+Back = { RunAppleScript = 'tell application "System Events" to keystroke "f" using {command down, control down, option down, shift down}' }
 Forward = "LeftClick"
 
 [devices."unit:7aa40479".links."direct:046d:b023".capabilities]
