@@ -25,6 +25,13 @@
 //
 // The goku script in chezmoi makes the "Game" and "WoW" profiles, from the
 // device settings of the main profile.
+//
+// Some games also get a monitor to themselves. When World of Warcraft starts,
+// the agent waits for its window. It then moves each other window on the
+// workspace of the game to the workspace that shows on the other monitor. That
+// workspace gets the accordion layout, so the windows overlap and do not split
+// the screen. The windows stay there after the game quits. See
+// `clearMonitorPrefixes`.
 
 import AppKit
 import Darwin
@@ -110,6 +117,123 @@ private func profile(for app: NSRunningApplication?) -> String? {
     return gameProfilesByBundle.first { id.hasPrefix($0.prefix) }?.profile ?? gameProfile
 }
 
+// MARK: - AeroSpace
+
+private let aerospace = "/opt/homebrew/bin/aerospace"
+// Each app that gets a monitor to itself when it starts. The key is a prefix
+// of the bundle ID, so it also matches the Classic and PTR clients.
+private let clearMonitorPrefixes = ["com.blizzard.worldofwarcraft"]
+// The game loads for some time before its window shows. Look for the window
+// at this interval, for this many times.
+private let windowPollInterval: TimeInterval = 1
+private let windowPollLimit = 180
+
+struct AeroWindow {
+    let id: String
+    let workspace: String
+    let monitor: String
+    let bundle: String
+    let layout: String
+    let container: String // the layout of the parent container
+}
+
+private func aero(_ arguments: [String]) -> (status: Int32, output: String) {
+    let result = run(aerospace, arguments)
+    if result.status != 0 {
+        log("aerospace \(arguments.joined(separator: " ")) failed: \(result.output)")
+    }
+    return result
+}
+
+private func aeroWindows() -> [AeroWindow] {
+    let format = "%{window-id}|%{workspace}|%{monitor-id}|%{app-bundle-id}|%{window-layout}|%{window-parent-container-layout}"
+    let result = aero(["list-windows", "--all", "--format", format])
+    guard result.status == 0 else { return [] }
+    return result.output.split(separator: "\n").compactMap { line in
+        let f = line.split(separator: "|", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard f.count == 6 else { return nil }
+        return AeroWindow(id: f[0], workspace: f[1], monitor: f[2], bundle: f[3],
+                          layout: f[4], container: f[5])
+    }
+}
+
+// The workspace that shows on each monitor, as (workspace, monitor ID).
+private func visibleWorkspaces() -> [(workspace: String, monitor: String)] {
+    let result = aero(["list-workspaces", "--monitor", "all", "--visible",
+                       "--format", "%{workspace}|%{monitor-id}"])
+    guard result.status == 0 else { return [] }
+    return result.output.split(separator: "\n").compactMap { line in
+        let f = line.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+        return f.count == 2 ? (f[0], f[1]) : nil
+    }
+}
+
+struct ClearPlan: Equatable {
+    let game: String          // the window ID of the game, to focus again
+    let destination: String   // the workspace on the other monitor
+    let moves: [String]       // the window IDs to move there
+}
+
+// Decide what to move. Nil when the game has no window, or when no other
+// monitor shows a workspace.
+func planClear(windows: [AeroWindow], prefix: String,
+               visible: [(workspace: String, monitor: String)]) -> ClearPlan? {
+    guard let game = windows.first(where: { $0.bundle.hasPrefix(prefix) }),
+          let destination = visible.first(where: { $0.monitor != game.monitor })?.workspace
+    else { return nil }
+    let moves = windows
+        .filter { $0.workspace == game.workspace && !$0.bundle.hasPrefix(prefix) }
+        .map(\.id)
+    return ClearPlan(game: game.id, destination: destination, moves: moves)
+}
+
+// Move the other windows off the monitor of the game. Return false when the
+// game has no window yet.
+@discardableResult
+private func clearMonitor(prefix: String, dryRun: Bool) -> Bool {
+    let windows = aeroWindows()
+    guard windows.contains(where: { $0.bundle.hasPrefix(prefix) }) else { return false }
+    guard let plan = planClear(windows: windows, prefix: prefix, visible: visibleWorkspaces()) else {
+        log("\(prefix): no other monitor shows a workspace, so no windows move")
+        return true
+    }
+    log("\(prefix): \(dryRun ? "dry run: would move" : "moving") \(plan.moves.count) window(s) to workspace \(plan.destination)")
+    if dryRun {
+        for id in plan.moves {
+            let w = windows.first { $0.id == id }
+            log("  window \(id) \(w?.bundle ?? "?") (\(w?.layout ?? "?"))")
+        }
+        return true
+    }
+    guard !plan.moves.isEmpty else { return true }
+    for id in plan.moves {
+        _ = aero(["move-node-to-workspace", "--window-id", id, plan.destination])
+    }
+    // A floating window would become tiled under `layout`, so give the layout
+    // to a tiled window. Its container is the one that holds the moved windows.
+    // AeroSpace reports a failure for a layout that is already set, so skip it.
+    let moved = Set(plan.moves)
+    if let tiled = aeroWindows().first(where: { moved.contains($0.id) && $0.layout != "floating" }),
+       !tiled.container.hasSuffix("accordion") {
+        _ = aero(["layout", "accordion", "--window-id", tiled.id])
+    }
+    _ = aero(["focus", "--window-id", plan.game])
+    return true
+}
+
+// Look for the window of the game until it shows, then clear its monitor.
+private func clearWhenWindowShows(prefix: String, triesLeft: Int = windowPollLimit) {
+    if clearMonitor(prefix: prefix, dryRun: false) { return }
+    guard triesLeft > 0 else {
+        log("\(prefix): no window after \(windowPollLimit) tries, so no windows move")
+        return
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + windowPollInterval) {
+        clearWhenWindowShows(prefix: prefix, triesLeft: triesLeft - 1)
+    }
+}
+
 // MARK: - Agent
 
 private final class Watcher {
@@ -173,6 +297,17 @@ private func watch() -> Never {
     ) { note in
         let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
         watcher.update(for: app)
+    }
+    NSWorkspace.shared.notificationCenter.addObserver(
+        forName: NSWorkspace.didLaunchApplicationNotification,
+        object: nil,
+        queue: .main
+    ) { note in
+        let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        let id = app?.bundleIdentifier ?? ""
+        guard let prefix = clearMonitorPrefixes.first(where: { id.hasPrefix($0) }) else { return }
+        log("\(id) started, so its monitor is cleared when its window shows")
+        clearWhenWindowShows(prefix: prefix)
     }
 
     // A stop of the agent gives the keybinds back.
@@ -522,7 +657,16 @@ case "watch":
     watch()
 case "menu":
     runMenu()
+case "clear-monitor":
+    // Clear the monitor of a running app now, as the agent does when the game
+    // starts. With --dry-run, only show what would move.
+    let rest = CommandLine.arguments.dropFirst(2)
+    let prefix = rest.first { !$0.hasPrefix("--") } ?? clearMonitorPrefixes[0]
+    if !clearMonitor(prefix: prefix, dryRun: rest.contains("--dry-run")) {
+        log("\(prefix): no window")
+        exit(1)
+    }
 default:
-    FileHandle.standardError.write("usage: gamekeys [watch|menu]\n".data(using: .utf8)!)
+    FileHandle.standardError.write("usage: gamekeys [watch|menu|clear-monitor [--dry-run] [bundle-prefix]]\n".data(using: .utf8)!)
     exit(2)
 }
