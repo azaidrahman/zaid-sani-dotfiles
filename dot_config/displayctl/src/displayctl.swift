@@ -3,12 +3,15 @@
 // A disabled display leaves the display list of macOS. No windows go to it and
 // it holds no place in the display arrangement. The lid can stay open.
 //
-// The `watch` command runs as an agent. It turns the built-in display off when
-// exactly two external displays are connected. It turns the display on again
-// for any other number. The agent decides after a change of the monitors, and
-// again after the Mac wakes. At its own start, for example at login, the agent
-// does not turn the display off. It leaves the display on, and the menu asks
-// the user.
+// The `watch` command runs as an agent. The usual desk has exactly two external
+// displays, and the built-in display is then not necessary. For any other
+// number the agent turns the built-in display on again. The agent decides after
+// a change of the monitors, and again after the Mac wakes.
+//
+// The agent never turns the display off by itself. When the display should go
+// off, the agent leaves it on, and the menu asks the user. When the agent turns
+// the display back on and an external display remains, the menu also asks. The
+// user can then turn the display off at that desk too.
 //
 // The `menu` command shows an item in the menu bar. The item shows the state of
 // the display and of the agent. It can turn the display on or off, and it can
@@ -191,10 +194,28 @@ struct Latch {
     }
 }
 
-// The count of externals for which the agent waits for the user. At its start,
-// the agent leaves the display on and the menu asks the user. The wait holds
-// until the count changes, also after a wake. Thus an answer of "Keep On" lasts
-// while the set of monitors stays the same.
+// What the agent does with a planned change.
+enum Step: Equatable {
+    case apply       // make the change, and ask nothing
+    case askOnly     // make no change, and let the user choose
+    case applyAndAsk // make the change, then let the user choose to undo it
+}
+
+// An "off" always waits for the user. A monitor can come or go for many reasons,
+// for example a loose cable or a different desk, and a dark panel then surprises
+// the user. An "on" is always safe, so it happens at once. When an external
+// display remains, the user may still want the panel off, so the menu asks.
+func step(for action: Action, externals: Int) -> Step {
+    switch action {
+    case .turnOff: return .askOnly
+    case .turnOn: return externals > 0 ? .applyAndAsk : .apply
+    case .none, .waitUnknown: return .apply
+    }
+}
+
+// The count of externals for which the agent waits for the user. The wait holds
+// until the count changes, also after a wake. Thus an answer of "Keep On" or
+// "Turn Off" lasts while the set of monitors stays the same.
 struct UserHold {
     private(set) var externals: Int? = nil
 
@@ -210,13 +231,14 @@ struct UserHold {
     }
 }
 
-// The agent writes this file when it waits for the user. The file holds the
-// count of externals. The menu reads it, asks the user, and removes it. The file
-// lives in /tmp, so a restart clears it.
+// The agent writes this file when it waits for the user. The first line holds
+// the count of externals, and the second line holds the reason for the
+// decision. The menu reads it, asks the user, and removes it. The file lives in
+// /tmp, so a restart clears it.
 private let askFile = "/tmp/.displayctl-ask"
 
-private func writeAsk(externals: Int) {
-    try? "\(externals)\n".write(toFile: askFile, atomically: true, encoding: .utf8)
+private func writeAsk(externals: Int, reason: String) {
+    try? "\(externals)\n\(reason)\n".write(toFile: askFile, atomically: true, encoding: .utf8)
 }
 
 private func removeAsk() {
@@ -342,20 +364,25 @@ private func evaluate(reason: String) {
     let wanted = builtinShouldBeOn(externals: externals)
     log("\(reason): \(externals) external(s), the built-in display should be \(wanted ? "on" : "off")")
 
-    // At its start the agent does not turn the display off. The start is often
-    // at login, and a change of the displays then slows the login and can go
-    // wrong. Leave the display on, and let the menu ask the user.
-    if reason == "start" && plan(wanted: wanted, state: builtinState()) == .turnOff {
+    let next = step(for: plan(wanted: wanted, state: builtinState()), externals: externals)
+    if next == .askOnly {
         userHold.hold(externals: externals)
-        writeAsk(externals: externals)
-        log("start: the display stays on until the user chooses in the menu")
+        writeAsk(externals: externals, reason: reason)
+        log("\(reason): the display stays on until the user chooses in the menu")
         return
     }
 
     applyingOwnChange = true
     let applied = applyBuiltin(on: wanted, dryRun: watchDryRun)
     latch.record(externals: externals, applied: applied)
-    if !applied { scheduleRetry() }
+    if !applied {
+        scheduleRetry()
+    } else if next == .applyAndAsk {
+        // The hold keeps a later "Turn Off" in place after a wake.
+        userHold.hold(externals: externals)
+        writeAsk(externals: externals, reason: reason)
+        log("\(reason): the display is back on, and the menu asks the user")
+    }
 
     // Release the guard after the events from our own change are done.
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { applyingOwnChange = false }
@@ -549,43 +576,67 @@ private final class MenuController: NSObject, NSMenuDelegate {
         // finds a question from the agent.
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             self?.refresh()
+        }
+        // The look for a question is only a stat of a file, so it can run more
+        // often. A question after a cable change must show soon.
+        askTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.askIfAgentWaits()
         }
     }
 
-    // Wait this long after the agent starts before the question shows. The
-    // agent starts at login, and the login is still busy for some seconds.
-    private let askDelay: TimeInterval = 10
+    private var askTimer: Timer?
 
-    // The agent leaves the display on at its start and writes the ask file.
-    // Ask the user, then remove the file, so the question shows one time only.
+    // Wait this long after the agent writes the question before it shows. At
+    // the start of the agent, the login is still busy for some seconds. After a
+    // cable change, the windows still move to the new set of displays.
+    private func askDelay(reason: String) -> TimeInterval {
+        reason == "start" ? 10 : 2
+    }
+
+    // The agent leaves the display in a safe state and writes the ask file. Ask
+    // the user, then remove the file, so the question shows one time only.
     private func askIfAgentWaits() {
         guard !asking,
               let attributes = try? FileManager.default.attributesOfItem(atPath: askFile),
-              let written = attributes[.modificationDate] as? Date,
-              Date().timeIntervalSince(written) >= askDelay
+              let written = attributes[.modificationDate] as? Date
         else { return }
-        let text = (try? String(contentsOfFile: askFile, encoding: .utf8)) ?? ""
+        let lines = ((try? String(contentsOfFile: askFile, encoding: .utf8)) ?? "")
+            .split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+        let reason = lines.count > 1 ? lines[1] : "start"
+        guard Date().timeIntervalSince(written) >= askDelay(reason: reason) else { return }
         removeAsk()
-        guard let externals = Int(text.trimmingCharacters(in: .whitespacesAndNewlines)),
+        guard let externals = lines.first.flatMap({ Int($0) }),
               externalCount() == externals,
               builtinState() == .on
         else { return }
 
+        // At the usual desk the question is about an "off". At any other desk
+        // the agent just turned the display back on, and "Keep On" is the safe
+        // default.
+        let usualDesk = !builtinShouldBeOn(externals: externals)
+        let plural = externals == 1 ? "display is" : "displays are"
         asking = true
         let alert = NSAlert()
-        alert.messageText = "Turn off the built-in display?"
-        alert.informativeText = "\(externals) external displays are connected. The built-in display stays on until you choose. You can also turn it off later from the menu bar."
         alert.icon = NSImage(systemSymbolName: "laptopcomputer", accessibilityDescription: nil)
-        alert.addButton(withTitle: "Turn Off")
-        alert.addButton(withTitle: "Keep On")
+        if usualDesk {
+            alert.messageText = "Turn off the built-in display?"
+            alert.informativeText = "\(externals) external \(plural) connected. The built-in display stays on until you choose. You can also turn it off later from the menu bar."
+            alert.addButton(withTitle: "Turn Off")
+            alert.addButton(withTitle: "Keep On")
+        } else {
+            alert.messageText = "The monitors changed"
+            alert.informativeText = "\(externals) external \(plural) connected, so the built-in display is back on. Keep it on, or turn it off again?"
+            alert.addButton(withTitle: "Keep On")
+            alert.addButton(withTitle: "Turn Off")
+        }
+        let turnOffButton: NSApplication.ModalResponse = usualDesk ? .alertFirstButtonReturn : .alertSecondButtonReturn
         // An accessory app is not in front by itself, and the alert would open
         // behind the other windows.
         NSApp.activate()
         let answer = alert.runModal()
         asking = false
 
-        guard answer == .alertFirstButtonReturn else {
+        guard answer == turnOffButton else {
             log("the user chose to keep the built-in display on")
             return
         }
@@ -871,6 +922,18 @@ private func selftest() -> Bool {
     check("hold, same count", hold.waits(externals: 2), true)
     check("hold, new count", hold.waits(externals: 1), false)
     check("hold after a new count", hold.waits(externals: 2), false)
+
+    // The agent never turns the display off by itself. After it turns the
+    // display back on, it asks only when an external display remains, because
+    // the built-in display is then not the only screen.
+    for (action, externals, want) in [
+        (Action.turnOff, 2, Step.askOnly),
+        (Action.turnOn, 1, Step.applyAndAsk),
+        (Action.turnOn, 0, Step.apply),
+        (Action.none, 1, Step.apply),
+    ] {
+        check("step for \(action) at \(externals) external(s)", step(for: action, externals: externals), want)
+    }
 
     // The menu reads the agent state from `launchctl print`. The nested
     // sections have their own "state" lines, and they must not count.

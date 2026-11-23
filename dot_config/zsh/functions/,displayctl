@@ -4,15 +4,17 @@
 #               The `displayctl` tool removes the built-in display from the
 #               display list of macOS. No windows go to it. The lid can stay
 #               open. The `com.zaid.displayctl` launch agent watches for a
-#               change of the monitors. It turns the built-in display off when
-#               exactly two external displays are connected. It turns the
-#               display on again for any other number. It decides again after
-#               the Mac wakes, because the monitors can change during sleep.
+#               change of the monitors. The usual desk has exactly two external
+#               displays. For any other number, the agent turns the built-in
+#               display on again. It decides again after the Mac wakes, because
+#               the monitors can change during sleep.
 #
-#               At its start, for example at login, the agent does not turn
-#               the display off. It leaves the display on, and the menu asks
-#               about 10 seconds later. The choice holds until the set of
-#               monitors changes.
+#               The agent never turns the display off by itself. At the usual
+#               desk, it leaves the display on, and the menu asks. The question
+#               shows about 10 seconds after login, or 2 seconds after a cable
+#               change. When the agent turns the display back on and an
+#               external display remains, the menu asks too. The choice holds
+#               until the set of monitors changes.
 #
 #               The app ~/Applications/displayctl.app shows a laptop icon in
 #               the menu bar. A slash on the icon means the display is off. A
