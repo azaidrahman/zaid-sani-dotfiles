@@ -145,7 +145,7 @@ run() {
   [ "$before" = - ] || printf '%s\n' "$before" > "$state/current"
   out=$(env -i HOME="$TMP/home" PATH="$TMP/bin:/usr/bin:/bin" \
     BROWSER_HOME="$home" BROWSER_NOTIFIER="$TMP/bin/notifier" \
-    XDG_STATE_HOME="$TMP/state" STUB_LOG="$TMP/log" STUB_DIR="$TMP" \
+    XDG_STATE_HOME="$TMP/state" KARABINER_CLI=/usr/bin/true STUB_LOG="$TMP/log" STUB_DIR="$TMP" \
     AEROSPACE_BIN="$TMP/bin/aerospace" VIVALDI_PREFS="$TMP/viv-prefs.json" \
     BROWSER_DRIVER="${BROWSER_DRIVER:-}" BROWSER_WAIT_TRIES=2 \
     STUB_FOCUSED="${STUB_FOCUSED:-}" STUB_TITLES="${STUB_TITLES:-}" \
@@ -261,6 +261,8 @@ BROWSER_DRIVER=vivaldi STUB_WTITLE=Video \
   STUB_TITLES=$'10|true|true|Mail - Vivaldi\n11|false|false|Video - Vivaldi' \
   run "tab window: move the tab to a new window" 0 \
   "activate 42;;key 42 command;;aerospace focus --window-id 20" - - tab-window 5 42 2
+BROWSER_DRIVER=vivaldi run "close tab: close the tab in its window" 0 \
+  "viv-prefs.json close 5 42" - - close-tab 5 42
 
 # The URL matching of vivaldi.js, run for real. js_check loads vivaldi.js
 # from this repository with eval, to call its functions. It reads no other
@@ -333,6 +335,45 @@ js_check "watch: go back after a jump, and notify for a tab that the user cannot
       sim(snap(true, 'z', [A, Z])),
       // A jump while another application is frontmost: no keys, only a note.
       sim(snap(false, 'r', [A, Z, R]), snap(false, 'r', [A, Z, R])),
+    ].join('|');
+  })()"
+
+# snapStep, one row for each case. Each row gives looks at one window, at
+# the times in seconds. "sim" prints the tab of each screenshot, or "-" for
+# none. SNAP_SETTLE is 2 and SNAP_EVERY is 60.
+js_check "snap: a screenshot of the tab that the user sees, after the page settles" \
+  "a|-|-|a,b|a,a|a,a|-|-" \
+  "(() => {
+    const look = (front, activeId, url = 'https://x/' + activeId, mode = 'normal') => ({ front,
+      windows: [{ id: '9', mode, activeId, tabs: [{ id: activeId, url }] }] });
+    const sim = (...looks) => {
+      let state = null;
+      const out = [];
+      looks.forEach(([t, s]) => {
+        const r = snapStep(state, s, t);
+        state = r.state;
+        if (r.shot) out.push(r.shot.id);
+      });
+      return out.join() || '-';
+    };
+    return [
+      // One shot when the tab settles, and none in the next minute.
+      sim([0, look(true, 'a')], [2, look(true, 'a')], [30, look(true, 'a')]),
+      // The user left the tab before it settled.
+      sim([0, look(true, 'a')], [1, look(true, 'b')], [2, look(true, 'c')]),
+      // Another application is frontmost.
+      sim([0, look(false, 'a')], [5, look(false, 'a')]),
+      // A different tab starts a new wait.
+      sim([0, look(true, 'a')], [2, look(true, 'a')], [3, look(true, 'b')], [5, look(true, 'b')]),
+      // A new URL in the same tab starts a new wait.
+      sim([0, look(true, 'a')], [2, look(true, 'a')], [3, look(true, 'a', 'https://x/2')],
+        [5, look(true, 'a', 'https://x/2')]),
+      // The same tab gets a new shot after SNAP_EVERY.
+      sim([0, look(true, 'a')], [2, look(true, 'a')], [62, look(true, 'a')]),
+      // A private window, and a start page, get no shots.
+      sim([0, look(true, 'a', 'https://x/a', 'incognito')], [5, look(true, 'a', 'https://x/a', 'incognito')]),
+      sim([0, look(true, 'a', 'chrome://vivaldi-webui/startpage')],
+        [5, look(true, 'a', 'chrome://vivaldi-webui/startpage')]),
     ].join('|');
   })()"
 

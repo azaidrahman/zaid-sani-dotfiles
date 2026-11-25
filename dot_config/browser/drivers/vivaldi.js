@@ -18,7 +18,14 @@
 //   window-title <window id>   print the title that AeroSpace shows for the
 //                              window, without " - Vivaldi"
 //   activate <tab id>          make the tab the active tab of its window
-//   tabs                       print the open tabs as Alfred script filter JSON
+//   close <window id> <tab id> close the tab
+//   actives                    print one line for each window, from front to
+//                              back: "<window id><TAB><tab id><TAB><mode>".
+//                              The tab is the active tab of the window.
+//   tabs                       print the open tabs as Alfred script filter JSON.
+//                              If $BROWSER_SHOTS has a screenshot of a tab
+//                              (<tab id>-<stamp>.jpg), the item shows it.
+//                              Remove the screenshots of closed tabs.
 //   current                    print the name of the workspace of the active
 //                              tab of the front window, or nothing
 //   windows                    print one line for each window, from front to
@@ -33,6 +40,9 @@
 //                              notification runs "browser focus-tab" for
 //                              the tab. The LaunchAgent
 //                              com.zaid.vivaldi-watch runs this command.
+//                              It also asks Alfred to take a screenshot of
+//                              the tab that the user looks at (see
+//                              snapStep).
 //
 // Vivaldi scripting does not tell the workspace of a tab. This helper reads
 // it from the session file of Vivaldi (see sessionWorkspaces). If the session
@@ -297,6 +307,66 @@ function watchStep(state, snap, load, now) {
   return { state: { tabs: next, front }, notes };
 }
 
+// The times of the screenshots, in seconds. A tab gets a screenshot when it
+// was the active tab of the front window for SNAP_SETTLE, so that the page
+// had time to load. While it stays the active tab, it gets a new screenshot
+// after each SNAP_EVERY.
+const SNAP_SETTLE = 2;
+const SNAP_EVERY = 60;
+// The Alfred workflow "Browser Tabs" and its external trigger that runs
+// "browser snap <window id> <tab id>". Only Alfred and AeroSpace have the
+// Screen Recording permission, so the watcher cannot take the screenshot.
+const ALFRED_WORKFLOW = 'com.zaid.browser-tabs';
+const ALFRED_SNAP_TRIGGER = 'snap';
+
+// snapStep: find the tab that gets a screenshot now. The user must see the
+// tab: Vivaldi is frontmost, and the tab is the active tab of the front
+// window. Private windows get no screenshots. A new URL in the same tab
+// starts a new wait.
+//
+// state: the state that the last step returned, or null.
+// snap: the same look at the tabs as for watchStep.
+// Return { state, shot }. "shot" is { windowId, id } or null.
+function snapStep(state, snap, now) {
+  const none = { state: null, shot: null };
+  const fw = snap.windows[0];
+  if (!snap.front || !fw || fw.mode !== 'normal') return none;
+  const t = fw.tabs.find((x) => x.id === fw.activeId);
+  if (!t || isHidden(t.url)) return none;
+  const key = `${fw.id} ${t.id} ${t.url}`;
+  const s = state && state.key === key ? state : { key, since: now, shotAt: null };
+  if (now - s.since < SNAP_SETTLE) return { state: s, shot: null };
+  if (s.shotAt !== null && now - s.shotAt < SNAP_EVERY) return { state: s, shot: null };
+  return { state: { ...s, shotAt: now }, shot: { windowId: fw.id, id: t.id } };
+}
+
+// watchSnap: ask Alfred to run "browser snap" for the tab. Alfred runs the
+// command without a window.
+function watchSnap(shot) {
+  Application('com.runningwithcrayons.Alfred').runTrigger(ALFRED_SNAP_TRIGGER, {
+    inWorkflow: ALFRED_WORKFLOW,
+    withArgument: `${shot.windowId} ${shot.id}`,
+  });
+}
+
+// tabShots: map each tab id to the path of its newest screenshot in the
+// directory. Remove the screenshots of the tabs that are not open. A file
+// name is <tab id>-<stamp>.jpg. Alfred keeps images in a cache by path, so
+// each new screenshot gets a new name.
+function tabShots(dir, openIds) {
+  const shots = new Map();
+  if (!dir) return shots;
+  const fm = $.NSFileManager.defaultManager;
+  const names = ObjC.deepUnwrap(fm.contentsOfDirectoryAtPathError(dir, null)) || [];
+  for (const name of names.sort()) {
+    const m = /^(\d+)-\d+\.jpg$/.exec(name);
+    if (!m) continue;
+    if (openIds.has(m[1])) shots.set(m[1], `${dir}/${name}`);
+    else fm.removeItemAtPathError(`${dir}/${name}`, null);
+  }
+  return shots;
+}
+
 // newTabPosition: the position of the workspace of a new tab. If the
 // session file has no record of the tab yet, use the workspace rules. If no
 // rule matches, Vivaldi opened the tab in the workspace that its window
@@ -376,13 +446,24 @@ function watch(prefsPath) {
   const app = Application('Vivaldi');
   const end = Date.now() / 1000 + WATCH_LIFETIME;
   let state = null;
+  let snapState = null;
   for (let now = Date.now() / 1000; now < end; now = Date.now() / 1000) {
     try {
       if (!app.running()) {
         state = null;
+        snapState = null;
       } else {
         const snap = watchSnapshot(app);
         if (snap) {
+          const s = snapStep(snapState, snap, now);
+          snapState = s.state;
+          if (s.shot) {
+            try {
+              watchSnap(s.shot);
+            } catch (e) {
+              console.log(`${new Date().toISOString()} snap: ${e}`);
+            }
+          }
           let data;
           const load = () => {
             data = { ws: readWorkspaces(prefsPath), session: sessionWorkspaces(prefsPath) };
@@ -444,6 +525,22 @@ function run(argv) {
       tab.window.activeTabIndex = tab.index;
       return 'ok';
     }
+    case 'close': {
+      const app = Application('Vivaldi');
+      const w = app.windows().find((x) => String(x.id()) === String(arg));
+      if (!w) throw new Error(`Vivaldi has no window ${arg}`);
+      const tab = w.tabs().find((x) => String(x.id()) === String(arg2));
+      if (!tab) throw new Error(`Vivaldi has no tab ${arg2}`);
+      app.close(tab);
+      return 'ok';
+    }
+    case 'actives': {
+      const w = Application('Vivaldi').windows;
+      const ids = w.id();
+      const actives = w.activeTab.id();
+      const modes = w.mode();
+      return ids.map((id, i) => `${id}\t${actives[i]}\t${modes[i]}`).join('\n');
+    }
     case 'current': {
       const ws = readWorkspaces(prefsPath);
       const front = Application('Vivaldi').windows[0].activeTab;
@@ -472,21 +569,30 @@ function run(argv) {
           .URLForApplicationWithBundleIdentifier('com.vivaldi.Vivaldi');
         if (!app.isNil()) icon = { type: 'fileicon', path: app.path.js };
       } catch (e) { /* no icon */ }
+      const tabs = allTabs();
+      const env = ObjC.deepUnwrap($.NSProcessInfo.processInfo.environment);
+      const shots = tabShots(env.BROWSER_SHOTS, new Set(tabs.map((t) => t.id)));
       return JSON.stringify({
-        items: allTabs().filter((t) => !isHidden(t.url)).map((t) => {
+        items: tabs.filter((t) => !isHidden(t.url)).map((t) => {
           const pos = positionOfTab(ws, session, t);
           const w = pos ? ws.list[pos - 1] : null;
           const place = w ? `${w.emoji ? `${w.emoji} ` : ''}${w.name}` : 'No workspace';
+          const shot = shots.get(t.id);
           return {
             uid: t.id,
             title: t.title || t.url,
             subtitle: `${place} · ${t.url}`,
             arg: `${t.windowId} ${t.id}`,
             // With ⌘, the item variable "window" is "new": the next action
-            // then moves the tab to a new window.
-            mods: { cmd: { subtitle: `Move to a new window · ${t.url}`, variables: { window: 'new' } } },
+            // then moves the tab to a new window. The workflow connects ⌥
+            // to the action that closes the tab.
+            mods: {
+              cmd: { subtitle: `Move to a new window · ${t.url}`, variables: { window: 'new' } },
+              alt: { subtitle: `Close the tab · ${t.url}` },
+            },
             match: `${t.title} ${t.url} ${w ? w.name : ''}`,
-            icon,
+            // Shift or ⌘Y shows the screenshot at full size.
+            ...(shot ? { icon: { path: shot }, quicklookurl: shot } : { icon }),
           };
         }),
       });

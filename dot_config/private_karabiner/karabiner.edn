@@ -351,6 +351,17 @@
     [:!Cw :!Ch]
     [:!Qw :!Qh]]}
 
+  ;; The tab grid of the Alfred workflow "Browser Tabs" (Hyper =) closes a tab
+  ;; with Option+Return. Alfred cannot bind Backspace, because Backspace edits
+  ;; the query. "browser tabs" sets browser_tabs_open to 1 when the grid
+  ;; opens, and to 0 when the Alfred window closes. Thus Command+Backspace
+  ;; keeps its own action in the other Alfred views, for example the
+  ;; clipboard history. The rule has no condition on the application:
+  ;; Alfred shows a panel, and it never becomes the frontmost application.
+  {:des "Alfred browser tabs: Command+Backspace closes the tab"
+   :rules
+   [[:!Cdelete_or_backspace :!Oreturn_or_enter ["browser_tabs_open" 1]]]}
+
   ; {:des "Ghostty/UTM: swap Cmd and Ctrl"
   ;  :rules
   ;  [[:##left_command :left_control :ghostty-utm {:alone :left_command}]

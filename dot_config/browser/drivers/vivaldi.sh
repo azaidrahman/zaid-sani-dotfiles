@@ -351,6 +351,29 @@ drv_tabs() {
   viv_js tabs
 }
 
+# drv_close_tab <window id> <tab id>: close the tab.
+drv_close_tab() {
+  viv_js close "$1" "$2" > /dev/null
+}
+
+# drv_snap [<window id> <tab id>]: take a screenshot of the active tab of
+# each normal window. With a window and a tab, take one only of that window,
+# and only if the tab is still its active tab. Do not start Vivaldi.
+# AeroSpace gives the window id for screencapture (see viv_window_aero).
+drv_snap() {
+  local win tab mode aero
+  pgrep -x Vivaldi > /dev/null || return 0
+  viv_js actives | while IFS="$(printf '\t')" read -r win tab mode; do
+    [ "$mode" = normal ] || continue
+    if [ $# -eq 2 ]; then
+      [ "$win" = "$1" ] && [ "$tab" = "$2" ] || continue
+    fi
+    aero=$(viv_window_aero "$win")
+    [ -n "$aero" ] && save_shot "$aero" "$tab"
+  done
+  return 0
+}
+
 # drv_current_space: print the workspace of the front window, or nothing.
 # Alfred runs this at each key press. Do not start Vivaldi.
 drv_current_space() {

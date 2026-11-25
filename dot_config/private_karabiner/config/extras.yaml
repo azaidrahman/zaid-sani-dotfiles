@@ -42,6 +42,9 @@ extras:
   - ⌥L] | next app | cmd+tab
   - ⌥L[ | prev app | cmd+shift+tab
 
+  # Alfred
+  - ⌘⌫ | close tab | in the browser tab grid (Hyper =), close the tab
+
   # Help
   - layer / | layer help | hold a layer, press / = that layer's overlay
   - ⇪? | key search | this HUD (also ctrl+shift+/)

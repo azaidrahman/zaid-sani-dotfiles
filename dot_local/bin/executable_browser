@@ -6,7 +6,12 @@
 #   browser space-window <name>     show a space in its own window
 #   browser no-space                show the tabs that are in no space
 #   browser tab <name>              focus a named tab (see config.sh)
-#   browser tabs                    print the open tabs as Alfred JSON
+#   browser tabs                    print the open tabs as Alfred JSON for
+#                                   the grid of the Browser Tabs workflow
+#                                   (see "The tab grid" below)
+#   browser close-tab <win> <tab>   close a tab that "browser tabs" printed
+#   browser snap [<win> <tab>]      take a screenshot of the active tab of
+#                                   each window, or only of that tab
 #   browser bookmarks               print the Pinboard bookmarks of all
 #                                   spaces as Alfred JSON, current first
 #   browser focus-tab <win> <tab> [<pos>]
@@ -32,8 +37,8 @@
 # Each browser has a driver: $BROWSER_HOME/drivers/<name>.sh. A driver sets
 # DRIVER_APP and DRIVER_BUNDLE, and defines one function for each action that
 # it can do: drv_space, drv_space_window, drv_no_space, drv_tab, drv_tabs,
-# drv_focus_tab, drv_tab_window, drv_focus_url, drv_open_in, drv_open_window,
-# drv_float, and drv_current_space.
+# drv_focus_tab, drv_tab_window, drv_close_tab, drv_snap, drv_focus_url,
+# drv_open_in, drv_open_window, drv_float, and drv_current_space.
 # If the driver cannot do an action, or the action fails, the command shows a
 # notification. "browser tabs" and "browser bookmarks" show the error as an
 # Alfred item instead, because Alfred runs them at each key press.
@@ -44,6 +49,17 @@
 # Exit status: 0 success, 1 the action failed, 2 the action, the driver, the
 # space, or the tab is not known or not supported.
 #
+# The tab grid: the Alfred workflow "Browser Tabs" (Hyper =) shows the output
+# of "browser tabs" in a grid. Each tab shows its last screenshot, from
+# $BROWSER_SHOTS. A tab gets a screenshot when the user looks at it (the
+# Vivaldi watcher asks Alfred to run "browser snap"), and when the grid opens.
+# While the grid is open, the Karabiner variable browser_tabs_open is 1, so
+# that Command+Backspace closes the tab (Karabiner sends Option+Return). The
+# script lib/alfred-open.js waits until the Alfred window closes, then the
+# variable goes back to 0. After a close, the workflow opens the grid again,
+# so that the closed tab goes away.
+# The screenshots can show private text. The directory has mode 0700.
+#
 # Karabiner runs this command with /bin/sh and a minimal PATH. Thus the
 # command must work with bash 3.2, and it uses full paths for Homebrew tools.
 set -u
@@ -51,8 +67,13 @@ set -u
 BROWSER_HOME="${BROWSER_HOME:-$HOME/.config/browser}"
 BROWSER_NOTIFIER="${BROWSER_NOTIFIER:-/opt/homebrew/bin/terminal-notifier}"
 AEROSPACE_BIN="${AEROSPACE_BIN:-/opt/homebrew/bin/aerospace}"
+BROWSER_SHOTS="${BROWSER_SHOTS:-$HOME/Library/Caches/browser/shots}"
+export BROWSER_SHOTS
+KARABINER_CLI="${KARABINER_CLI:-/Library/Application Support/org.pqrs/Karabiner-Elements/bin/karabiner_cli}"
 state_file="${XDG_STATE_HOME:-$HOME/.local/state}/browser/current"
 BROWSER_DRIVER_NAME=""
+# The time in seconds between two screenshots that the grid starts.
+GRID_SNAP_EVERY=10
 
 action="${1:-}"
 [ $# -gt 0 ] && shift
@@ -79,8 +100,60 @@ fail() {
   exit "$1"
 }
 
+# save_shot <window id> <tab id>: take a screenshot of the window, where
+# the window id is the one of macOS (AeroSpace gives it), and keep it as the
+# screenshot of the tab. Keep the old screenshot if the capture fails.
+# screencapture does not write a file whose name starts with a dot.
+save_shot() {
+  local tmp="$BROWSER_SHOTS/tmp-$2-$$.jpg" stamp
+  mkdir -p "$BROWSER_SHOTS" && chmod 700 "$BROWSER_SHOTS" || return 1
+  if screencapture -x -o -t jpg -l "$1" "$tmp" 2> /dev/null && [ -s "$tmp" ]; then
+    sips -Z 1200 "$tmp" > /dev/null 2>&1
+    stamp="$(date +%s)$$"
+    rm -f "$BROWSER_SHOTS/$2"-*.jpg
+    mv "$tmp" "$BROWSER_SHOTS/$2-$stamp.jpg"
+  else
+    rm -f "$tmp"
+    return 1
+  fi
+}
+
+# stale <file> <seconds>: succeed if the file is older than the seconds, or
+# if it does not exist.
+stale() {
+  [ -e "$1" ] || return 0
+  [ $(($(date +%s) - $(stat -f %m "$1"))) -ge "$2" ]
+}
+
+# set_key <0|1>: set the Karabiner variable browser_tabs_open.
+set_key() {
+  [ -x "$KARABINER_CLI" ] || return 0
+  "$KARABINER_CLI" --set-variables "{\"browser_tabs_open\":$1}" > /dev/null 2>&1
+}
+
+# grid_extras: work for the grid that runs in the background, so that the
+# grid shows with no wait. Take new screenshots if the last ones are old.
+# Give Command+Backspace to the grid until the Alfred window closes. Each run
+# writes its own token. A watcher of an older run then does not set the
+# variable to 0, for example when the workflow opens the grid again.
+grid_extras() {
+  local dir="${XDG_STATE_HOME:-$HOME/.local/state}/browser" self=$0 token=$$
+  mkdir -p "$dir" "$BROWSER_SHOTS"
+  chmod 700 "$BROWSER_SHOTS"
+  if declare -F drv_snap > /dev/null && stale "$BROWSER_SHOTS/.last-snap" "$GRID_SNAP_EVERY"; then
+    touch "$BROWSER_SHOTS/.last-snap"
+    "$self" snap < /dev/null > /dev/null 2>&1 &
+  fi
+  echo "$token" > "$dir/grid-token"
+  set_key 1
+  (
+    osascript -l JavaScript "$BROWSER_HOME/lib/alfred-open.js"
+    [ "$(cat "$dir/grid-token" 2> /dev/null)" = "$token" ] && set_key 0
+  ) < /dev/null > /dev/null 2>&1 &
+}
+
 usage() {
-  sed -n '3,31s/^# \{0,1\}//p' "$0" >&2
+  sed -n '3,35s/^# \{0,1\}//p' "$0" >&2
   fail 2 "unknown action: ${action:-none}"
 }
 
@@ -176,7 +249,8 @@ case "$action" in
     echo "browser: now using $1"
     exit 0
     ;;
-  space | space-window | no-space | tab | tabs | bookmarks | focus-tab | tab-window | open | open-in | open-window) ;;
+  space | space-window | no-space | tab | tabs | bookmarks | focus-tab | tab-window | \
+    close-tab | snap | open | open-in | open-window) ;;
   *) usage ;;
 esac
 
@@ -203,7 +277,16 @@ case "$action" in
     call drv_tab "$1" "${entry%%|*}" "${entry#*|}"
     ;;
   tabs)
+    grid_extras
     call drv_tabs
+    ;;
+  close-tab)
+    [ $# -eq 2 ] || usage
+    call drv_close_tab "$@"
+    ;;
+  snap)
+    [ $# -eq 0 ] || [ $# -eq 2 ] || usage
+    call drv_snap "$@"
     ;;
   bookmarks)
     # The bookmarks of the current space come first. A driver that cannot

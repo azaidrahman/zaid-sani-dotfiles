@@ -171,6 +171,7 @@ extra		⌥L,	vol-	volume down (SoundSource on aqua)
 extra		⌥L.	vol+	volume up (SoundSource on aqua)
 extra		⌥L]	next app	cmd+tab
 extra		⌥L[	prev app	cmd+shift+tab
+extra		⌘⌫	close tab	in the browser tab grid (Hyper =), close the tab
 extra		layer /	layer help	hold a layer, press / = that layer's overlay
 extra		⇪?	key search	this HUD (also ctrl+shift+/)
 extra		⌥⌘\	arc tab → window	Arc: Move Current Tab to New Window (KM)
