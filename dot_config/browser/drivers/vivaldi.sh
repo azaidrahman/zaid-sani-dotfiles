@@ -344,10 +344,17 @@ drv_tab() {
 
 # drv_tabs: Alfred runs this at each key press. Do not start Vivaldi.
 # If Vivaldi is not running, remove all the screenshots. The next start of
-# Vivaldi gives the same tab ids to different pages.
+# Vivaldi gives the same tab ids to different pages. Remove only the files
+# with the name of a screenshot (<tab id>-<stamp>.jpg), so that a wrong
+# $BROWSER_SHOTS does not remove other images.
 drv_tabs() {
+  local f
   if ! pgrep -x Vivaldi > /dev/null; then
-    [ -n "$BROWSER_SHOTS" ] && rm -f "$BROWSER_SHOTS"/*.jpg
+    if [ -n "$BROWSER_SHOTS" ]; then
+      for f in "$BROWSER_SHOTS"/*.jpg; do
+        [[ ${f##*/} =~ ^[0-9]+-[0-9]+\.jpg$ ]] && rm -f "$f"
+      done
+    fi
     printf '{"items":[{"title":"Vivaldi is not running","valid":false}]}\n'
     return 0
   fi
