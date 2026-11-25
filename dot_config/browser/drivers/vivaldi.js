@@ -350,10 +350,13 @@ function watchSnap(shot) {
 }
 
 // tabShots: map each tab id to the path of its newest screenshot in the
-// directory. Remove the screenshots of the tabs that are not open. A file
-// name is <tab id>-<stamp>.jpg. Alfred keeps images in a cache by path, so
-// each new screenshot gets a new name.
-function tabShots(dir, openIds) {
+// directory. Remove the screenshots of the tabs that are not open. Also
+// remove the screenshots from before "since" (the start of Vivaldi, in
+// seconds). Vivaldi gives the same tab ids again after a restart, so an old
+// screenshot can show a different page. A file name is
+// <tab id>-<stamp>.jpg. Alfred keeps images in a cache by path, so each new
+// screenshot gets a new name.
+function tabShots(dir, openIds, since = 0) {
   const shots = new Map();
   if (!dir) return shots;
   const fm = $.NSFileManager.defaultManager;
@@ -361,10 +364,21 @@ function tabShots(dir, openIds) {
   for (const name of names.sort()) {
     const m = /^(\d+)-\d+\.jpg$/.exec(name);
     if (!m) continue;
-    if (openIds.has(m[1])) shots.set(m[1], `${dir}/${name}`);
-    else fm.removeItemAtPathError(`${dir}/${name}`, null);
+    const path = `${dir}/${name}`;
+    const attrs = fm.attributesOfItemAtPathError(path, null);
+    const time = attrs.isNil() ? 0 : attrs.fileModificationDate.timeIntervalSince1970;
+    if (openIds.has(m[1]) && time >= since) shots.set(m[1], path);
+    else fm.removeItemAtPathError(path, null);
   }
   return shots;
+}
+
+// vivaldiStart: the time that Vivaldi started, in seconds, or 0.
+function vivaldiStart() {
+  const apps = $.NSRunningApplication.runningApplicationsWithBundleIdentifier('com.vivaldi.Vivaldi');
+  if (apps.count === 0) return 0;
+  const date = apps.objectAtIndex(0).launchDate;
+  return date.isNil() ? 0 : date.timeIntervalSince1970;
 }
 
 // newTabPosition: the position of the workspace of a new tab. If the
@@ -571,7 +585,7 @@ function run(argv) {
       } catch (e) { /* no icon */ }
       const tabs = allTabs();
       const env = ObjC.deepUnwrap($.NSProcessInfo.processInfo.environment);
-      const shots = tabShots(env.BROWSER_SHOTS, new Set(tabs.map((t) => t.id)));
+      const shots = tabShots(env.BROWSER_SHOTS, new Set(tabs.map((t) => t.id)), vivaldiStart());
       return JSON.stringify({
         items: tabs.filter((t) => !isHidden(t.url)).map((t) => {
           const pos = positionOfTab(ws, session, t);

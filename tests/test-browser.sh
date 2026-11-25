@@ -377,4 +377,19 @@ js_check "snap: a screenshot of the tab that the user sees, after the page settl
     ].join('|');
   })()"
 
+# tabShots keeps a screenshot only if its tab is open and Vivaldi took it
+# after its start. Tab 1 is open and new. Tab 2 is closed. Tab 3 is open,
+# but its screenshot is from before the start (2020).
+shots="$TMP/shots"
+mkdir -p "$shots"
+touch "$shots/1-1.jpg" "$shots/2-1.jpg"
+touch -t 202001010000 "$shots/3-1.jpg"
+js_check "shots: remove the screenshots of closed tabs, and from before the start of Vivaldi" \
+  "1|1-1.jpg" \
+  "(() => {
+    const map = tabShots('$shots', new Set(['1', '3']), Date.now() / 1000 - 3600);
+    const left = ObjC.deepUnwrap(\$.NSFileManager.defaultManager.contentsOfDirectoryAtPathError('$shots', null));
+    return [[...map.keys()].join(), left.join()].join('|');
+  })()"
+
 exit "$fail"

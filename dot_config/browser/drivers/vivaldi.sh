@@ -343,8 +343,11 @@ drv_tab() {
 }
 
 # drv_tabs: Alfred runs this at each key press. Do not start Vivaldi.
+# If Vivaldi is not running, remove all the screenshots. The next start of
+# Vivaldi gives the same tab ids to different pages.
 drv_tabs() {
   if ! pgrep -x Vivaldi > /dev/null; then
+    [ -n "$BROWSER_SHOTS" ] && rm -f "$BROWSER_SHOTS"/*.jpg
     printf '{"items":[{"title":"Vivaldi is not running","valid":false}]}\n'
     return 0
   fi

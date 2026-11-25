@@ -135,7 +135,9 @@ set_key() {
 # grid shows with no wait. Take new screenshots if the last ones are old.
 # Give Command+Backspace to the grid until the Alfred window closes. Each run
 # writes its own token. A watcher of an older run then does not set the
-# variable to 0, for example when the workflow opens the grid again.
+# variable to 0, for example when the workflow opens the grid again. The
+# trap sets the variable to 0 also if a signal stops the watcher. If the
+# variable stays 1, Command+Backspace sends Option+Return in all apps.
 grid_extras() {
   local dir="${XDG_STATE_HOME:-$HOME/.local/state}/browser" self=$0 token=$$
   mkdir -p "$dir" "$BROWSER_SHOTS"
@@ -147,8 +149,11 @@ grid_extras() {
   echo "$token" > "$dir/grid-token"
   set_key 1
   (
-    osascript -l JavaScript "$BROWSER_HOME/lib/alfred-open.js"
-    [ "$(cat "$dir/grid-token" 2> /dev/null)" = "$token" ] && set_key 0
+    trap '[ "$(cat "$dir/grid-token" 2> /dev/null)" = "$token" ] && set_key 0' EXIT
+    # "wait" stops for a signal. A command in the foreground does not.
+    osascript -l JavaScript "$BROWSER_HOME/lib/alfred-open.js" &
+    trap 'kill $! 2> /dev/null; exit 1' HUP INT TERM
+    wait $!
   ) < /dev/null > /dev/null 2>&1 &
 }
 

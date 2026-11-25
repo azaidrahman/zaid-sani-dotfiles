@@ -13,7 +13,7 @@ ObjC.import('CoreGraphics');
 const POLL = 0.25; // the time between two looks, in seconds
 const START = 3; // the time that Alfred gets to show the window
 const GONE = 2; // the number of looks in a row with no window
-const LIFETIME = 1800; // stop after this time, in seconds
+const LIFETIME = 600; // stop after this time, in seconds
 
 function alfredOpen() {
   const list = ObjC.deepUnwrap(ObjC.castRefToObject(
