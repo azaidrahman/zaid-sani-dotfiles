@@ -40,5 +40,5 @@ app:
   - o | todoist(app) | Todoist
   - x | mixlet | Mixlet
   - 0 | claude | Claude
-  - r | rex | Rex
+  - r | rex | sh:open -b com.superlogical.rex
   - m | ytm | YouTube Music for Desktop
