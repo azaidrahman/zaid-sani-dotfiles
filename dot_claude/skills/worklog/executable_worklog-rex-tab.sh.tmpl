@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# worklog-rex-tab.sh — deterministic Rex tab provisioning for one Jira ticket.
+# Replaces worklog-tmux-session.sh: the user moved from tmux to Rex.
+#
+# Makes sure a Rex window (a tab) exists for <KEY> in the current Rex session
+# ($REX_SESSION), with one shell block that starts in the ticket's git worktree.
+# Idempotent: safe to run again. The only part of the flow that needs judgment
+# (a missing worktree, whose slug comes from the Jira summary) is NOT here. The
+# caller handles exit code 3.
+#
+# The tag matches start-ticket-worktree.sh --session, so the two never open two
+# tabs for one ticket:
+#   - tag      = the label of the shell block: ticket:<KEY>
+#   - liveness = a placed block with the label ticket:<KEY> or handoff:<KEY>
+#   - name     = the worktree directory tail ('.'/':' -> '-'), the window label
+# The new window is not focused, so a loop does not move the user.
+#
+# Usage:   worklog-rex-tab.sh <KEY> [REPO]
+#          REPO defaults to the gtech-atlas working copy.
+#
+# stdout:  one status line — "already-live: <name> <block_id>" | "created: <name> <block_id>"
+#          (for already-live, <name> is the label of the window that holds the block)
+# Exit codes:
+#   0  the tab is open (created, or already open)
+#   3  no worktree for <KEY> yet  → caller runs start-ticket-worktree, then re-invokes
+#   2  precondition failure (bad key, repo not found, not in Rex, Rex error) — msg on stderr
+set -euo pipefail
+
+KEY=${1:-}
+REPO_ARG=${2:-$HOME/projects/{{ .workProjectsDir }}/gtech-atlas}
+
+[ -n "$KEY" ] || { echo "usage: $0 <KEY> [REPO]" >&2; exit 2; }
+case "$KEY" in
+  [A-Z]*-[0-9]*) ;;
+  *) echo "bad key: '$KEY' (expected e.g. GTI-123)" >&2; exit 2 ;;
+esac
+
+REPO=$(git -C "$REPO_ARG" rev-parse --show-toplevel 2>/dev/null) \
+  || { echo "repo not found at: $REPO_ARG" >&2; exit 2; }
+[ -n "${REX_SESSION:-}" ] || { echo "not in a Rex session (REX_SESSION is not set)" >&2; exit 2; }
+command -v rex >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 \
+  || { echo "rex or jq is not on PATH" >&2; exit 2; }
+blocks=$(rex block ls -s "$REX_SESSION" --json 2>/dev/null) \
+  || { echo "cannot reach Rex session $REX_SESSION" >&2; exit 2; }
+
+# 1. Liveness — a placed block tagged for this key, from this script or handoff.
+live=$(printf '%s' "$blocks" | jq -r --arg t "ticket:$KEY" --arg h "handoff:$KEY" \
+  'first(.blocks[] | select((.label == $t or .label == $h) and .placement == "placed") | "\(.window_id) \(.block_id)") // empty')
+if [ -n "$live" ]; then
+  wid=${live%% *}; bid=${live#* }
+  wlabel=$(rex window ls -s "$REX_SESSION" --json 2>/dev/null \
+    | jq -r --arg w "$wid" 'first(.windows[] | select(.window_id == $w) | .label) // empty' || true)
+  echo "already-live: ${wlabel:-$KEY} $bid"
+  exit 0
+fi
+
+# 2. Worktree directory tail starting with <KEY>- (parse only `worktree ` path lines,
+#    so HEAD/branch lines can't leak a branch slug in place of the directory).
+tail=$(git -C "$REPO" worktree list --porcelain \
+  | sed -n 's#^worktree .*/##p' | grep -E "^${KEY}-" | head -1 || true)
+if [ -z "$tail" ]; then
+  echo "no-worktree: $KEY"
+  exit 3
+fi
+
+# 3. Open the window rooted in the worktree. One call makes the window, its
+#    shell block, the tag, and the start directory.
+name=${tail//[.:]/-}
+dir="$REPO/.worktrees/$tail"
+created=$(jq -n --arg window "$name" --arg tag "ticket:$KEY" --arg cwd "$dir" '{
+    window_label: $window,
+    layout: { block: { flavor: "com.superlogical.terminal.shell",
+                       label: $tag, options: { cwd: $cwd } } } }' \
+  | rex api call -s "$REX_SESSION" session.new_window - 2>/dev/null) \
+  || { echo "Rex refused the new window for $KEY" >&2; exit 2; }
+bid=$(printf '%s' "$created" | jq -er '.block_ids[0]') \
+  || { echo "Rex returned no block for $KEY" >&2; exit 2; }
+echo "created: $name $bid"

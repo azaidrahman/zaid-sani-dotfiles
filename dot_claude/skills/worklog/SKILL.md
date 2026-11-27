@@ -88,63 +88,102 @@ priorities with them, and only write the set they choose to focus on today.
    The write replaces the day's task rows. It keeps the day's recap row if one
    exists, so re-running start is safe.
 7. Report to the terminal: number of tasks written and the CSV path.
-8. Offer the tmux session sync (see below). This is opt-in - ask once, act only
+8. Offer the Rex tab sync (see below). This is opt-in - ask once, act only
    if the user says yes.
 
-## tmux sessions per ticket (start, opt-in)
+## Rex tabs per ticket (start, opt-in)
+
+The user moved from tmux to Rex. This section replaced the tmux sessions. The
+tmux version is kept below in a `<!-- tmux disabled -->` block for reference
+only. Do not run `worklog-tmux-session.sh` or `tmux send-keys`.
 
 After the focus set is written, offer to give each Jira focus ticket its own
-detached tmux session, so the user can attach and start working immediately.
-Only for the Jira tickets in today's focus set - skip non-Jira task rows.
+Rex tab (a Rex window) in the current Rex session, so the user can switch to it
+and start working immediately. Only for the Jira tickets in today's focus set -
+skip non-Jira task rows.
 
-The deterministic mechanics - liveness check, worktree lookup, session creation,
-duplicate/illegal-name guards - live in `worklog-tmux-session.sh` (next to this
-file). Do not re-type those commands inline; call the script. The agent's only
-job is the loop, skipping non-Jira rows, and handling the one case the script
-can't (creating a missing worktree, whose slug needs the Jira summary).
+The deterministic mechanics - liveness check, worktree lookup, tab creation,
+name sanitizing, the `ticket:<KEY>` tag - live in `worklog-rex-tab.sh` (next to
+this file). Do not re-type those commands inline; call the script. The agent's
+only job is the loop, skipping non-Jira rows, and handling the one case the
+script can't (creating a missing worktree, whose slug needs the Jira summary).
 
 For each **Jira** ticket KEY in the focus set, run:
 
 ```bash
-~/.claude/skills/worklog/worklog-tmux-session.sh "<KEY>"
+~/.claude/skills/worklog/worklog-rex-tab.sh "<KEY>"
 ```
 
 Act on the exit code:
 
 | Exit | stdout | What it means / do next |
 |------|--------|--------------------------|
-| `0`  | `already-live: <name>` or `created: <name>` | Done - report it, next ticket. |
-| `3`  | `no-worktree: <KEY>` | No worktree yet. Invoke the `start-ticket-worktree` skill for `<KEY>` to create the branch + worktree, then **re-run the script** (it now finds the worktree and creates the session). When using start-ticket-worktree here, **skip its Step 8 tmux tagging** - that renames the *current* window (running worklog); the script names the new session itself. Also **skip its `EnterWorktree` step** - this session must stay put, and the new session starts in the worktree by itself. |
-| `2`  | error on stderr | Precondition failed (repo not found / no tmux server). Report and skip the whole sync - don't improvise. |
+| `0`  | `created: <name> <block_id>` or `already-live: <name> <block_id>` | Done - keep the block ID for the launch step, report it, next ticket. |
+| `3`  | `no-worktree: <KEY>` | No worktree yet. Invoke the `start-ticket-worktree` skill for `<KEY>` to create the branch + worktree (no `--session`), then **re-run the script** (it now finds the worktree and opens the tab). When using start-ticket-worktree here, **skip its Step 6 Mode A window rename** - that renames the window that runs worklog; the script labels the new tab itself. Also **skip its `EnterWorktree` step** - this session must stay put, and the new tab starts in the worktree by itself. |
+| `2`  | error on stderr | Precondition failed (repo not found / not in Rex / Rex error). Report and skip the whole sync - don't improvise. |
 
-The script is idempotent: it matches existing sessions on the `<KEY>` prefix (so
-key-only sessions like `GTI-333` count), names new ones `<KEY>-<slug>` after the
-worktree directory, and roots them there with `tmux new-session -c`. Re-running
-`/worklog start` never duplicates a session. It assumes GTI worktrees live in
-`gtech-atlas` (override with a second arg: `... "<KEY>" "/path/to/repo"`).
+The script is idempotent: a placed block with the label `ticket:<KEY>` (from this
+script or from `start-ticket-worktree --session`) or `handoff:<KEY>` (from the
+handoff skill) counts as an open tab. It labels new windows `<KEY>-<slug>` after
+the worktree directory, starts the shell there, and does not focus the new
+window. Re-running `/worklog start` never duplicates a tab. It assumes GTI
+worktrees live in `gtech-atlas` (override with a second arg:
+`... "<KEY>" "/path/to/repo"`).
 
-### Launch Claude in each session (opt-in)
-
-After the sessions exist, optionally kick off a Claude Code instance inside each
-one that immediately runs `/start-ticket-worktree` for its ticket - so attaching drops the
-user straight into an agent already oriented on that ticket. Ask once before
-doing this; act only if the user says yes.
-
-The session name equals the worktree directory tail (the `created:`/`already-live:`
-value the script printed), so send the launch command straight to it. For each
-Jira focus ticket KEY with a live session `<SESSION>`:
+Tell the user how to switch to a tab:
 
 ```bash
-tmux send-keys -t "<SESSION>" "claude \"/start-ticket-worktree <KEY>\"" Enter
+rex window focus -s "$REX_SESSION" <name>
+```
+
+### Launch Claude in each tab (opt-in)
+
+After the tabs exist, optionally start a Claude Code instance in each new tab
+that immediately runs `/start-ticket-worktree` for its ticket - so switching to
+the tab drops the user straight into an agent already oriented on that ticket.
+Ask once before doing this; act only if the user says yes.
+
+For each tab that the script reported as **`created`** in this run, type the
+command into its block, then press Enter:
+
+```bash
+rex send -s "$REX_SESSION" -b "<block_id>" 'claude "/start-ticket-worktree <KEY>"'
+rex send-key -s "$REX_SESSION" -b "<block_id>" enter
 ```
 
 Notes:
-- Send only to sessions the script reported as `created`/`already-live` - never to
-  a session that failed provisioning.
+- Send only to tabs reported as `created`. An `already-live` tab can already run
+  Claude or other work (a handoff tab always does), and typed text would land in
+  that program. Report those tabs as already open.
 - The worktree and branch already exist by this point, so `/start-ticket-worktree` finds
   them and reports the path rather than recreating - that is expected and fine.
-- This launches an interactive agent per session; do not wait on or drive them
-  from the worklog session. Just report which sessions were launched.
+- This launches an interactive agent per tab; do not wait on or drive them
+  from the worklog session. Just report which tabs were launched.
+
+<!-- tmux disabled — the tmux version of this section, kept for reference:
+
+## tmux sessions per ticket (start, opt-in)
+
+For each Jira ticket KEY in the focus set, run:
+
+    ~/.claude/skills/worklog/worklog-tmux-session.sh "<KEY>"
+
+| Exit | stdout | What it means / do next |
+|------|--------|--------------------------|
+| `0`  | `already-live: <name>` or `created: <name>` | Done - report it, next ticket. |
+| `3`  | `no-worktree: <KEY>` | Invoke start-ticket-worktree for `<KEY>`, skip its tmux tagging and its EnterWorktree step, then re-run the script. |
+| `2`  | error on stderr | Precondition failed (repo not found / no tmux server). Report and skip the whole sync. |
+
+The script matches existing sessions on the `<KEY>` prefix (so key-only sessions
+like `GTI-333` count), names new ones `<KEY>-<slug>` after the worktree
+directory, and roots them there with `tmux new-session -c`.
+
+### Launch Claude in each session (opt-in)
+
+    tmux send-keys -t "<SESSION>" "claude \"/start-ticket-worktree <KEY>\"" Enter
+
+Send only to sessions the script reported as `created`/`already-live`.
+-->
 
 ## stop procedure
 
