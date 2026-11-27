@@ -30,10 +30,9 @@ KEY=${1:-}
 REPO_ARG=${2:-$HOME/projects/{{ .workProjectsDir }}/gtech-atlas}
 
 [ -n "$KEY" ] || { echo "usage: $0 <KEY> [REPO]" >&2; exit 2; }
-case "$KEY" in
-  [A-Z]*-[0-9]*) ;;
-  *) echo "bad key: '$KEY' (expected e.g. GTI-123)" >&2; exit 2 ;;
-esac
+# A full-string match: a glob such as [A-Z]*-[0-9]* also accepts '/' and '..'.
+[[ $KEY =~ ^[A-Z][A-Z0-9]*-[0-9]+$ ]] \
+  || { echo "bad key: '$KEY' (expected e.g. GTI-123)" >&2; exit 2; }
 
 REPO=$(git -C "$REPO_ARG" rev-parse --show-toplevel 2>/dev/null) \
   || { echo "repo not found at: $REPO_ARG" >&2; exit 2; }

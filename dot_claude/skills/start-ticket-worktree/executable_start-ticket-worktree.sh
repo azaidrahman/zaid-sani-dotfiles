@@ -71,7 +71,9 @@ while [ $# -gt 0 ]; do
 done
 
 # ---- validate the naming contract (cheap, fail fast) ------------------------
-case "$KEY"  in [A-Z]*-[0-9]*) ;; *) die "bad key '$KEY' (expected e.g. GTI-273, uppercase)";; esac
+# A full-string match: a glob such as [A-Z]*-[0-9]* also accepts '/' and '..',
+# which would put the worktree outside .worktrees/.
+[[ $KEY =~ ^[A-Z][A-Z0-9]*-[0-9]+$ ]] || die "bad key '$KEY' (expected e.g. GTI-273, uppercase)"
 case "$TYPE" in feat|fix|chore|docs) ;;            *) die "bad type '$TYPE' (one of: feat fix chore docs)";; esac
 case "$SLUG" in
   -*|*-) die "bad slug '$SLUG' (no leading/trailing '-')";;
@@ -131,7 +133,7 @@ fi
 
 # ---- worktree: conflict matrix (idempotent) ---------------------------------
 # Already a worktree on this exact branch? Reuse it — never recreate.
-if g worktree list --porcelain | grep -qx "branch refs/heads/$BRANCH"; then
+if g worktree list --porcelain | grep -qxF "branch refs/heads/$BRANCH"; then
   existing=$(g worktree list --porcelain \
     | awk -v b="branch refs/heads/$BRANCH" '/^worktree /{p=$2} $0==b{print p; exit}')
   echo "worktree: reused $BRANCH ${existing:-$WT}"

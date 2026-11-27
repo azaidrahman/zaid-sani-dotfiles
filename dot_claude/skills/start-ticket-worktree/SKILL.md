@@ -73,16 +73,16 @@ In order, stop at the first that yields a confident answer:
    <!-- tmux disabled:
    2. **Tmux window name** — if `$TMUX` is set: `tmux display-message -p '#W'` may already carry the key (set by [[rename-tmux-to-ticket]]).
    -->
-3. **Ask the user** — one short `AskUserQuestion` with the top 3–5 candidates from `mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql` (`assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC`, limit 5). Load the MCP tool first via `ToolSearch` if it isn't resolved.
+3. **Ask the user** — one short `AskUserQuestion` with the top 3–5 candidates from `searchJiraIssuesUsingJql` (`assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC`, limit 5). Load the MCP tool first via `ToolSearch` if it isn't resolved; the server prefix differs per connector, see `~/.claude/plugins/marketplaces/gtech-skills/general/references/atlassian-tools.md`.
 
 Stop and ask if you have no signal — do not invent a key.
 
 ## Step 2 — Fetch ticket details
 
-Get `cloudId` once via `mcp__claude_ai_Atlassian__getAccessibleAtlassianResources`, then:
+Get `cloudId` once via `getAccessibleAtlassianResources`, then:
 
 ```
-mcp__claude_ai_Atlassian__getJiraIssue(
+getJiraIssue(
   cloudId=<id>,
   issueIdOrKey="<KEY>",
   fields=["summary", "issuetype", "status"]
